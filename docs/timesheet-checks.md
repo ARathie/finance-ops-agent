@@ -40,10 +40,10 @@ Each check either passes or creates a review item with one of the reasons below.
 5. Can we tell which engagement (client) it is, and is it active for these dates?
 6. Can we tell which dates it covers, and do they fit the billing schedule?
 7. Can we find the hours, and do the daily hours add up to the total?
-8. Are the hours believable? (More than 24 in a day, more than about 25% over full time for the period, or zero.)
+8. Are the hours believable? (More than 24 in a day, more than 25% over full time for the period — full time counted as 8 hours per weekday — or zero.)
 9. Was it approved, and can we see by whom or how?
-10. Is the model sure enough about the consultant, dates, hours, and approval?
-11. Is there a rate for these dates, and a billing email for the client?
+10. Is the model sure enough about the consultant, dates, hours, and approval? ("Sure enough" means none of those read with low confidence.)
+11. Is there a rate for these dates, and a billing email for the client? (A rate that changes in the middle of the period is a `LIST_ROW_PROBLEM` review naming both rows — the agent never splits an invoice.)
 12. Have we already handled a different timesheet for this consultant and period? (If so, this may be a correction.)
 
 ## Review reasons

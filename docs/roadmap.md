@@ -36,9 +36,9 @@ Read `engagements.xlsx` (and CSVs) with validation; SQLite tables and migrations
 
 Fake mailbox from `.eml` files, fake reader scripted per attachment, the checks in order, duplicates, corrections, waiting for weekly timesheets to cover a month, expected items and `waiting_for_timesheet`, `fops dry-run --fake`, `fops status`.
 
-- [ ] Scenario tests: happy path; same file twice; same file forwarded by someone else; corrected timesheet before and after "sent"; unknown sender; no approval; daily hours not adding up; dates not matching the schedule; weekly timesheets into a monthly invoice; rate change mid-period.
-- [ ] Running the same mailbox twice changes nothing the second time.
-- [ ] Stopping the run half-way and starting again produces no duplicate items or emails.
+- [x] Scenario tests: happy path; same file twice; same file forwarded by someone else; corrected timesheet before and after "sent"; unknown sender; no approval; daily hours not adding up; dates not matching the schedule; weekly timesheets into a monthly invoice; rate change mid-period.
+- [x] Running the same mailbox twice changes nothing the second time.
+- [x] Stopping the run half-way and starting again produces no duplicate items or emails.
 
 ## PR 6 — Claude reader and test set
 

@@ -1,0 +1,47 @@
+{
+  "consultant_name": {
+    "value": "Priya Shah",
+    "quote": "Consultant: Priya Shah",
+    "confidence": "high"
+  },
+  "client_name": {
+    "value": "Acme Corp",
+    "quote": "Client: Acme Corp",
+    "confidence": "high"
+  },
+  "end_client_name": {
+    "value": null,
+    "quote": null,
+    "confidence": "low"
+  },
+  "period_start": {
+    "value": "2026-08-01",
+    "quote": "08/01/2026",
+    "confidence": "high"
+  },
+  "period_end": {
+    "value": "2026-08-31",
+    "quote": "08/31/2026",
+    "confidence": "high"
+  },
+  "daily_entries": {
+    "value": [],
+    "quote": null,
+    "confidence": "low"
+  },
+  "stated_total_hours_hundredths": {
+    "value": 15600,
+    "quote": "Total: 156.00",
+    "confidence": "high"
+  },
+  "approval": {
+    "value": {
+      "kind": "approver_name_date",
+      "approver": "Jane Doe",
+      "approval_date": "2026-09-01"
+    },
+    "quote": "Approved by Jane Doe, 9/1/2026",
+    "confidence": "high"
+  },
+  "unusual_items": []
+}
