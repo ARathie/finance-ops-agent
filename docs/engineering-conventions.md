@@ -3,8 +3,8 @@
 ## Tooling
 
 - Python 3.11+, managed with `uv` (`uv sync`, `uv run …`). One `pyproject.toml` at the root; `src/` layout; package `finance_ops_agent`; console script `fops`.
-- `ruff` for lint and format (`uv run ruff check .`, `uv run ruff format .`), `mypy --strict` on `domain/`, `application/`, and `ports/` (adapters may relax where third-party types are missing), `pytest`.
-- GitHub Actions runs all four on every push; no network access is assumed in CI.
+- `ruff` for lint and format (`uv run ruff check .`, `uv run ruff format .`; line length 100, rule families E, W, F, I, UP, B, SIM), `mypy --strict` on `domain/`, `application/`, and `ports/` (adapters may relax where third-party types are missing, via per-module overrides in `pyproject.toml`; today strict applies everywhere), `pytest`.
+- GitHub Actions runs all four on every push, on Ubuntu and macOS with Python 3.11 and 3.13; the tests themselves need no network.
 - Dependencies are pinned in `uv.lock`; the Anthropic SDK is `anthropic` 1.x.
 
 ## Layout
@@ -16,7 +16,7 @@ tests/contract      the same test suite run against each fake and (when credenti
 tests/scenarios     whole runs on fixture mailboxes: happy path, duplicate, correction, unknown sender, no approval, …
 tests/evals         made-up timesheets with expected readings, for the Claude reader
 tests/fixtures      .eml files, sample workbooks, sample timesheets (all made up; never real client data)
-alembic/            database migrations
+alembic/            database migrations (arrives with the database in PR 4)
 docs/               these documents
 ```
 
