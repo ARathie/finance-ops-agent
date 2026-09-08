@@ -10,9 +10,9 @@ Work is done in small pull requests in this order. Each PR ticks its boxes here 
 
 Set up `uv`, the `src/finance_ops_agent` layout, `ruff`, `mypy`, `pytest`, GitHub Actions, and the `fops` command.
 
-- [ ] `uv sync && uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest` pass locally and in CI.
-- [ ] `uv run fops --version` prints a version.
-- [ ] `engineering-conventions.md` matches what was actually set up.
+- [x] `uv sync && uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest` pass locally and in CI.
+- [x] `uv run fops --version` prints a version.
+- [x] `engineering-conventions.md` matches what was actually set up.
 
 ## PR 3 — Core rules (no I/O)
 

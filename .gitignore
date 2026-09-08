@@ -27,6 +27,7 @@ data/
 
 # The real engagement list and real timesheets never go in git
 engagements.xlsx
+tracking.xlsx
 evals/private/
 
 # Editors and OS
