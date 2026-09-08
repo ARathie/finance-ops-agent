@@ -16,7 +16,6 @@ tests/contract      the same test suite run against each fake and (when credenti
 tests/scenarios     whole runs on fixture mailboxes: happy path, duplicate, correction, unknown sender, no approval, …
 tests/evals         made-up timesheets with expected readings, for the Claude reader
 tests/fixtures      .eml files, sample workbooks, sample timesheets (all made up; never real client data)
-alembic/            database migrations (arrives with the database in PR 4)
 docs/               these documents
 ```
 
@@ -26,6 +25,7 @@ docs/               these documents
 - Statuses and review codes exactly as spelled in `status-tracking.md` and `timesheet-checks.md`; define each once as a `StrEnum` in `domain/`.
 - Kevin-facing text (emails, tracking sheet headers, messages in review emails) uses the plain words from `glossary.md`; no accounting jargon.
 - Adapter modules are named after the real thing: `adapters/microsoft365`, `adapters/quickbooks`, `adapters/claude`, `adapters/excel`, `adapters/sqlite`, `adapters/pdf`, `adapters/fakes`.
+- Alembic migrations live inside the package (`adapters/sqlite/alembic/`), so `fops` can migrate its database wherever it runs from; apply them through `adapters.sqlite.migrations.upgrade_to_head` (which `open_database` does).
 
 ## Types and values
 
