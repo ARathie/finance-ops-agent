@@ -18,10 +18,10 @@ Set up `uv`, the `src/finance_ops_agent` layout, `ruff`, `mypy`, `pytest`, GitHu
 
 Money as cents and hours as hundredths; billing periods for each schedule (clipped to engagement dates); invoice and pay math; the statuses and allowed status changes; the review codes; the `TimesheetReading` form.
 
-- [ ] The worked example (156 h, $140, $100 → $21,840 and $15,600) is a test.
-- [ ] Period generation is tested for monthly, twice a month, every two weeks, and weekly, including a first and last partial period.
-- [ ] Every allowed status change has a test and every disallowed one raises.
-- [ ] Rounding is tested with property-based tests (Hypothesis).
+- [x] The worked example (156 h, $140, $100 → $21,840 and $15,600) is a test.
+- [x] Period generation is tested for monthly, twice a month, every two weeks, and weekly, including a first and last partial period.
+- [x] Every allowed status change has a test and every disallowed one raises.
+- [x] Rounding is tested with property-based tests (Hypothesis).
 
 ## PR 4 — Engagement list, database, tracking sheet
 
