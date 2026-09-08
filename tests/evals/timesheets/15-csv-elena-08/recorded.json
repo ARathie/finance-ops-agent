@@ -1,0 +1,132 @@
+{
+  "consultant_name": {
+    "value": "Elena Petrov",
+    "quote": "Consultant: Elena Petrov",
+    "confidence": "high"
+  },
+  "client_name": {
+    "value": "Cardinal Foods",
+    "quote": "Client: Cardinal Foods",
+    "confidence": "high"
+  },
+  "end_client_name": {
+    "value": null,
+    "quote": null,
+    "confidence": "low"
+  },
+  "period_start": {
+    "value": "2026-08-01",
+    "quote": "2026-08-01",
+    "confidence": "high"
+  },
+  "period_end": {
+    "value": "2026-08-31",
+    "quote": "2026-08-31",
+    "confidence": "high"
+  },
+  "daily_entries": {
+    "value": [
+      {
+        "day": "2026-08-03",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-08-04",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-08-05",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-08-06",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-08-07",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-08-10",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-08-11",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-08-12",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-08-13",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-08-14",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-08-17",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-08-18",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-08-19",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-08-20",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-08-21",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-08-24",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-08-25",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-08-26",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-08-27",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-08-28",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-08-31",
+        "hours_hundredths": 800
+      }
+    ],
+    "quote": "hours per day",
+    "confidence": "high"
+  },
+  "stated_total_hours_hundredths": {
+    "value": 16800,
+    "quote": "Total: 168.00",
+    "confidence": "high"
+  },
+  "approval": {
+    "value": {
+      "kind": "approver_name_date",
+      "approver": "Grace Okafor",
+      "approval_date": "2026-08-31"
+    },
+    "quote": "Approved by Grace Okafor on 2026-08-31",
+    "confidence": "high"
+  },
+  "unusual_items": []
+}

@@ -1,0 +1,145 @@
+{
+  "reading": {
+    "consultant_name": {
+      "value": "Marcus Webb",
+      "quote": "Consultant: Marcus Webb",
+      "confidence": "high"
+    },
+    "client_name": {
+      "value": "Bluewater Systems",
+      "quote": "Client: Bluewater Systems",
+      "confidence": "high"
+    },
+    "end_client_name": {
+      "value": null,
+      "quote": null,
+      "confidence": "low"
+    },
+    "period_start": {
+      "value": "2026-07-01",
+      "quote": "2026-07-01",
+      "confidence": "high"
+    },
+    "period_end": {
+      "value": "2026-07-31",
+      "quote": "2026-07-31",
+      "confidence": "high"
+    },
+    "daily_entries": {
+      "value": [
+        {
+          "day": "2026-07-01",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-07-02",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-07-03",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-07-06",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-07-07",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-07-08",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-07-09",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-07-10",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-07-13",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-07-14",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-07-15",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-07-16",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-07-17",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-07-20",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-07-21",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-07-22",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-07-23",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-07-24",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-07-27",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-07-28",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-07-29",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-07-30",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-07-31",
+          "hours_hundredths": 800
+        }
+      ],
+      "quote": "hours per day",
+      "confidence": "high"
+    },
+    "stated_total_hours_hundredths": {
+      "value": 18800,
+      "quote": "Total: 188.00",
+      "confidence": "high"
+    },
+    "approval": {
+      "value": {
+        "kind": "approver_name_date",
+        "approver": "Jane Doe",
+        "approval_date": "2026-07-31"
+      },
+      "quote": "Approved by Jane Doe on 2026-07-31",
+      "confidence": "high"
+    },
+    "unusual_items": []
+  },
+  "review_codes": [
+    "HOURS_DONT_ADD_UP"
+  ]
+}

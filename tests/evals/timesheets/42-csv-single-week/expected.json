@@ -1,0 +1,71 @@
+{
+  "reading": {
+    "consultant_name": {
+      "value": "Dana Cruz",
+      "quote": "Consultant: Dana Cruz",
+      "confidence": "high"
+    },
+    "client_name": {
+      "value": "Northwind Bank",
+      "quote": "Client: Northwind Bank",
+      "confidence": "high"
+    },
+    "end_client_name": {
+      "value": null,
+      "quote": null,
+      "confidence": "low"
+    },
+    "period_start": {
+      "value": "2026-09-01",
+      "quote": "2026-09-01",
+      "confidence": "high"
+    },
+    "period_end": {
+      "value": "2026-09-07",
+      "quote": "2026-09-07",
+      "confidence": "high"
+    },
+    "daily_entries": {
+      "value": [
+        {
+          "day": "2026-09-01",
+          "hours_hundredths": 700
+        },
+        {
+          "day": "2026-09-02",
+          "hours_hundredths": 700
+        },
+        {
+          "day": "2026-09-03",
+          "hours_hundredths": 700
+        },
+        {
+          "day": "2026-09-04",
+          "hours_hundredths": 700
+        },
+        {
+          "day": "2026-09-07",
+          "hours_hundredths": 700
+        }
+      ],
+      "quote": "hours per day",
+      "confidence": "high"
+    },
+    "stated_total_hours_hundredths": {
+      "value": 3500,
+      "quote": "Total: 35.00",
+      "confidence": "high"
+    },
+    "approval": {
+      "value": {
+        "kind": "approved_status",
+        "approver": null,
+        "approval_date": null
+      },
+      "quote": "Status: Approved",
+      "confidence": "high"
+    },
+    "unusual_items": []
+  },
+  "review_codes": []
+}

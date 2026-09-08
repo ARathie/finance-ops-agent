@@ -7,7 +7,7 @@ port with the Claude adapter (see docs/integrations/claude-extraction.md).
 
 from typing import Protocol
 
-from finance_ops_agent.domain.reading import TimesheetReading
+from finance_ops_agent.domain.reading import ReadingHints, TimesheetReading
 
 
 class CantReadAttachmentError(Exception):
@@ -15,6 +15,22 @@ class CantReadAttachmentError(Exception):
 
 
 class TimesheetReader(Protocol):
-    def read_timesheet(self, content: bytes, filename: str, mime_type: str) -> TimesheetReading:
+    @property
+    def model_name(self) -> str:
+        """Recorded with every reading (e.g. "claude-opus-5", or "fake")."""
+        ...
+
+    @property
+    def prompt_version(self) -> str:
+        """The prompt file version recorded with every reading (e.g. "timesheet_v1")."""
+        ...
+
+    def read_timesheet(
+        self,
+        content: bytes,
+        filename: str,
+        mime_type: str,
+        hints: ReadingHints | None = None,
+    ) -> TimesheetReading:
         """Fill in the whole form, or raise CantReadAttachmentError. Never partial."""
         ...
