@@ -27,10 +27,10 @@ Money as cents and hours as hundredths; billing periods for each schedule (clipp
 
 Read `engagements.xlsx` (and CSVs) with validation; SQLite tables and migrations; the audit log; write `tracking.xlsx`.
 
-- [ ] A sample workbook loads; each bad row described in `engagement-list.md` produces `LIST_ROW_PROBLEM` naming the sheet and row.
-- [ ] The unique key (consultant, client, period) is enforced by the database.
-- [ ] Every status change writes an audit row in the same transaction.
-- [ ] `tracking.xlsx` is written with the columns in `status-tracking.md`.
+- [x] A sample workbook loads; each bad row described in `engagement-list.md` produces `LIST_ROW_PROBLEM` naming the sheet and row.
+- [x] The unique key (consultant, client, period) is enforced by the database.
+- [x] Every status change writes an audit row in the same transaction.
+- [x] `tracking.xlsx` is written with the columns in `status-tracking.md`.
 
 ## PR 5 — The run, on fakes
 
