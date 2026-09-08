@@ -1,14 +1,16 @@
 """The Store contract: the fake and the SQLite adapter behave identically."""
 
 from collections.abc import Callable
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
 
 from finance_ops_agent.adapters.fakes.store import FakeStore
 from finance_ops_agent.adapters.sqlite.store import SqliteStore, open_database
-from finance_ops_agent.domain.items import EngagementSnapshot
+from finance_ops_agent.domain.items import EngagementSnapshot, TimesheetRecord
+from finance_ops_agent.domain.messages import MessageKind, StoredAttachment, StoredMessage
+from finance_ops_agent.domain.money import Hours, Money
 from finance_ops_agent.domain.periods import BillingPeriod
 from finance_ops_agent.domain.statuses import DisallowedStatusChange, ItemStatus
 from finance_ops_agent.ports.store import DuplicateItemError, Store
@@ -35,7 +37,7 @@ def snapshot() -> EngagementSnapshot:
 def store(request: pytest.FixtureRequest, tmp_path: Path) -> Store:
     if request.param == "fake":
         return FakeStore()
-    return SqliteStore(open_database(tmp_path / "agent.db"))
+    return SqliteStore(open_database(tmp_path / "agent.db"), files_dir=tmp_path / "files")
 
 
 def create(store: Store, period: BillingPeriod = AUGUST, client: str = "Acme Corp") -> int:
@@ -116,6 +118,96 @@ class TestStatusChangesAndTheAuditLog:
         whats = [entry.what for entry in store.audit_entries(item_id)]
         assert whats == ["item created", "status changed", "status changed"]
         assert store.audit_entries() == store.audit_entries(item_id)
+
+
+def _stored_message(provider_id: str = "m1", internet_id: str = "<m1@example>") -> StoredMessage:
+    return StoredMessage(
+        provider_id=provider_id,
+        internet_message_id=internet_id,
+        conversation_id="",
+        from_address="priya@example.com",
+        to_addresses="jay@icon-technologies.com",
+        subject="August timesheet",
+        received_at=datetime(2026, 9, 2, 9, 0, tzinfo=UTC),
+        kind=MessageKind.TIMESHEET,
+        processed=False,
+        attachments=(
+            StoredAttachment(
+                filename="timesheet.pdf",
+                mime_type="application/pdf",
+                sha256="a" * 64,
+                size_bytes=7,
+            ),
+        ),
+    )
+
+
+class TestMessages:
+    def test_stored_then_processed(self, store: Store) -> None:
+        assert store.record_message(_stored_message(), {"a" * 64: b"PDFDATA"})
+        [message] = store.unprocessed_messages()
+        assert message.provider_id == "m1"
+        assert message.attachments[0].sha256 == "a" * 64
+        assert store.load_file("a" * 64) == b"PDFDATA"
+
+        store.mark_processed("m1")
+        assert store.unprocessed_messages() == []
+
+    def test_the_same_provider_id_is_stored_once(self, store: Store) -> None:
+        assert store.record_message(_stored_message(), {})
+        assert not store.record_message(_stored_message(internet_id="<other@example>"), {})
+        assert len(store.unprocessed_messages()) == 1
+
+    def test_the_same_internet_message_id_is_stored_once(self, store: Store) -> None:
+        assert store.record_message(_stored_message(), {})
+        assert not store.record_message(_stored_message(provider_id="m2"), {})
+
+
+class TestTimesheetsReviewsOutgoingState:
+    def test_timesheet_records(self, store: Store) -> None:
+        item_id = create(store)
+        assert not store.timesheet_seen("b" * 64)
+        store.record_timesheet(
+            TimesheetRecord(
+                item_id=item_id,
+                sha256="b" * 64,
+                reading={"anything": "goes"},
+                model="fake",
+                prompt_version="0",
+                is_duplicate=False,
+                is_correction=False,
+            )
+        )
+        assert store.timesheet_seen("b" * 64)
+        [record] = store.timesheets_for_item(item_id)
+        assert record.reading == {"anything": "goes"}
+
+    def test_the_same_open_review_is_not_asked_twice(self, store: Store) -> None:
+        item_id = create(store)
+        assert store.open_review(item_id, "NO_APPROVAL", "I can't see approval.")
+        assert not store.open_review(item_id, "NO_APPROVAL", "I can't see approval.")
+        assert store.open_review(item_id, "NO_APPROVAL", "a different message")
+        assert len(store.open_reviews()) == 2
+
+    def test_outgoing_is_written_down_once_per_key(self, store: Store) -> None:
+        assert store.record_outgoing("details_to_kevin", "details:m1", None, {"x": 1})
+        assert not store.record_outgoing("details_to_kevin", "details:m1", None, {"x": 2})
+        [record] = store.outgoing_records()
+        assert record.payload == {"x": 1}
+        assert record.status == "pending"
+
+    def test_state_round_trip(self, store: Store) -> None:
+        assert store.get_state("mailbox_cursor") is None
+        store.set_state("mailbox_cursor", "5")
+        store.set_state("mailbox_cursor", "7")
+        assert store.get_state("mailbox_cursor") == "7"
+
+    def test_set_item_amounts(self, store: Store) -> None:
+        item_id = create(store)
+        changed = store.set_item_amounts(item_id, Hours(15_600), Money(2_184_000), Money(1_560_000))
+        assert changed.approved_hours == Hours(15_600)
+        assert store.get_item(item_id).invoice_amount == Money(2_184_000)
+        assert store.get_item(item_id).amount_owed == Money(1_560_000)
 
 
 def test_the_database_survives_reopening(tmp_path: Path) -> None:

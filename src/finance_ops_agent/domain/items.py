@@ -52,3 +52,38 @@ class AuditEntry:
     what: str
     item_id: int | None
     details: dict[str, object]
+
+
+@dataclass(frozen=True)
+class TimesheetRecord:
+    """One timesheet file processed against an item."""
+
+    item_id: int
+    sha256: str
+    reading: dict[str, object]  # the TimesheetReading, as stored JSON
+    model: str
+    prompt_version: str
+    is_duplicate: bool
+    is_correction: bool
+
+
+@dataclass(frozen=True)
+class ReviewRecord:
+    """One review reason raised for Kevin, open until he answers."""
+
+    id: int
+    item_id: int | None
+    code: str
+    message: str
+    status: str  # open / answered / ignored
+
+
+@dataclass(frozen=True)
+class OutgoingRecord:
+    """An email or accounting write, written down before it happens."""
+
+    kind: str
+    idempotency_key: str
+    item_id: int | None
+    payload: dict[str, object]
+    status: str  # pending / in_flight / done / failed

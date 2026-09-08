@@ -1,0 +1,23 @@
+From: priya@example.com
+To: jay@icon-technologies.com
+Subject: August timesheet attached
+Message-ID: <priya-aug-2026@example>
+Date: Wed, 02 Sep 2026 09:12:00 +0000
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="===============0887128275318719971=="
+
+--===============0887128275318719971==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+Hi, August timesheet attached. Approved by Jane. Thanks! Priya
+
+--===============0887128275318719971==
+Content-Type: application/pdf
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="priya-shah-august-2026.pdf"
+MIME-Version: 1.0
+
+JVBERi1mYWtlIHByaXlhIGF1Z3VzdCAyMDI2
+
+--===============0887128275318719971==--

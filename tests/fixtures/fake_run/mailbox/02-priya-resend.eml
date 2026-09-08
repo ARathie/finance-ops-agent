@@ -1,0 +1,23 @@
+From: priya@example.com
+To: jay@icon-technologies.com
+Subject: Resending August timesheet just in case
+Message-ID: <priya-aug-2026-resend@example>
+Date: Fri, 04 Sep 2026 08:00:00 +0000
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="===============7126756838860479710=="
+
+--===============7126756838860479710==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+Not sure the first one went through, resending.
+
+--===============7126756838860479710==
+Content-Type: application/pdf
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="priya-shah-august-2026.pdf"
+MIME-Version: 1.0
+
+JVBERi1mYWtlIHByaXlhIGF1Z3VzdCAyMDI2
+
+--===============7126756838860479710==--
