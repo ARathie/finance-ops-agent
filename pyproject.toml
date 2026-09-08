@@ -5,7 +5,10 @@ description = "Billing agent for Icon Technologies: reads consultant timesheets 
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "alembic>=1.14",
+    "openpyxl>=3.1",
     "pydantic>=2.10",
+    "sqlalchemy>=2.0",
 ]
 
 [project.scripts]
@@ -17,6 +20,7 @@ dev = [
     "mypy>=1.14",
     "pytest>=8.3",
     "ruff>=0.9",
+    "types-openpyxl>=3.1.5.20260827",
 ]
 
 [build-system]
