@@ -20,6 +20,35 @@ The agent keeps one record, called a timesheet item, for each consultant and bil
 
 Each item also records, with dates: the email the timesheet came in, the details-for-records email to Kevin, the review emails and Kevin's answers, the invoice number, the QuickBooks invoice id, the billing email, and the payment instruction email.
 
+## Allowed status changes
+
+An item starts as `waiting_for_timesheet` (the period ended and nothing has arrived) or `received` (a timesheet arrived first). From there, only these changes are allowed; the software refuses anything else.
+
+| From | Can change to | When |
+|---|---|---|
+| `waiting_for_timesheet` | `received` | The timesheet arrives. |
+| | `cancelled` | Kevin cancels it (for example the consultant was on leave). |
+| `received` | `ready` | Every check passes. |
+| | `needs_review` | A check fails; Kevin is emailed. |
+| | `ignored` | It was a duplicate, or not a timesheet after all. |
+| | `cancelled` | Kevin cancels it. |
+| `needs_review` | `ready` | Kevin's answer (or a fixed engagement list) clears everything. |
+| | `received` | Kevin's answer sends it back to checking or to waiting for more weekly timesheets. |
+| | `ignored` | Kevin replies "ignore". |
+| | `cancelled` | Kevin cancels it. |
+| `ready` | `waiting_for_approval` | Ask first mode: Kevin is emailed "Approve this invoice?". |
+| | `invoice_sent` | Automatic mode sends it directly. (In dry run the item stays `ready`.) |
+| | `needs_review` | Sending or creating the invoice failed, or a corrected timesheet arrived. |
+| | `cancelled` | Kevin cancels it. |
+| `waiting_for_approval` | `invoice_sent` | Kevin replies "approve". |
+| | `needs_review` | Sending failed after Kevin approved, or a corrected timesheet arrived. |
+| | `cancelled` | Kevin replies "cancel". |
+| `invoice_sent` | `client_paid` | QuickBooks Online shows it paid, or Kevin says so. |
+| | `needs_review` | A corrected timesheet arrived after the invoice went out. |
+| `client_paid`, `ignored`, `cancelled` | — | Final. Nothing changes these. |
+
+A corrected timesheet accepted with "use the new one" travels back through this table: the item returns to `received` and is checked again from the start (cancelling and replacing the old invoice first if one was already sent).
+
 The agent does not track whether the consultant or vendor was paid. That stays with Kevin, as today.
 
 ## Duplicates
