@@ -1,0 +1,79 @@
+"""The form Claude fills in when it reads a timesheet.
+
+Claude reads; code decides (docs/decisions.md #14). Every field carries the exact
+words on the page it relied on and how sure the model is. The model never sums
+hours, never sees a rate, and never picks recipients; `summed_daily_hundredths`
+below is the code doing its own arithmetic. All fields are required: a reading is
+always the whole form, never a fragment (a failed read becomes
+CANT_READ_ATTACHMENT, not a partial reading).
+"""
+
+from datetime import date
+from enum import StrEnum
+from typing import Annotated, Generic, TypeVar
+
+from pydantic import BaseModel, ConfigDict, Field
+
+T = TypeVar("T")
+
+
+class Confidence(StrEnum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class ApprovalKind(StrEnum):
+    """What shows the client approved the hours (docs/timesheet-checks.md)."""
+
+    APPROVED_STATUS = "approved_status"
+    APPROVER_NAME_DATE = "approver_name_date"
+    SIGNATURE = "signature"
+    FORWARDED_EMAIL = "forwarded_email"
+    NONE = "none"
+
+
+class ReadField(BaseModel, Generic[T]):
+    """One answer on the form: the value, the words on the page, and how sure."""
+
+    model_config = ConfigDict(frozen=True)
+
+    value: T | None = None
+    quote: str | None = None
+    confidence: Confidence = Confidence.LOW
+
+
+class DailyEntry(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    day: date
+    hours_hundredths: Annotated[int, Field(ge=0)]
+
+
+class Approval(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    kind: ApprovalKind = ApprovalKind.NONE
+    approver: str | None = None
+    approval_date: date | None = None
+
+
+class TimesheetReading(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    consultant_name: ReadField[str]
+    client_name: ReadField[str]
+    end_client_name: ReadField[str]
+    period_start: ReadField[date]
+    period_end: ReadField[date]
+    daily_entries: ReadField[list[DailyEntry]]
+    stated_total_hours_hundredths: ReadField[int]
+    approval: ReadField[Approval]
+    unusual_items: list[str] = Field(default_factory=list)
+
+    def summed_daily_hundredths(self) -> int | None:
+        """Code sums the daily hours itself; None when the timesheet showed no daily hours."""
+        entries = self.daily_entries.value
+        if not entries:
+            return None
+        return sum(entry.hours_hundredths for entry in entries)
