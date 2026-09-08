@@ -1,0 +1,47 @@
+{
+  "consultant_name": {
+    "value": "Marcus Webb",
+    "quote": "Consultant: Marcus Webb",
+    "confidence": "high"
+  },
+  "client_name": {
+    "value": "Bluewater Systems",
+    "quote": "Client: Bluewater Systems",
+    "confidence": "high"
+  },
+  "end_client_name": {
+    "value": null,
+    "quote": null,
+    "confidence": "low"
+  },
+  "period_start": {
+    "value": "2026-07-01",
+    "quote": "2026-07-01",
+    "confidence": "high"
+  },
+  "period_end": {
+    "value": "2026-07-31",
+    "quote": "2026-07-31",
+    "confidence": "high"
+  },
+  "daily_entries": {
+    "value": [],
+    "quote": null,
+    "confidence": "low"
+  },
+  "stated_total_hours_hundredths": {
+    "value": 18400,
+    "quote": "Total: 184.00",
+    "confidence": "high"
+  },
+  "approval": {
+    "value": {
+      "kind": "signature",
+      "approver": null,
+      "approval_date": null
+    },
+    "quote": "Signed: (signature on file)",
+    "confidence": "high"
+  },
+  "unusual_items": []
+}

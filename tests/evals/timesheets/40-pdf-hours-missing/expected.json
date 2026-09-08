@@ -1,0 +1,53 @@
+{
+  "reading": {
+    "consultant_name": {
+      "value": "Tom Nakamura",
+      "quote": "Consultant: Tom Nakamura",
+      "confidence": "high"
+    },
+    "client_name": {
+      "value": "Harbor Analytics",
+      "quote": "Client: Harbor Analytics",
+      "confidence": "high"
+    },
+    "end_client_name": {
+      "value": null,
+      "quote": null,
+      "confidence": "low"
+    },
+    "period_start": {
+      "value": "2026-03-01",
+      "quote": "2026-03-01",
+      "confidence": "high"
+    },
+    "period_end": {
+      "value": "2026-03-31",
+      "quote": "2026-03-31",
+      "confidence": "high"
+    },
+    "daily_entries": {
+      "value": [],
+      "quote": null,
+      "confidence": "low"
+    },
+    "stated_total_hours_hundredths": {
+      "value": null,
+      "quote": null,
+      "confidence": "high"
+    },
+    "approval": {
+      "value": {
+        "kind": "approver_name_date",
+        "approver": "Jane Doe",
+        "approval_date": "2026-03-31"
+      },
+      "quote": "Approved by Jane Doe on 2026-03-31",
+      "confidence": "high"
+    },
+    "unusual_items": []
+  },
+  "review_codes": [
+    "HOURS_MISSING",
+    "NOT_SURE"
+  ]
+}

@@ -1,0 +1,139 @@
+{
+  "reading": {
+    "consultant_name": {
+      "value": "Dana Cruz",
+      "quote": "Consultant: Dana Cruz",
+      "confidence": "high"
+    },
+    "client_name": {
+      "value": "Northwind Bank",
+      "quote": "Client: Northwind Bank",
+      "confidence": "high"
+    },
+    "end_client_name": {
+      "value": null,
+      "quote": null,
+      "confidence": "low"
+    },
+    "period_start": {
+      "value": "2026-06-01",
+      "quote": "2026-06-01",
+      "confidence": "high"
+    },
+    "period_end": {
+      "value": "2026-06-30",
+      "quote": "2026-06-30",
+      "confidence": "high"
+    },
+    "daily_entries": {
+      "value": [
+        {
+          "day": "2026-06-01",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-06-02",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-06-03",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-06-04",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-06-05",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-06-08",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-06-09",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-06-10",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-06-11",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-06-12",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-06-15",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-06-16",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-06-17",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-06-18",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-06-19",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-06-22",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-06-23",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-06-24",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-06-25",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-06-26",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-06-29",
+          "hours_hundredths": 800
+        },
+        {
+          "day": "2026-06-30",
+          "hours_hundredths": 800
+        }
+      ],
+      "quote": "hours per day",
+      "confidence": "high"
+    },
+    "stated_total_hours_hundredths": {
+      "value": 17600,
+      "quote": "Total: 176.00",
+      "confidence": "high"
+    },
+    "approval": {
+      "value": {
+        "kind": "approver_name_date",
+        "approver": "Sam Ortiz",
+        "approval_date": "2026-06-30"
+      },
+      "quote": "Approved by Sam Ortiz on 2026-06-30",
+      "confidence": "high"
+    },
+    "unusual_items": []
+  },
+  "review_codes": []
+}

@@ -35,7 +35,7 @@ from finance_ops_agent.domain.messages import (
 )
 from finance_ops_agent.domain.money import Hours, Money, invoice_amount, pay_amount
 from finance_ops_agent.domain.periods import BillingPeriod, billing_periods
-from finance_ops_agent.domain.reading import TimesheetReading
+from finance_ops_agent.domain.reading import ReadingHints, TimesheetReading
 from finance_ops_agent.domain.review import ReviewCode
 from finance_ops_agent.domain.statuses import ItemStatus
 from finance_ops_agent.ports.clock import Clock
@@ -45,8 +45,6 @@ from finance_ops_agent.ports.reader import CantReadAttachmentError, TimesheetRea
 from finance_ops_agent.ports.store import Store
 
 MAILBOX_CURSOR_KEY = "mailbox_cursor"
-READER_NAME = "fake"  # the Claude adapter (PR 6) records its real model name
-PROMPT_VERSION = "0"
 
 
 @dataclass(frozen=True)
@@ -340,7 +338,14 @@ def _process_timesheet(
         return
     content = deps.store.load_file(attachment.sha256)
     try:
-        reading = deps.reader.read_timesheet(content, attachment.filename, attachment.mime_type)
+        hints = ReadingHints(
+            email_subject=message.subject,
+            consultant_names=[consultant.name for consultant in workbook.consultants],
+            client_names=[client.name for client in workbook.clients],
+        )
+        reading = deps.reader.read_timesheet(
+            content, attachment.filename, attachment.mime_type, hints
+        )
     except CantReadAttachmentError:
         _open_review(
             deps,
@@ -439,8 +444,8 @@ def _process_timesheet(
                 item_id=item.id,
                 sha256=attachment.sha256,
                 reading=reading.model_dump(mode="json"),
-                model=READER_NAME,
-                prompt_version=PROMPT_VERSION,
+                model=deps.reader.model_name,
+                prompt_version=deps.reader.prompt_version,
                 is_duplicate=is_duplicate,
                 is_correction=is_correction,
             )

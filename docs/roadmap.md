@@ -44,9 +44,9 @@ Fake mailbox from `.eml` files, fake reader scripted per attachment, the checks 
 
 The three Claude calls, prompt files with versions, attachment conversion (PDF, images, spreadsheets), quote checking against the PDF text, saved readings, `fops eval`.
 
-- [ ] 40+ made-up timesheets with expected readings; `fops eval` reports per-field accuracy and hours error; thresholds recorded.
-- [ ] CI runs the reader against recorded responses only; the live run is documented.
-- [ ] `refusal` and `max_tokens` produce `CANT_READ_ATTACHMENT`, never a partial reading.
+- [x] 40+ made-up timesheets with expected readings; `fops eval` reports per-field accuracy and hours error; thresholds recorded.
+- [x] CI runs the reader against recorded responses only; the live run is documented.
+- [x] `refusal` and `max_tokens` produce `CANT_READ_ATTACHMENT`, never a partial reading.
 
 ## PR 7 — Emails and invoices, on fakes
 
