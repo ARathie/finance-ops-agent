@@ -1,0 +1,36 @@
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+htmlcov/
+
+# Secrets and local settings
+.env
+.env.*
+secrets/
+
+# Runtime data: database, stored attachments, tokens, tracking sheet
+data/
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+
+# The real engagement list and real timesheets never go in git
+engagements.xlsx
+evals/private/
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
