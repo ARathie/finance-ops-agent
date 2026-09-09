@@ -75,11 +75,11 @@ The real mailbox adapter, `fops doctor`, and the setup checklist in `integration
 
 ## PR 10 — Running it day to day
 
-Scheduler instructions (launchd on the Mac this runs on, and systemd for a Linux box), the lock file, JSON logs, `fops backup` and a tested restore, token-expiry warnings, the automatic-mode guardrails.
+Scheduler instructions (launchd on the Mac this runs on, and systemd for a Linux box), the lock file, JSON logs, `fops backup` and a tested restore, token-expiry warnings, the automatic-mode guardrails. The operator's page is `running-it.md`.
 
-- [ ] Two overlapping runs cannot happen.
-- [ ] Backup and restore round-trip a populated data folder.
-- [ ] Every guardrail in `technical-design.md` has a test; `FOPS_MODE=dry_run` overrides everything.
+- [x] Two overlapping runs cannot happen.
+- [x] Backup and restore round-trip a populated data folder.
+- [x] Every guardrail in `technical-design.md` has a test; `FOPS_MODE=dry_run` overrides everything.
 
 ## Later, if wanted
 

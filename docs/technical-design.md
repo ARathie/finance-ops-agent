@@ -23,11 +23,12 @@ src/finance_ops_agent/
   application/   the steps of a run, in order, calling ports. Knows nothing about Microsoft, QuickBooks, or Claude.
   ports/         the interfaces the application needs (below). Plain Python Protocols.
   adapters/      one folder per real thing: microsoft365/, quickbooks/, claude/, excel/ (engagement list + tracking sheet), sqlite/, pdf/, and fakes/ for every port.
-  cli/           `fops` commands: run, dry-run, status, doctor, qbo-connect, eval, backup.
+  cli/           `fops` commands: run, dry-run, status, doctor, qbo-connect, eval, backup, restore. Also the doctor's checks, which are all about a concrete adapter.
   config.py      settings from environment variables / .env
+  logs.py        JSON lines logging; only the command line configures where they go
 ```
 
-Rule: `domain/` and `application/` never import from `adapters/`. Tests for the business rules run with fakes and no network.
+Rule: `domain/`, `application/`, and `ports/` never import from `adapters/` or `cli/`, and `tests/unit/test_layering.py` checks it file by file. Tests for the business rules run with fakes and no network.
 
 ### Ports (interfaces)
 
@@ -81,7 +82,7 @@ Tables (key columns only; the domain objects mirror them):
 - **One item per consultant + period:** enforced by a unique index. A new timesheet for an existing item is a duplicate (same content) or a correction (different content), never a new item.
 - **Sending and creating:** before any email is sent or any invoice is created in QuickBooks, an `outgoing` row is written with an idempotency key (for example `billing-email:<item id>:<invoice number>`) in the same transaction as the status change. The worker then: marks it `in_flight`; creates the draft / invoice; stores the draft id / external id immediately; sends; marks it `done`. On start-up, any `in_flight` row is reconciled first: ask the provider whether the draft was sent or the invoice exists (by draft id, or by the item id kept in the QuickBooks private note) before doing anything again.
 - **Retries:** transient failures (network, 429, 5xx) retry with backoff across runs, up to 3 attempts, then become `SEND_FAILED` / `QUICKBOOKS_FAILED` review items. Permanent failures (4xx other than 429) become review items at once.
-- **Overlapping runs:** a lock file under `data/` prevents two runs at the same time.
+- **Overlapping runs:** a POSIX advisory lock (`flock`) on `data/run.lock` prevents two runs at the same time; the second run says who holds it and stops. The lock belongs to the process, so it is released even if a run is killed — a pid file could not promise that.
 
 ## Kevin's replies
 
@@ -89,7 +90,9 @@ Replies from Kevin's address that are in the thread of a review or approval emai
 
 ## Modes and guardrails
 
-`FOPS_MODE` is one of `dry_run`, `ask_first`, `auto`. A billing email goes out without asking only when all of these hold: mode is `auto`; the engagement row says "Send automatically = yes"; the item has no open review item; every confidence on consultant, period, hours, and approval is `high`; and the amount is within 25% of the engagement's last three invoices (if there are any). Otherwise the item is handled as `ask_first`. In `dry_run` nothing is sent to clients and nothing is created in QuickBooks.
+`FOPS_MODE` is one of `dry_run`, `ask_first`, `auto`. A billing email goes out without asking only when all of these hold: mode is `auto`; the engagement row says "Send automatically = yes"; the item has no open review item; every confidence on consultant, period, hours, and approval is `high`; and the amount is within 25% of the engagement's last three invoices (if there are any). Otherwise the item is handled as `ask_first`: the invoice still happens, Kevin just sees it first, and the run says which condition did not hold. In `dry_run` nothing is sent to clients and nothing is created in QuickBooks.
+
+`dry_run` is the kill switch, so it is checked before the guardrails and it wins over everything else: while `FOPS_MODE=dry_run` is set, `fops run --mode auto` still runs as a dry run and says so. The flag may only lower a live mode to `dry_run`, never raise one. Changing what the agent may send is a change to the setting, made deliberately, not a flag on one command.
 
 ## Configuration
 
@@ -97,8 +100,10 @@ Environment variables (from `.env` locally): `FOPS_MODE`, `FOPS_TIMEZONE`, `FOPS
 
 ## Running it
 
-- Developer: `uv run fops dry-run --fake` runs the whole flow on fixture emails with fake adapters and no network. `uv run fops run` does a real run. `uv run fops status` prints the items and open reviews. `uv run fops doctor` checks every credential and setting without sending anything to a client. `uv run fops qbo-connect` does the one-time QuickBooks sign-in. `uv run fops eval` runs the timesheet reading test set. `uv run fops backup` zips `data/`.
-- Production: one always-on Mac (see `open-questions.md`); a launchd LaunchAgent with `StartInterval` runs `fops run` every 15 minutes, and the machine must be kept from sleeping or it simply does not run. Nightly `fops backup` copied to OneDrive/SharePoint, with Files-On-Demand off for that folder so the copy really lands on disk. Logs are JSON lines with item ids and codes, never attachment contents, email bodies, or rates.
+- Developer: `uv run fops dry-run --fake` runs the whole flow on fixture emails with fake adapters and no network. `uv run fops run` does a real run. `uv run fops status` prints the items and open reviews. `uv run fops doctor` checks every credential and setting without sending anything to a client. `uv run fops qbo-connect` does the one-time QuickBooks sign-in. `uv run fops eval` runs the timesheet reading test set. `uv run fops backup` zips `data/` and `uv run fops restore <zip>` unpacks it into an empty data folder.
+- Production: one always-on Mac (see `open-questions.md`); a launchd LaunchAgent with `StartInterval` runs `fops run` every 15 minutes, and the machine must be kept logged in and from sleeping or it simply does not run. Nightly `fops backup` copied to OneDrive/SharePoint, with Files-On-Demand off for that folder so the copy really lands on disk. Logs are JSON lines in `data/fops.log` with item ids, codes, statuses, and counts, never attachment contents, email bodies, rates, or amounts.
+- **`running-it.md` is the operator's page**: the launchd and systemd files, what the schedule needs from the machine, reading the log, backups and a real restore, the QuickBooks expiry warning, and what to check when nothing is happening.
+- Backups checkpoint the database before copying it (`PRAGMA wal_checkpoint(TRUNCATE)`, exposed as `Store.checkpoint`) and leave the `-wal`/`-shm` sidecars and `run.lock` out of the zip. Without the checkpoint the `.db` file alone can be missing committed work, which is a quietly incomplete backup; a test proves it.
 
 ## Security and privacy
 

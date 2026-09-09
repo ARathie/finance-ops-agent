@@ -155,6 +155,9 @@ class FakeStore:
     def mark_processed(self, provider_id: str) -> None:
         self._messages[provider_id] = replace(self._messages[provider_id], processed=True)
 
+    def checkpoint(self) -> None:
+        return  # nothing on disk to fold in
+
     def load_file(self, sha256: str) -> bytes:
         return self._files[sha256]
 
