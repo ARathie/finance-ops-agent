@@ -17,6 +17,6 @@ Things only Icon can answer. Until they are answered, the agent will use the def
 | Any sales tax on invoices? | None. |
 | Invoice numbering: should the agent continue Kevin's current sequence? | In manual mode `ICON-<year>-<number>` starting from a number Kevin chooses; in QuickBooks Online mode, QuickBooks assigns the number. |
 | Can Kevin share a few real timesheets (with names changed) to test with? | Made-up timesheets only until then. |
-| Which machine will the agent run on? | One always-on Windows or Linux machine at Icon, or a small cloud machine, checking mail every 15 minutes. |
+| Which machine will the agent run on? | An always-on Mac at Icon, checking mail every 15 minutes (launchd, and sleep disabled). Answered: macOS. |
 | Where should backups go? | A folder on OneDrive/SharePoint, copied nightly. |
 | What should the Monday summary include or leave out? | Everything listed in `emails.md`. |

@@ -98,7 +98,7 @@ Environment variables (from `.env` locally): `FOPS_MODE`, `FOPS_TIMEZONE`, `FOPS
 ## Running it
 
 - Developer: `uv run fops dry-run --fake` runs the whole flow on fixture emails with fake adapters and no network. `uv run fops run` does a real run. `uv run fops status` prints the items and open reviews. `uv run fops doctor` checks every credential and setting without sending anything to a client. `uv run fops qbo-connect` does the one-time QuickBooks sign-in. `uv run fops eval` runs the timesheet reading test set. `uv run fops backup` zips `data/`.
-- Production: one always-on Windows or Linux machine; Task Scheduler or a systemd timer runs `fops run` every 15 minutes; nightly `fops backup` copied to OneDrive/SharePoint. Logs are JSON lines with item ids and codes, never attachment contents, email bodies, or rates.
+- Production: one always-on Mac (see `open-questions.md`); a launchd LaunchAgent with `StartInterval` runs `fops run` every 15 minutes, and the machine must be kept from sleeping or it simply does not run. Nightly `fops backup` copied to OneDrive/SharePoint, with Files-On-Demand off for that folder so the copy really lands on disk. Logs are JSON lines with item ids and codes, never attachment contents, email bodies, or rates.
 
 ## Security and privacy
 
