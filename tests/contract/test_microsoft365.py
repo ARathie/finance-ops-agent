@@ -16,7 +16,7 @@ from finance_ops_agent.adapters.microsoft365.client import (
 )
 from finance_ops_agent.adapters.microsoft365.inbox import GraphInbox
 from finance_ops_agent.adapters.microsoft365.sender import GraphSender
-from finance_ops_agent.application.doctor import (
+from finance_ops_agent.cli.doctor import (
     CheckResult,
     check_can_read_the_agent_mailbox,
     check_cannot_read_another_mailbox,

@@ -11,6 +11,7 @@ from datetime import timedelta
 from finance_ops_agent.application.context import Mode, RunDeps, RunReport
 from finance_ops_agent.domain import emails
 from finance_ops_agent.domain.emails import EmailAttachment, OutgoingEmail
+from finance_ops_agent.domain.guardrails import GuardrailCheck, check_guardrails
 from finance_ops_agent.domain.invoices import DRAFT_NUMBER, build_invoice
 from finance_ops_agent.domain.items import (
     InvoiceRecord,
@@ -18,6 +19,8 @@ from finance_ops_agent.domain.items import (
     OutgoingRecord,
     PaymentInstructionRecord,
 )
+from finance_ops_agent.domain.money import Money
+from finance_ops_agent.domain.reading import TimesheetReading
 from finance_ops_agent.domain.review import ReviewCode
 from finance_ops_agent.domain.statuses import ItemStatus
 from finance_ops_agent.ports.sender import DraftState
@@ -64,6 +67,39 @@ def _active_timesheet_attachment(deps: RunDeps, item: Item) -> EmailAttachment |
 
 def _live_invoice_count(deps: RunDeps, item: Item) -> int:
     return len(deps.store.invoices_for_item(item.id))
+
+
+def _recent_amounts(deps: RunDeps, item: Item) -> list[Money]:
+    """What the last few invoices for this same engagement came to."""
+    amounts: list[Money] = []
+    for other in deps.store.list_items():
+        if other.id == item.id:
+            continue
+        if other.consultant != item.consultant or other.client != item.client:
+            continue
+        for record in deps.store.invoices_for_item(other.id):
+            if record.status != "cancelled":
+                amounts.append(Money(record.amount_cents))
+    return amounts
+
+
+def guardrails_for(deps: RunDeps, item: Item) -> GuardrailCheck:
+    """Every condition from docs/technical-design.md, for this one item."""
+    assert item.invoice_amount is not None
+    readings = [
+        TimesheetReading.model_validate(record.reading)
+        for record in deps.store.timesheets_for_item(item.id)
+        if not record.is_duplicate and not record.is_correction
+    ]
+    return check_guardrails(
+        send_automatically=item.snapshot.send_automatically,
+        open_review_count=sum(
+            1 for review in deps.store.open_reviews() if review.item_id == item.id
+        ),
+        readings=readings,
+        amount=item.invoice_amount,
+        recent_amounts=_recent_amounts(deps, item),
+    )
 
 
 def approve_item(deps: RunDeps, item: Item, report: RunReport) -> None:
@@ -173,9 +209,20 @@ def plan_outgoing(deps: RunDeps, report: RunReport) -> None:
             key = f"preview:{item.id}:{item.approved_hours.hundredths}"
             enqueue_email(deps, "preview_email", key, item.id, preview)
             _enqueue_payment(deps, item, None)
-        elif mode is Mode.AUTO and item.snapshot.send_automatically:
+            # Dry run stops here, always: nothing to a client, nothing created.
+            continue
+        # Only automatic mode can skip asking, and only when every guardrail
+        # holds. Anything else is handled as ask first: the invoice still
+        # happens, Kevin just sees it first.
+        guardrails = guardrails_for(deps, item) if mode is Mode.AUTO else None
+        if guardrails is not None and guardrails.may_send_automatically:
             approve_item(deps, item, report)
         else:
+            if guardrails is not None:
+                report.note(
+                    f"asking rather than sending automatically ({item.consultant}"
+                    f" at {item.client}): {guardrails.why_not()}"
+                )
             invoice = build_invoice(item, DRAFT_NUMBER, deps.clock.today())
             pdf_sha = deps.store.save_file(deps.renderer.invoice_pdf(invoice))
             attachments = tuple(

@@ -73,3 +73,11 @@ Every email to a client and every invoice creation is written down before it hap
 ## 18. The application records the invoice, not the accounting adapter
 
 An `AccountingSystem` adapter creates the invoice in the accounting system and returns its number, external id, and PDF; writing the agent's own `invoices` row is the application's job. The first cut had manual mode write that row as a side effect, which silently left QuickBooks Online mode with no invoice rows at all — so the tracking sheet, the daily paid check, and replacement invoices would all have quietly stopped working once the mode changed. Consequence: `application/outgoing.py` writes the row once for whichever adapter made the invoice, and `create_invoice` stays idempotent per item so a crash mid-run cannot produce a second one (in QuickBooks by recognising the item id in the invoice's private note).
+
+## 19. One run at a time by advisory file lock, not a pid file
+
+A run takes a POSIX advisory lock (`fcntl.flock`) on `data/run.lock`; a run that cannot get it stops and leaves the work to the next one. A pid file cannot promise the same thing: a killed or crashed run leaves the file behind, and the next run has to guess whether the pid it names is still the same program. The kernel releases an advisory lock when the process ends, however it ends. Consequence: no stale-lock cleanup, and the agent runs on macOS and Linux only — which matches the machine it runs on (`open-questions.md`) but would need rewriting for Windows.
+
+## 20. `dry_run` wins over any command-line flag
+
+`FOPS_MODE=dry_run` is the stop button, so `fops run --mode auto` still runs as a dry run and says so; a flag may only lower a live mode to `dry_run`, never raise one. A kill switch that a flag can argue with is not a kill switch, and the flag is the easiest thing to get wrong in a scheduler file nobody rereads. Consequence: changing what the agent may send is a deliberate change to `.env`, and `effective_mode` is one small function with the whole matrix under test.

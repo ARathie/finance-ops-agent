@@ -14,6 +14,7 @@ table once per thing, and sent draft-then-send with restart reconciliation
 import hashlib
 from datetime import date
 
+from finance_ops_agent import logs
 from finance_ops_agent.application import outgoing as outgoing_steps
 from finance_ops_agent.application import paid_check
 from finance_ops_agent.application import replies as reply_steps
@@ -54,6 +55,7 @@ __all__ = ["Mode", "RunDeps", "RunReport", "Settings", "run_once"]
 
 def run_once(deps: RunDeps, report: RunReport | None = None) -> RunReport:
     report = report or RunReport()
+    logs.log("run started", mode=deps.settings.mode.value)
     workbook = parse_workbook(deps.engagement_list.load())
     _report_list_problems(deps, workbook, report)
     _create_expected_items(deps, workbook, report)
@@ -67,6 +69,16 @@ def run_once(deps: RunDeps, report: RunReport | None = None) -> RunReport:
     outgoing_steps.advance_after_sends(deps, report)
     outgoing_steps.send_pending(deps, report)  # what advancing released, e.g. payment
     _write_tracking(deps)  # once more, now with the run's final statuses
+    logs.log(
+        "run finished",
+        messages_stored=report.messages_stored,
+        timesheets_processed=report.timesheets_processed,
+        reviews_opened=report.reviews_opened,
+        items_made_ready=report.items_made_ready,
+        emails_sent=report.emails_sent,
+        invoices_created=report.invoices_created,
+        duplicates_filed=report.duplicates_filed,
+    )
     return report
 
 
@@ -84,6 +96,7 @@ def _open_review(deps: RunDeps, report: RunReport, item_id: int | None, finding:
     if deps.store.open_review(item_id, finding.code.value, finding.message):
         report.reviews_opened += 1
         report.note(f"needs Kevin's review ({finding.code.value}): {finding.message}")
+        logs.log("review opened", item_id=item_id, code=finding.code.value)
 
 
 def _report_list_problems(deps: RunDeps, workbook: EngagementWorkbook, report: RunReport) -> None:

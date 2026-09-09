@@ -19,6 +19,7 @@ Read in this order the first time. `context/` is the business's own description 
 - `timesheet-checks.md` — what the agent reads from a timesheet, the checks, and every reason it asks Kevin for a review.
 - `status-tracking.md` — the statuses, duplicates, corrections, and the tracking sheet.
 - `emails.md` — every email the agent sends and how Kevin replies.
+- `running-it.md` — installing it on the Mac so it runs by itself, the schedule, logs, backups, and what to do when something looks wrong.
 - `open-questions.md` — things only Kevin can answer, with the defaults used meanwhile.
 
 ## How it is built (for coding agents)

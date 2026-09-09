@@ -11,6 +11,7 @@
 
 ```
 src/finance_ops_agent/{domain,application,ports,adapters,cli}
+src/finance_ops_agent/{config,logs}.py   cross-cutting, so top level rather than inside a layer
 tests/unit          fast tests of domain rules and application steps with fakes
 tests/contract      the same test suite run against each fake and (when credentials exist) each real adapter
 tests/scenarios     whole runs on fixture mailboxes: happy path, duplicate, correction, unknown sender, no approval, …
@@ -24,6 +25,7 @@ docs/               these documents
 - `bill_rate_cents` and `pay_rate_cents`, never `rate`. `hours_hundredths`, never `hours` as a float.
 - Statuses and review codes exactly as spelled in `status-tracking.md` and `timesheet-checks.md`; define each once as a `StrEnum` in `domain/`.
 - Kevin-facing text (emails, tracking sheet headers, messages in review emails) uses the plain words from `glossary.md`; no accounting jargon.
+- `domain/`, `application/`, and `ports/` never import from `adapters/` or `cli/`; `tests/unit/test_layering.py` checks every file, including imports inside functions. Anything that needs a concrete adapter belongs in `cli/` (the composition root), which is why `fops doctor` lives in `cli/doctor.py`.
 - Adapter modules are named after the real thing: `adapters/microsoft365`, `adapters/quickbooks`, `adapters/claude`, `adapters/excel`, `adapters/sqlite`, `adapters/pdf`, `adapters/fakes`.
 - Alembic migrations live inside the package (`adapters/sqlite/alembic/`), so `fops` can migrate its database wherever it runs from; apply them through `adapters.sqlite.migrations.upgrade_to_head` (which `open_database` does).
 - Email snapshots live in `tests/fixtures/email_snapshots/`. Regenerate them deliberately with `FOPS_UPDATE_SNAPSHOTS=1 uv run pytest tests/unit/test_emails.py`, and read the diff before committing: these are the words Kevin and the client see.

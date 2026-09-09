@@ -17,6 +17,7 @@ from finance_ops_agent.adapters.fakes.sender import FakeSender
 from finance_ops_agent.adapters.pdf.writer import TextPdfRenderer
 from finance_ops_agent.adapters.quickbooks.manual import ManualQuickBooks
 from finance_ops_agent.adapters.sqlite.store import SqliteStore, open_database
+from finance_ops_agent.application.context import effective_mode
 from finance_ops_agent.application.run import Mode, RunDeps, Settings, run_once
 from finance_ops_agent.domain.reading import TimesheetReading
 from finance_ops_agent.ports.accounting import AccountingSystem
@@ -24,7 +25,7 @@ from finance_ops_agent.ports.store import Store
 
 if TYPE_CHECKING:
     from finance_ops_agent.adapters.microsoft365.client import GraphClient
-    from finance_ops_agent.application.doctor import Check
+    from finance_ops_agent.cli.doctor import Check
     from finance_ops_agent.config import Config
 
 
@@ -84,7 +85,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Mode,
         choices=list(Mode),
         default=None,
-        help="override FOPS_MODE for this run (dry_run is always safe)",
+        help="lower FOPS_MODE for this run; while FOPS_MODE=dry_run nothing can raise it",
     )
 
     connect = commands.add_parser(
@@ -95,6 +96,22 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="loopback port for the redirect (must match the Intuit app)",
+    )
+
+    backup_cmd = commands.add_parser("backup", help="zip the data folder")
+    backup_cmd.add_argument(
+        "--to",
+        type=Path,
+        default=None,
+        help="where to put the zip (default: <data>/backups)",
+    )
+
+    restore_cmd = commands.add_parser("restore", help="unpack a backup into an empty data folder")
+    restore_cmd.add_argument("archive", type=Path)
+    restore_cmd.add_argument(
+        "--force",
+        action="store_true",
+        help="overwrite a data folder that is not empty",
     )
 
     evaluate = commands.add_parser(
@@ -235,7 +252,10 @@ def _real_deps(mode_override: "Mode | None" = None) -> RunDeps:
         reader=ClaudeReader(model=config.model),
         store=store,
         clock=clock,
-        settings=Settings(admin_email=config.admin_email, mode=mode_override or config.mode),
+        settings=Settings(
+            admin_email=config.admin_email,
+            mode=effective_mode(config.mode, mode_override),
+        ),
         sender=GraphSender(client),
         accounting=_accounting(config, store, renderer, clock.today()),
         renderer=renderer,
@@ -245,14 +265,31 @@ def _real_deps(mode_override: "Mode | None" = None) -> RunDeps:
 
 
 def _command_run(args: argparse.Namespace) -> int:
-    from finance_ops_agent.config import MissingSettingError
+    from finance_ops_agent import logs
+    from finance_ops_agent.adapters.lockfile import AlreadyRunning, RunLock
+    from finance_ops_agent.config import Config, MissingSettingError
 
     try:
+        config = Config.from_env()
         deps = _real_deps(args.mode)
     except MissingSettingError as error:
         print(f"Not configured: {error}. Run `fops doctor` for the whole list.")
         return 2
-    report = run_once(deps)
+    if args.mode is not None and deps.settings.mode is not args.mode:
+        print(
+            f"FOPS_MODE={config.mode} is set, so this run is {deps.settings.mode},"
+            f" not {args.mode}. Change the setting to run any other way."
+        )
+    logs.configure(config.data_dir / "fops.log")
+    try:
+        # One run at a time: the scheduler fires every 15 minutes and a slow run
+        # must never overlap with the next one.
+        with RunLock(config.data_dir / "run.lock"):
+            report = run_once(deps)
+    except AlreadyRunning as error:
+        print(error)
+        return 0  # not a failure: the next run will pick things up
+    _warn_about_ageing_connections(config)
     print(f"Run finished in {deps.settings.mode} mode:")
     for line in report.lines:
         print(f"  {line}")
@@ -267,8 +304,8 @@ def _command_run(args: argparse.Namespace) -> int:
 def _command_doctor(args: argparse.Namespace) -> int:
     from finance_ops_agent.adapters.excel.engagement_list import ExcelEngagementList
     from finance_ops_agent.adapters.microsoft365.client import GraphClient, token_from_msal
-    from finance_ops_agent.application import doctor as checks
-    from finance_ops_agent.application.doctor import Check, CheckResult
+    from finance_ops_agent.cli import doctor as checks
+    from finance_ops_agent.cli.doctor import Check, CheckResult
     from finance_ops_agent.config import Config, MicrosoftSettings, MissingSettingError
     from finance_ops_agent.domain.engagements import parse_workbook
 
@@ -341,7 +378,7 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
     from finance_ops_agent.adapters.quickbooks.client import QuickBooksClient
     from finance_ops_agent.adapters.quickbooks.online import QuickBooksOnline
     from finance_ops_agent.adapters.quickbooks.tokens import TokenStore
-    from finance_ops_agent.application.doctor import (
+    from finance_ops_agent.cli.doctor import (
         Check,
         CheckResult,
         check_quickbooks_customers,
@@ -377,7 +414,7 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
 
 def _send_test_email(client: "GraphClient", admin_email: str) -> "Check":
     from finance_ops_agent.adapters.microsoft365.sender import GraphSender
-    from finance_ops_agent.application.doctor import Check, CheckResult
+    from finance_ops_agent.cli.doctor import Check, CheckResult
     from finance_ops_agent.domain.emails import OutgoingEmail
 
     try:
@@ -397,6 +434,65 @@ def _send_test_email(client: "GraphClient", admin_email: str) -> "Check":
         return Check("test email", CheckResult.PASS, f"sent one email to {admin_email}")
     except Exception as error:
         return Check("test email", CheckResult.FAIL, str(error)[:300])
+
+
+def _warn_about_ageing_connections(config: "Config") -> None:
+    """A QuickBooks refresh token that is about to age out needs a person."""
+    if config.accounting != "quickbooks":
+        return
+    from finance_ops_agent.adapters.quickbooks.tokens import (
+        NotConnected,
+        TokenStore,
+        utcnow,
+    )
+
+    try:
+        tokens = TokenStore(config.qbo_token_path).load()
+    except NotConnected:
+        return
+    warning = tokens.refresh_token_warning(utcnow())
+    if warning:
+        print(f"Warning: {warning}")
+
+
+def _command_backup(args: argparse.Namespace) -> int:
+    from finance_ops_agent.application.backup import back_up
+    from finance_ops_agent.config import Config, MissingSettingError
+
+    try:
+        config = Config.from_env()
+    except MissingSettingError as error:
+        print(f"Not configured: {error}")
+        return 2
+    destination = args.to or (config.data_dir / "backups")
+    result = back_up(
+        config.data_dir,
+        destination,
+        date.today(),  # noqa: DTZ011 - a backup's filename, not a billing date
+        store=_open_store(config.data_dir),
+    )
+    print(f"Backed up {result.files} file(s) to {result.path}")
+    print("Copy it somewhere off this machine (OneDrive/SharePoint), and try")
+    print(f"`fops restore {result.path}` into an empty folder now and then.")
+    return 0
+
+
+def _command_restore(args: argparse.Namespace) -> int:
+    from finance_ops_agent.application.backup import RestoreRefused, restore
+    from finance_ops_agent.config import Config, MissingSettingError
+
+    try:
+        config = Config.from_env()
+    except MissingSettingError as error:
+        print(f"Not configured: {error}")
+        return 2
+    try:
+        count = restore(args.archive, config.data_dir, force=args.force)
+    except RestoreRefused as error:
+        print(error)
+        return 1
+    print(f"Restored {count} file(s) into {config.data_dir}")
+    return 0
 
 
 def _command_qbo_connect(args: argparse.Namespace) -> int:
@@ -495,6 +591,10 @@ def main(argv: list[str] | None = None) -> int:
         return _command_run(args)
     if args.command == "qbo-connect":
         return _command_qbo_connect(args)
+    if args.command == "backup":
+        return _command_backup(args)
+    if args.command == "restore":
+        return _command_restore(args)
     parser.print_help()
     return 0
 
