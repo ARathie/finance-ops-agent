@@ -1,0 +1,15 @@
+To: kevin@icon-technologies.com
+Cc: 
+Reply-To: 
+Subject: Payment due 2026-09-15: Priya Shah — Aug 2026 — $15,600.00
+Attachments: 
+
+Who to pay: Priya Shah (bank transfer)
+For: Priya Shah at Acme Corp, Aug 1–31, 2026
+Approved hours: 156.00
+Pay rate: $100.00
+Amount owed: $15,600.00
+Due: 2026-09-15
+
+This relates to invoice ICON-2026-1001.
+I don't follow up on payments; this stays with you, as today.

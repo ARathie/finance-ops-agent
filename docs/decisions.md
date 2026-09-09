@@ -61,3 +61,11 @@ The model fills in a fixed form with quotes and confidence levels. Code sums hou
 ## 15. Nothing is sent twice
 
 Every email to a client and every invoice creation is written down before it happens, with an id, and reconciled with the provider after a restart before any retry. Consequence: the `outgoing` table and the draft-then-send pattern.
+
+## 16. Invoice PDFs are rendered by a small built-in writer, not WeasyPrint or ReportLab
+
+`technical-design.md` left the choice open ("HTML template + WeasyPrint (or ReportLab)"). The invoice is one page of plain lines — consultant, role, period, hours, rate, total — so a ~60-line writer that emits a one-page Helvetica PDF covers it with no third-party renderer and no system libraries. That matters for the machine this runs on: WeasyPrint needs GTK/Pango via Homebrew on macOS, which a `brew upgrade` can break on an unattended machine months later. Consequence: `adapters/pdf/writer.py` is both the real renderer and the fake, output is byte-for-byte deterministic (so snapshot tests are meaningful), and `pypdf` can read every line back out. If invoices ever need logos, tables, or styling, revisit this with a new decision — ReportLab is the pure-Python next step.
+
+## 17. Kevin's replies are matched by the subject of the email he replies to
+
+`technical-design.md` says replies are matched by conversation id *and* an item reference in the subject. On fakes there is no provider conversation id yet, so the agent matches the reply to the exact subject line of the email it answers, and the outgoing table holds those subjects. Consequence: reply handling is fully testable now; when the real mailbox arrives (PR 8) the conversation id becomes the primary key for matching and the subject stays as the fallback.

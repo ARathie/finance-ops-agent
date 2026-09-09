@@ -1,0 +1,23 @@
+To: kevin@icon-technologies.com
+Cc: 
+Reply-To: 
+Subject: Weekly summary — week of Sep 7, 2026
+Attachments: tracking.xlsx
+
+Timesheets received last week:
+- Priya Shah at Acme Corp
+
+Invoices sent:
+- ICON-2026-1001 — Acme Corp — $21,840.00
+
+Waiting for your review:
+- [NO_APPROVAL] I can't see approval.
+
+Waiting for your approval: none
+
+No timesheet yet for the last period:
+- Dana Cruz at Acme Corp, Aug 1–31, 2026
+
+Emails set aside (unknown senders): none
+
+Duplicates filed: none

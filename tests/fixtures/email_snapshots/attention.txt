@@ -1,0 +1,11 @@
+To: kevin@icon-technologies.com
+Cc: 
+Reply-To: 
+Subject: Something needs attention: I can't read the mailbox.
+Attachments: 
+
+I can't read the mailbox.
+
+What to do:
+- Check that the machine is online.
+- The setup steps are in the runbook.

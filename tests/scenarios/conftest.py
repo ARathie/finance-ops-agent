@@ -11,8 +11,11 @@ from finance_ops_agent.adapters.fakes.clock import FakeClock
 from finance_ops_agent.adapters.fakes.engagement_list import FakeEngagementList
 from finance_ops_agent.adapters.fakes.mailbox import FakeMailbox
 from finance_ops_agent.adapters.fakes.reader import FakeReader
+from finance_ops_agent.adapters.fakes.sender import FakeSender
 from finance_ops_agent.adapters.fakes.store import FakeStore
-from finance_ops_agent.application.run import RunDeps, RunReport, Settings, run_once
+from finance_ops_agent.adapters.pdf.writer import TextPdfRenderer
+from finance_ops_agent.adapters.quickbooks.manual import ManualQuickBooks
+from finance_ops_agent.application.run import Mode, RunDeps, RunReport, Settings, run_once
 from finance_ops_agent.domain.engagements import RawRow, RawWorkbook
 from finance_ops_agent.domain.items import Item
 from finance_ops_agent.domain.reading import (
@@ -21,6 +24,7 @@ from finance_ops_agent.domain.reading import (
     Confidence,
     DailyEntry,
     ReadField,
+    ReplyReading,
     TimesheetReading,
 )
 
@@ -149,8 +153,11 @@ class ScenarioEnv:
     store: FakeStore
     readings: dict[str, TimesheetReading]
     workbook: RawWorkbook
+    sender: FakeSender
     email_count: int = 0
     today: date = TODAY
+    mode: Mode = Mode.DRY_RUN
+    replies: dict[str, ReplyReading] = field(default_factory=dict)
     _deps: RunDeps | None = field(default=None, repr=False)
 
     def add_email(
@@ -160,6 +167,7 @@ class ScenarioEnv:
         attachment: tuple[str, bytes] | None = ("timesheet.pdf", b"PDFDATA"),
         message_id: str | None = None,
         scripted_reading: TimesheetReading | None = None,
+        body: str = "Please see attached.",
     ) -> str:
         self.email_count += 1
         name = f"{self.email_count:02d}-email"
@@ -169,7 +177,7 @@ class ScenarioEnv:
         message["Subject"] = subject
         message["Message-ID"] = message_id or f"<{name}@example>"
         message["Date"] = "Tue, 08 Sep 2026 09:00:00 +0000"
-        message.set_content("Please see attached.")
+        message.set_content(body)
         if attachment is not None:
             filename, content = attachment
             message.add_attachment(
@@ -180,16 +188,32 @@ class ScenarioEnv:
         (self.mailbox_dir / f"{name}.eml").write_bytes(bytes(message))
         return name
 
-    def run(self) -> RunReport:
-        deps = RunDeps(
+    def deps(self) -> RunDeps:
+        return RunDeps(
             engagement_list=FakeEngagementList(self.workbook),
             inbox=self.mailbox,
-            reader=FakeReader(self.readings),
+            reader=FakeReader(self.readings, self.replies),
             store=self.store,
             clock=FakeClock(self.today),
-            settings=Settings(),
+            settings=Settings(mode=self.mode),
+            sender=self.sender,
+            accounting=ManualQuickBooks(self.store, TextPdfRenderer(), self.today),
+            renderer=TextPdfRenderer(),
         )
-        return run_once(deps)
+
+    def run(self) -> RunReport:
+        return run_once(self.deps())
+
+    def sent_subjects(self) -> list[str]:
+        return [email.subject for email in self.sender.sent_emails()]
+
+    def reply_from_kevin(self, original_subject: str, body: str) -> str:
+        return self.add_email(
+            "kevin@icon-technologies.com",
+            subject=f"Re: {original_subject}",
+            attachment=None,
+            body=body,
+        )
 
     def the_item(self) -> Item:
         items = self.store.list_items()
@@ -207,4 +231,5 @@ def env(tmp_path: Path) -> ScenarioEnv:
         store=FakeStore(),
         readings={},
         workbook=default_workbook(),
+        sender=FakeSender(tmp_path / "outbox"),
     )

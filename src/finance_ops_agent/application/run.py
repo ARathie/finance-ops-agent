@@ -5,17 +5,23 @@ messages are stored before they are processed and marked processed only when
 handling finished; the mailbox cursor is saved only after the run's messages
 are stored; a second run over the same mailbox changes nothing.
 
-This run stops at `ready` (dry run behaviour): composing and sending the
-actual emails, and the modes, arrive with PR 7. What would be sent is already
-written down in the outgoing table, once per thing, never twice.
+Everything that leaves the agent is composed here, written to the outgoing
+table once per thing, and sent draft-then-send with restart reconciliation
+(application/outgoing.py). Kevin's replies are matched and applied
+(application/replies.py). The tracking sheet is rewritten after every run.
 """
 
 import hashlib
-from dataclasses import dataclass, field
 from datetime import date
 
-from finance_ops_agent.domain import checks
+from finance_ops_agent.application import outgoing as outgoing_steps
+from finance_ops_agent.application import replies as reply_steps
+from finance_ops_agent.application import summary as summary_steps
+from finance_ops_agent.application.completion import complete_if_covered
+from finance_ops_agent.application.context import Mode, RunDeps, RunReport, Settings
+from finance_ops_agent.domain import checks, emails
 from finance_ops_agent.domain.checks import Finding
+from finance_ops_agent.domain.emails import EmailAttachment, TimesheetSummary
 from finance_ops_agent.domain.engagements import (
     Client,
     Consultant,
@@ -33,48 +39,16 @@ from finance_ops_agent.domain.messages import (
     StoredAttachment,
     StoredMessage,
 )
-from finance_ops_agent.domain.money import Hours, Money, invoice_amount, pay_amount
 from finance_ops_agent.domain.periods import BillingPeriod, billing_periods
 from finance_ops_agent.domain.reading import ReadingHints, TimesheetReading
 from finance_ops_agent.domain.review import ReviewCode
 from finance_ops_agent.domain.statuses import ItemStatus
-from finance_ops_agent.ports.clock import Clock
-from finance_ops_agent.ports.engagement_list import EngagementList
-from finance_ops_agent.ports.inbox import NEEDS_REVIEW_FOLDER, EmailInbox
-from finance_ops_agent.ports.reader import CantReadAttachmentError, TimesheetReader
-from finance_ops_agent.ports.store import Store
+from finance_ops_agent.ports.inbox import NEEDS_REVIEW_FOLDER
+from finance_ops_agent.ports.reader import CantReadAttachmentError
 
 MAILBOX_CURSOR_KEY = "mailbox_cursor"
 
-
-@dataclass(frozen=True)
-class Settings:
-    admin_email: str = "kevin@icon-technologies.com"
-
-
-@dataclass
-class RunDeps:
-    engagement_list: EngagementList
-    inbox: EmailInbox
-    reader: TimesheetReader
-    store: Store
-    clock: Clock
-    settings: Settings
-
-
-@dataclass
-class RunReport:
-    messages_stored: int = 0
-    timesheets_processed: int = 0
-    duplicates_filed: int = 0
-    reviews_opened: int = 0
-    items_made_ready: int = 0
-    expected_items_created: int = 0
-    unknown_senders: int = 0
-    lines: list[str] = field(default_factory=list)
-
-    def note(self, line: str) -> None:
-        self.lines.append(line)
+__all__ = ["Mode", "RunDeps", "RunReport", "Settings", "run_once"]
 
 
 def run_once(deps: RunDeps, report: RunReport | None = None) -> RunReport:
@@ -84,7 +58,24 @@ def run_once(deps: RunDeps, report: RunReport | None = None) -> RunReport:
     _create_expected_items(deps, workbook, report)
     _ingest_mailbox(deps, workbook, report)
     _process_messages(deps, workbook, report)
+    outgoing_steps.plan_outgoing(deps, report)
+    tracking_sha = _write_tracking(deps)
+    summary_steps.enqueue_monday_summary(deps, report, tracking_sha)
+    outgoing_steps.send_pending(deps, report)
+    outgoing_steps.advance_after_sends(deps, report)
+    outgoing_steps.send_pending(deps, report)  # what advancing released, e.g. payment
+    _write_tracking(deps)  # once more, now with the run's final statuses
     return report
+
+
+def _write_tracking(deps: RunDeps) -> str | None:
+    if deps.render_tracking is None:
+        return None
+    content = deps.render_tracking(summary_steps.tracking_rows(deps))
+    if deps.tracking_path is not None:
+        deps.tracking_path.parent.mkdir(parents=True, exist_ok=True)
+        deps.tracking_path.write_bytes(content)
+    return deps.store.save_file(content)
 
 
 def _open_review(deps: RunDeps, report: RunReport, item_id: int | None, finding: Finding) -> None:
@@ -94,12 +85,16 @@ def _open_review(deps: RunDeps, report: RunReport, item_id: int | None, finding:
 
 
 def _report_list_problems(deps: RunDeps, workbook: EngagementWorkbook, report: RunReport) -> None:
-    for problem in workbook.problems:
-        finding = Finding(
-            ReviewCode.LIST_ROW_PROBLEM,
-            f"{problem.sheet} sheet, row {problem.row_number}: {problem.message}",
-        )
-        _open_review(deps, report, None, finding)
+    problems = [
+        f"{problem.sheet} sheet, row {problem.row_number}: {problem.message}"
+        for problem in workbook.problems
+    ]
+    for message in problems:
+        _open_review(deps, report, None, Finding(ReviewCode.LIST_ROW_PROBLEM, message))
+    if problems:
+        digest = hashlib.sha256("|".join(sorted(problems)).encode()).hexdigest()[:16]
+        email = emails.needs_review(deps.settings.admin_email, "the engagement list", problems)
+        outgoing_steps.enqueue_email(deps, "review_email", f"list-problems:{digest}", None, email)
 
 
 def _engagement_pairs(
@@ -172,6 +167,10 @@ def _build_snapshot(
         payee=payee,
         paid_by=paid_by.value,
         engagement_row_number=rate_row.row_number,
+        role=rate_row.role,
+        client_legal_name=client.legal_name,
+        client_delivery=client.delivery.value,
+        send_automatically=rate_row.send_automatically,
     )
 
 
@@ -250,6 +249,7 @@ def _ingest_mailbox(deps: RunDeps, workbook: EngagementWorkbook, report: RunRepo
             from_address=email.from_address,
             to_addresses=email.to_addresses,
             subject=email.subject,
+            body_text=email.body_text,
             received_at=email.received_at,
             kind=_decide_kind(deps, workbook, email),
             processed=False,
@@ -278,7 +278,10 @@ def _process_messages(deps: RunDeps, workbook: EngagementWorkbook, report: RunRe
             report.unknown_senders += 1
         elif message.kind is MessageKind.TIMESHEET:
             _process_timesheet(deps, workbook, message, report)
-        # Kevin's replies and client replies are handled with the emails in PR 7.
+        elif message.kind is MessageKind.KEVIN_REPLY:
+            reply_steps.handle_kevin_reply(deps, message, report)
+        # Client replies are forwarded unchanged once the real mailbox exists (PR 8);
+        # until then they are recorded and listed in the Monday summary.
         deps.store.mark_processed(message.provider_id)
 
 
@@ -320,16 +323,13 @@ def _process_timesheet(
     deps: RunDeps, workbook: EngagementWorkbook, message: StoredMessage, report: RunReport
 ) -> None:
     if not message.attachments:
-        _open_review(
-            deps,
-            report,
-            None,
-            Finding(
-                ReviewCode.NO_ATTACHMENT,
-                "This looks like a timesheet email but has no attachment I can use"
-                f' ("{message.subject}").',
-            ),
+        finding = Finding(
+            ReviewCode.NO_ATTACHMENT,
+            "This looks like a timesheet email but has no attachment I can use"
+            f' ("{message.subject}").',
         )
+        _open_review(deps, report, None, finding)
+        _enqueue_review_email(deps, message.provider_id, None, [finding], None, None)
         return
     attachment = message.attachments[0]
     if deps.store.timesheet_seen(attachment.sha256):
@@ -347,14 +347,18 @@ def _process_timesheet(
             content, attachment.filename, attachment.mime_type, hints
         )
     except CantReadAttachmentError:
-        _open_review(
+        finding = Finding(
+            ReviewCode.CANT_READ_ATTACHMENT,
+            f'I couldn\'t read the attachment {attachment.filename} ("{message.subject}").',
+        )
+        _open_review(deps, report, None, finding)
+        _enqueue_review_email(
             deps,
-            report,
+            message.provider_id,
             None,
-            Finding(
-                ReviewCode.CANT_READ_ATTACHMENT,
-                f'I couldn\'t read the attachment {attachment.filename} ("{message.subject}").',
-            ),
+            [finding],
+            None,
+            EmailAttachment(attachment.filename, attachment.sha256),
         )
         return
     report.timesheets_processed += 1
@@ -467,66 +471,77 @@ def _process_timesheet(
     if item is not None and findings:
         _to_needs_review(deps, item)
 
+    summary = _timesheet_summary(reading, consultant, client_name, period, item)
+    timesheet_attachment = EmailAttachment(attachment.filename, attachment.sha256)
+
     # Details for Kevin's records, every time a timesheet is read (Objective 2).
-    deps.store.record_outgoing(
-        "details_to_kevin",
-        f"details:{message.provider_id}",
-        item_id,
-        {
-            "consultant": consultant.name if consultant else reading.consultant_name.value,
-            "client": client_name or reading.client_name.value,
-            "period_start": str(reading.period_start.value),
-            "period_end": str(reading.period_end.value),
-            "hours_hundredths": hours_total,
-            "subject": message.subject,
-        },
+    next_step = (
+        "I'll ask you to review " + ", ".join(sorted({f.code.value for f in findings}))
+        if findings
+        else "everything checks out; I'll prepare the invoice"
+    )
+    details = emails.timesheet_details(
+        deps.settings.admin_email, summary, next_step, timesheet_attachment
+    )
+    outgoing_steps.enqueue_email(
+        deps, "details_email", f"details:{message.provider_id}", item_id, details
     )
     if findings:
-        deps.store.record_outgoing(
-            "review_to_kevin",
-            f"review:{message.provider_id}",
-            item_id,
-            {"codes": sorted({finding.code.value for finding in findings})},
+        _enqueue_review_email(
+            deps, message.provider_id, item_id, findings, summary, timesheet_attachment
         )
         return
 
-    if item is None or period is None:
+    if item is None:
         return
-    _complete_if_covered(deps, item, period, report)
+    complete_if_covered(deps, deps.store.get_item(item.id), report)
 
 
-def _complete_if_covered(
-    deps: RunDeps, item: Item, period: BillingPeriod, report: RunReport
-) -> None:
-    """Weekly timesheets for a monthly engagement wait here until the whole
-    period is covered; then hours are summed and the item becomes ready."""
-    if any(review.item_id == item.id for review in deps.store.open_reviews()):
-        return  # something is still waiting on Kevin
-    latest_by_span: dict[tuple[date, date], TimesheetReading] = {}
-    for record in deps.store.timesheets_for_item(item.id):
-        if record.is_duplicate or record.is_correction:
-            continue
-        reading = _stored_reading(record)
-        span = _span(reading)
-        if span is not None:
-            latest_by_span[span] = reading
-    if not checks.period_fully_covered(period, list(latest_by_span)):
-        report.note(
-            f"waiting for the rest of the period: {item.consultant} at {item.client},"
-            f" {period.start} to {period.end}"
-        )
-        return
-    total = Hours(0)
-    for reading in latest_by_span.values():
-        hours, _ = checks.check_hours(reading)
-        total = total + Hours(hours or 0)
-    billed = invoice_amount(total, Money(item.snapshot.bill_rate_cents))
-    owed = pay_amount(total, Money(item.snapshot.pay_rate_cents))
-    deps.store.set_item_amounts(item.id, total, billed, owed)
-    deps.store.change_status(item.id, ItemStatus.READY, {"hours_hundredths": total.hundredths})
-    report.items_made_ready += 1
-    report.note(
-        f"ready to invoice: {item.consultant} at {item.client},"
-        f" {period.start} to {period.end}: {total} hours,"
-        f" invoice {billed}, owed {owed}"
+def _timesheet_summary(
+    reading: TimesheetReading,
+    consultant: Consultant | None,
+    client_name: str | None,
+    period: BillingPeriod | None,
+    item: Item | None,
+) -> TimesheetSummary:
+    total, _ = checks.check_hours(reading)
+    approval = reading.approval.value
+    if approval is None or approval.kind.value == "none":
+        approval_text = "no approval found"
+    else:
+        by = f" by {approval.approver}" if approval.approver else ""
+        on = f" on {approval.approval_date}" if approval.approval_date else ""
+        approval_text = f"{approval.kind.value.replace('_', ' ')}{by}{on}"
+    from finance_ops_agent.domain.money import Hours
+
+    return TimesheetSummary(
+        consultant=consultant.name if consultant else (reading.consultant_name.value or "unclear"),
+        client=client_name or reading.client_name.value or "unclear",
+        period=period,
+        total_hours=None if total is None else Hours(total),
+        approval=approval_text,
+        engagement_row=item.snapshot.engagement_row_number if item else None,
     )
+
+
+def _enqueue_review_email(
+    deps: RunDeps,
+    provider_id: str,
+    item_id: int | None,
+    findings: list[Finding],
+    summary: TimesheetSummary | None,
+    timesheet: EmailAttachment | None,
+) -> None:
+    about = (
+        f"{summary.consultant} — {summary.client}"
+        if summary is not None
+        else "an email I couldn't handle"
+    )
+    email = emails.needs_review(
+        deps.settings.admin_email,
+        about,
+        [finding.message for finding in findings],
+        summary,
+        timesheet,
+    )
+    outgoing_steps.enqueue_email(deps, "review_email", f"review:{provider_id}", item_id, email)

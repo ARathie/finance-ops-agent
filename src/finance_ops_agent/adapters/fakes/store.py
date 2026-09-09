@@ -14,8 +14,10 @@ from datetime import UTC, datetime
 from finance_ops_agent.domain.items import (
     AuditEntry,
     EngagementSnapshot,
+    InvoiceRecord,
     Item,
     OutgoingRecord,
+    PaymentInstructionRecord,
     ReviewRecord,
     TimesheetRecord,
 )
@@ -48,6 +50,10 @@ class FakeStore:
         self._next_review_id = 1
         self._outgoing: dict[str, OutgoingRecord] = {}
         self._state: dict[str, str] = {}
+        self._invoices: list[InvoiceRecord] = []
+        self._next_invoice_id = 1
+        self._instructions: list[PaymentInstructionRecord] = []
+        self._answers: dict[int, dict[str, object]] = {}
 
     def create_item(
         self,
@@ -152,6 +158,13 @@ class FakeStore:
     def load_file(self, sha256: str) -> bytes:
         return self._files[sha256]
 
+    def file_name_for(self, sha256: str) -> str | None:
+        for message in self._messages.values():
+            for attachment in message.attachments:
+                if attachment.sha256 == sha256:
+                    return attachment.filename
+        return None
+
     def timesheet_seen(self, sha256: str) -> bool:
         return any(record.sha256 == sha256 for record in self._timesheets)
 
@@ -208,3 +221,86 @@ class FakeStore:
 
     def set_state(self, key: str, value: str) -> None:
         self._state[key] = value
+
+    def save_file(self, content: bytes) -> str:
+        import hashlib
+
+        sha = hashlib.sha256(content).hexdigest()
+        self._files[sha] = content
+        return sha
+
+    def update_outgoing(
+        self,
+        idempotency_key: str,
+        *,
+        status: str | None = None,
+        draft_id: str | None = None,
+        error: str | None = None,
+        bump_attempts: bool = False,
+    ) -> OutgoingRecord:
+        record = self._outgoing[idempotency_key]
+        record = replace(
+            record,
+            status=record.status if status is None else status,
+            draft_id=record.draft_id if draft_id is None else draft_id,
+            last_error=record.last_error if error is None else error,
+            attempts=record.attempts + 1 if bump_attempts else record.attempts,
+        )
+        self._outgoing[idempotency_key] = record
+        return record
+
+    def record_invoice(self, record: InvoiceRecord) -> InvoiceRecord:
+        stored = replace(record, id=self._next_invoice_id)
+        self._next_invoice_id += 1
+        self._invoices.append(stored)
+        return stored
+
+    def invoices_for_item(self, item_id: int) -> list[InvoiceRecord]:
+        return [record for record in self._invoices if record.item_id == item_id]
+
+    def set_invoice_status(self, external_id: str, status: str) -> None:
+        self._invoices = [
+            replace(record, status=status) if record.external_id == external_id else record
+            for record in self._invoices
+        ]
+
+    def record_payment_instruction(self, record: PaymentInstructionRecord) -> bool:
+        if any(existing.item_id == record.item_id for existing in self._instructions):
+            return False
+        self._instructions.append(record)
+        return True
+
+    def payment_instructions_for_item(self, item_id: int) -> list[PaymentInstructionRecord]:
+        return [record for record in self._instructions if record.item_id == item_id]
+
+    def answer_review(self, review_id: int, answer: dict[str, object], status: str) -> None:
+        serialised: dict[str, object] = json.loads(json.dumps(answer))
+        self._reviews = [
+            replace(review, status=status) if review.id == review_id else review
+            for review in self._reviews
+        ]
+        self._answers[review_id] = serialised
+
+    def reviews_for_item(self, item_id: int) -> list[ReviewRecord]:
+        return [review for review in self._reviews if review.item_id == item_id]
+
+    def review_answer(self, review_id: int) -> dict[str, object] | None:
+        return self._answers.get(review_id)
+
+    def accept_correction(self, item_id: int) -> None:
+        records = [record for record in self._timesheets if record.item_id == item_id]
+        corrections = [record for record in records if record.is_correction]
+        if not corrections:
+            return
+        keep = corrections[-1]
+        updated: list[TimesheetRecord] = []
+        for record in self._timesheets:
+            if record.item_id != item_id:
+                updated.append(record)
+            elif record.sha256 == keep.sha256:
+                updated.append(replace(record, is_correction=False, is_duplicate=False))
+            elif not record.is_duplicate and not record.is_correction:
+                updated.append(replace(record, is_duplicate=True))
+            else:
+                updated.append(record)
+        self._timesheets = updated
