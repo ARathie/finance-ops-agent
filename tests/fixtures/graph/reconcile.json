@@ -1,0 +1,38 @@
+{
+  "exchanges": [
+    {
+      "key": "GET https://graph.microsoft.com/v1.0/users/jay@icon-technologies.com/messages/SENT-1?$select=isDraft,sentDateTime",
+      "response": {
+        "status": 200,
+        "json": {
+          "id": "SENT-1",
+          "isDraft": false,
+          "sentDateTime": "2026-09-03T08:00:00Z"
+        }
+      }
+    },
+    {
+      "key": "GET https://graph.microsoft.com/v1.0/users/jay@icon-technologies.com/messages/DRAFT-9?$select=isDraft,sentDateTime",
+      "response": {
+        "status": 200,
+        "json": {
+          "id": "DRAFT-9",
+          "isDraft": true,
+          "sentDateTime": null
+        }
+      }
+    },
+    {
+      "key": "GET https://graph.microsoft.com/v1.0/users/jay@icon-technologies.com/messages/GONE-1?$select=isDraft,sentDateTime",
+      "response": {
+        "status": 404,
+        "json": {
+          "error": {
+            "code": "ErrorItemNotFound",
+            "message": "The specified object was not found."
+          }
+        }
+      }
+    }
+  ]
+}

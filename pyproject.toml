@@ -7,6 +7,8 @@ requires-python = ">=3.11"
 dependencies = [
     "alembic>=1.14",
     "anthropic>=1",
+    "httpx>=0.28",
+    "msal>=1.31",
     "openpyxl>=3.1",
     "pillow>=10",
     "pydantic>=2.10",
@@ -53,12 +55,12 @@ strict = true
 files = ["src", "tests"]
 
 # Adapters may relax strictness where third-party types are missing
-# (see docs/engineering-conventions.md). Add per-module overrides here
-# only when a concrete third-party gap forces it, for example:
-#
-# [[tool.mypy.overrides]]
-# module = "finance_ops_agent.adapters.excel.*"
-# disallow_untyped_calls = false
+# (see docs/engineering-conventions.md), and only for a concrete gap.
+
+# msal ships no type stubs and no py.typed marker.
+[[tool.mypy.overrides]]
+module = "msal.*"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

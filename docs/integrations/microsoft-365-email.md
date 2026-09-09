@@ -12,7 +12,15 @@ The agent's mailbox lives in Icon's Microsoft 365. The agent reads and sends mai
    - `New-ApplicationAccessPolicy -AppId <client id> -PolicyScopeGroupId <group address> -AccessRight RestrictAccess -Description "Billing agent"`;
    - `Test-ApplicationAccessPolicy -AppId <client id> -Identity kevin@icon-technologies.com` must report Denied.
 5. In the agent mailbox, create folders `Agent/Processed`, `Agent/Needs Review`, `Agent/Ignored` (the agent creates them if missing).
-6. Run `fops doctor`: it acquires a token, reads the agent inbox, confirms it **cannot** read a second mailbox, and sends one test email to Kevin.
+6. Run `fops doctor`. It reports one line per check and exits non-zero if any fails:
+   - **settings** — every required environment variable is set (`FOPS_TIMEZONE` has no default);
+   - **engagement list** — the workbook opens and every row parses;
+   - **database** — the SQLite file opens and migrations are applied;
+   - **token** — `msal` gets an application token and Graph recognises the mailbox;
+   - **read the agent mailbox** — the inbox can be listed;
+   - **cannot read anyone else's mailbox** — reading `FOPS_ADMIN_EMAIL`'s inbox must be **denied**. A success here is a doctor failure, and so is a denial that does not clearly say access denied. With no second mailbox to test against, this check fails rather than passing: an app that can read all of Icon's mail is not what was asked for.
+   
+   `fops doctor --send-test-email` additionally sends one email to Kevin. Nothing in `doctor` ever contacts a client.
 
 ## Reading mail
 
@@ -44,8 +52,13 @@ Replies to Kevin's messages stay in the same thread: `POST /users/{mailbox}/mess
 ## Testing
 
 - The `EmailInbox` and `EmailSender` fakes are folders of `.eml` files; scenario tests use them.
-- The real adapter is tested against recorded JSON responses (a small recorder script saves real responses with secrets removed) for: delta paging, delta expiry, attachment download, draft + upload session + send, 429 backoff, reconcile of an in-flight draft.
+- The real adapter is tested against recorded JSON responses in `tests/fixtures/graph/`, replayed through a real `httpx` client (`tests/contract/graph_replay.py`) so the adapter's own code runs: delta paging, delta expiry, attachment download, draft + attachments + send, 429 backoff, reconcile of an in-flight draft, folder creation on move, and both outcomes of the doctor's scoping check. No network, no credentials.
+- `tests/contract/record_graph.py` records fresh responses against a real mailbox (`uv run python tests/contract/record_graph.py <name>`). It never writes the `Authorization` header, but message subjects, bodies, and attachment names from a real mailbox **are** real client data: read the file before committing it, and prefer a mailbox holding only made-up mail. The committed recordings were written from the shapes documented above, not from Icon's mail.
 - A live smoke test (`FOPS_LIVE_TESTS=1`) reads the inbox and sends one email to Kevin only.
+
+## Running it for real
+
+`fops run` uses the real mailbox and obeys `FOPS_MODE`; `fops run --mode dry_run` (and plain `fops dry-run`, which forces it) is the safe way to start, since dry run sends nothing to a client. The first real milestone is a full billing cycle in dry run where Kevin confirms the readings match what he did by hand — that is a person's judgement, not something the tests can assert, and it is the gate before ask first mode.
 
 ## Library choice
 
