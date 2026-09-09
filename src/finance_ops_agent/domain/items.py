@@ -6,7 +6,7 @@ prepared (docs/decisions.md #3).
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
@@ -29,6 +29,10 @@ class EngagementSnapshot(BaseModel):
     payee: str  # the consultant, or their vendor company
     paid_by: str
     engagement_row_number: int
+    role: str = ""  # printed on the invoice line
+    client_legal_name: str = ""  # printed on the invoice
+    client_delivery: str = "email"  # email, or portal (Kevin uploads it himself)
+    send_automatically: bool = False  # the engagement row's "Send automatically" column
 
 
 @dataclass(frozen=True)
@@ -87,3 +91,33 @@ class OutgoingRecord:
     item_id: int | None
     payload: dict[str, object]
     status: str  # pending / in_flight / done / failed
+    draft_id: str | None = None
+    attempts: int = 0
+    last_error: str | None = None
+
+
+@dataclass(frozen=True)
+class InvoiceRecord:
+    """One invoice per item (plus replacements after corrections)."""
+
+    id: int
+    item_id: int
+    number: str
+    external_id: str
+    amount_cents: int
+    issue_date: date
+    due_date: date
+    pdf_sha256: str | None
+    status: str  # created / sent / paid / cancelled
+    replaces_number: str | None = None
+
+
+@dataclass(frozen=True)
+class PaymentInstructionRecord:
+    """What Kevin was told a consultant or vendor is owed, once per item."""
+
+    item_id: int
+    payee: str
+    amount_cents: int
+    due_date: date
+    method: str

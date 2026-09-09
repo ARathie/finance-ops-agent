@@ -128,6 +128,7 @@ def _stored_message(provider_id: str = "m1", internet_id: str = "<m1@example>") 
         from_address="priya@example.com",
         to_addresses="jay@icon-technologies.com",
         subject="August timesheet",
+        body_text="August attached.",
         received_at=datetime(2026, 9, 2, 9, 0, tzinfo=UTC),
         kind=MessageKind.TIMESHEET,
         processed=False,

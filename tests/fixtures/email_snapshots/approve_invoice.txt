@@ -1,0 +1,29 @@
+To: kevin@icon-technologies.com
+Cc: 
+Reply-To: 
+Subject: Approve? Invoice for Acme Corp — Priya Shah — Aug 2026 — $21,840.00
+Attachments: invoice-ICON-2026-1001.pdf, priya-august.pdf
+
+Everything checks out. Reply "approve" to send, or "cancel" to stop.
+
+Client: Acme Corp
+Billing email: ap@acme.example
+Consultant: Priya Shah
+Period: Aug 1–31, 2026
+Approved hours: 156.00
+Bill rate: $140.00
+Total: $21,840.00
+Due: 2026-10-03
+
+The billing email, exactly as it will be sent:
+
+Subject: Icon Technologies invoice ICON-2026-1001 — Priya Shah — Aug 2026
+
+Hello,
+
+Please find attached Icon Technologies invoice ICON-2026-1001 for Priya Shah's services for Aug 1–31, 2026 (156.00 approved hours), along with the approved timesheet. Payment terms are 30 days; the invoice is due 2026-10-03.
+
+Please let us know if you have any questions.
+
+Thank you,
+Icon Technologies

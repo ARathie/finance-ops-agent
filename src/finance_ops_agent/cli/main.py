@@ -8,11 +8,15 @@ from pathlib import Path
 
 from finance_ops_agent import __version__
 from finance_ops_agent.adapters.excel.engagement_list import CsvEngagementList
+from finance_ops_agent.adapters.excel.tracking import tracking_sheet_bytes
 from finance_ops_agent.adapters.fakes.clock import FakeClock
 from finance_ops_agent.adapters.fakes.mailbox import FakeMailbox
 from finance_ops_agent.adapters.fakes.reader import FakeReader
+from finance_ops_agent.adapters.fakes.sender import FakeSender
+from finance_ops_agent.adapters.pdf.writer import TextPdfRenderer
+from finance_ops_agent.adapters.quickbooks.manual import ManualQuickBooks
 from finance_ops_agent.adapters.sqlite.store import SqliteStore, open_database
-from finance_ops_agent.application.run import RunDeps, Settings, run_once
+from finance_ops_agent.application.run import Mode, RunDeps, Settings, run_once
 from finance_ops_agent.domain.reading import TimesheetReading
 from finance_ops_agent.ports.store import Store
 
@@ -46,6 +50,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="data folder (default: a fresh temporary folder)",
     )
     dry_run.add_argument("--today", type=date.fromisoformat, default=None)
+    dry_run.add_argument(
+        "--mode",
+        type=Mode,
+        choices=list(Mode),
+        default=Mode.DRY_RUN,
+        help="dry_run (default), ask_first, or auto — all still on fakes",
+    )
 
     status = commands.add_parser("status", help="print the items and open reviews")
     status.add_argument("--data", type=Path, required=True)
@@ -70,7 +81,7 @@ def _open_store(data: Path) -> SqliteStore:
     return SqliteStore(open_database(data / "agent.db"), files_dir=data / "files")
 
 
-def _build_fake_deps(fixtures: Path, data: Path, today: date | None) -> RunDeps:
+def _build_fake_deps(fixtures: Path, data: Path, today: date | None, mode: Mode) -> RunDeps:
     readings: dict[str, TimesheetReading] = {}
     readings_dir = fixtures / "readings"
     if readings_dir.is_dir():
@@ -86,13 +97,20 @@ def _build_fake_deps(fixtures: Path, data: Path, today: date | None) -> RunDeps:
             if today_file.exists()
             else date.today()  # noqa: DTZ011 - fake runs only; the real run uses the Clock port
         )
+    store = _open_store(data)
+    renderer = TextPdfRenderer()
     return RunDeps(
         engagement_list=CsvEngagementList(fixtures / "engagements"),
         inbox=FakeMailbox(fixtures / "mailbox"),
         reader=FakeReader(readings),
-        store=_open_store(data),
+        store=store,
         clock=FakeClock(today),
-        settings=Settings(),
+        settings=Settings(mode=mode),
+        sender=FakeSender(data / "outbox"),
+        accounting=ManualQuickBooks(store, renderer, today),
+        renderer=renderer,
+        tracking_path=data / "tracking.xlsx",
+        render_tracking=tracking_sheet_bytes,
     )
 
 
@@ -121,17 +139,18 @@ def _command_dry_run(args: argparse.Namespace) -> int:
         print("Only `fops dry-run --fake` exists so far; the real mailbox arrives with PR 8.")
         return 2
     data: Path = args.data if args.data is not None else Path(tempfile.mkdtemp(prefix="fops-"))
-    deps = _build_fake_deps(args.fixtures, data, args.today)
+    deps = _build_fake_deps(args.fixtures, data, args.today, args.mode)
     report = run_once(deps)
-    print(f"Dry run on fixtures in {args.fixtures} (data in {data}):")
+    print(f"{args.mode} run on fixtures in {args.fixtures} (data in {data}):")
     for line in report.lines:
         print(f"  {line}")
     print()
     _print_status(deps.store)
     outgoing = deps.store.outgoing_records()
-    print(f"{len(outgoing)} email(s) would go out (composing them arrives with PR 7):")
+    print(f"{len(outgoing)} email(s), each written down once and sent to {data / 'outbox'}:")
     for record in outgoing:
-        print(f"  {record.kind}: {json.dumps(record.payload, default=str)}")
+        subject = record.payload.get("subject", "")
+        print(f"  [{record.status}] {record.kind}: {subject}")
     return 0
 
 

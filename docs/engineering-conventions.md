@@ -26,6 +26,7 @@ docs/               these documents
 - Kevin-facing text (emails, tracking sheet headers, messages in review emails) uses the plain words from `glossary.md`; no accounting jargon.
 - Adapter modules are named after the real thing: `adapters/microsoft365`, `adapters/quickbooks`, `adapters/claude`, `adapters/excel`, `adapters/sqlite`, `adapters/pdf`, `adapters/fakes`.
 - Alembic migrations live inside the package (`adapters/sqlite/alembic/`), so `fops` can migrate its database wherever it runs from; apply them through `adapters.sqlite.migrations.upgrade_to_head` (which `open_database` does).
+- Email snapshots live in `tests/fixtures/email_snapshots/`. Regenerate them deliberately with `FOPS_UPDATE_SNAPSHOTS=1 uv run pytest tests/unit/test_emails.py`, and read the diff before committing: these are the words Kevin and the client see.
 
 ## Types and values
 

@@ -1,0 +1,23 @@
+To: kevin@icon-technologies.com
+Cc: 
+Reply-To: 
+Subject: Needs your review: Priya Shah — Acme Corp — I can't see that the client approved these hours
+Attachments: priya-august.pdf
+
+I need your help with this one.
+
+What I read:
+Consultant: Priya Shah
+Client: Acme Corp
+Period: Aug 1–31, 2026
+Hours: 156.00 hours
+Approval: approver name date by Jane Doe on 2026-09-01
+Engagement list row: 2
+
+What needs your review:
+- I can't see that the client approved these hours.
+
+You can fix or add the row in the engagement list, or just reply to this
+email with the answer, or reply "ignore".
+Replies that work: "this is for Acme", "use 152 hours",
+"approved by Jane Doe on 9/3", "use the new one", "ignore".

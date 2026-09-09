@@ -24,6 +24,7 @@ class MessageRow(Base):
     from_address: Mapped[str]
     to_addresses: Mapped[str]
     subject: Mapped[str]
+    body_text: Mapped[str] = mapped_column(String, default="")
     received_at: Mapped[str]
     kind: Mapped[str]
     processed_at: Mapped[str | None]

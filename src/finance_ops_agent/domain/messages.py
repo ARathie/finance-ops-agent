@@ -58,6 +58,7 @@ class StoredMessage:
     from_address: str
     to_addresses: str
     subject: str
+    body_text: str
     received_at: datetime
     kind: MessageKind
     processed: bool
