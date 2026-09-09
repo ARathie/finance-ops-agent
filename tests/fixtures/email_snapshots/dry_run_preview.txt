@@ -1,0 +1,21 @@
+To: kevin@icon-technologies.com
+Cc: 
+Reply-To: 
+Subject: Dry run — would invoice Acme Corp — Priya Shah — Aug 2026 — $21,840.00
+Attachments: invoice-ICON-2026-1001.pdf, priya-august.pdf
+
+Dry run: nothing was sent to the client and no invoice was created.
+Here is exactly what I would send.
+
+To: ap@acme.example
+CC: kevin@icon-technologies.com, jane.doe@acme.example
+Subject: Icon Technologies invoice ICON-2026-1001 — Priya Shah — Aug 2026
+
+Hello,
+
+Please find attached Icon Technologies invoice ICON-2026-1001 for Priya Shah's services for Aug 1–31, 2026 (156.00 approved hours), along with the approved timesheet. Payment terms are 30 days; the invoice is due 2026-10-03.
+
+Please let us know if you have any questions.
+
+Thank you,
+Icon Technologies

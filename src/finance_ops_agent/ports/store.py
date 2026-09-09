@@ -14,8 +14,10 @@ from typing import Protocol
 from finance_ops_agent.domain.items import (
     AuditEntry,
     EngagementSnapshot,
+    InvoiceRecord,
     Item,
     OutgoingRecord,
+    PaymentInstructionRecord,
     ReviewRecord,
     TimesheetRecord,
 )
@@ -120,3 +122,57 @@ class Store(Protocol):
     def get_state(self, key: str) -> str | None: ...
 
     def set_state(self, key: str, value: str) -> None: ...
+
+    def save_file(self, content: bytes) -> str:
+        """Store content by its sha256 and return the sha."""
+        ...
+
+    def file_name_for(self, sha256: str) -> str | None:
+        """The filename an attachment with this content arrived under, if known."""
+        ...
+
+    def update_outgoing(
+        self,
+        idempotency_key: str,
+        *,
+        status: str | None = None,
+        draft_id: str | None = None,
+        error: str | None = None,
+        bump_attempts: bool = False,
+    ) -> OutgoingRecord:
+        """Advance one outgoing record through pending -> in_flight -> done
+        (or failed), recording the draft id the moment it exists."""
+        ...
+
+    # Invoices and payment instructions
+
+    def record_invoice(self, record: InvoiceRecord) -> InvoiceRecord:
+        """Store an invoice (record.id is ignored; the store assigns it)."""
+        ...
+
+    def invoices_for_item(self, item_id: int) -> list[InvoiceRecord]: ...
+
+    def set_invoice_status(self, external_id: str, status: str) -> None: ...
+
+    def record_payment_instruction(self, record: PaymentInstructionRecord) -> bool:
+        """Write down the payment instruction; False if one exists already."""
+        ...
+
+    def payment_instructions_for_item(self, item_id: int) -> list[PaymentInstructionRecord]: ...
+
+    # Kevin's answers
+
+    def answer_review(self, review_id: int, answer: dict[str, object], status: str) -> None:
+        """Record Kevin's answer and close the review (status answered/ignored)."""
+        ...
+
+    def reviews_for_item(self, item_id: int) -> list[ReviewRecord]:
+        """All of an item's reviews, whatever their status, oldest first."""
+        ...
+
+    def review_answer(self, review_id: int) -> dict[str, object] | None: ...
+
+    def accept_correction(self, item_id: int) -> None:
+        """Kevin said "use the new one": the latest correction becomes the
+        timesheet that counts, and the earlier overlapping ones stop counting."""
+        ...

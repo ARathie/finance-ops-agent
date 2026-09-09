@@ -1,0 +1,16 @@
+To: kevin@icon-technologies.com
+Cc: 
+Reply-To: 
+Subject: Timesheet received: Priya Shah — Acme Corp — Aug 1–31, 2026 — 156.00 hours
+Attachments: priya-august.pdf
+
+A timesheet arrived. Here is what I read, for your records.
+
+Consultant: Priya Shah
+Client: Acme Corp
+Period: Aug 1–31, 2026
+Hours: 156.00 hours
+Approval: approver name date by Jane Doe on 2026-09-01
+Engagement list row: 2
+
+What happens next: everything checks out; I'll prepare the invoice

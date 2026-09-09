@@ -15,9 +15,11 @@ from finance_ops_agent.adapters.sqlite.migrations import upgrade_to_head
 from finance_ops_agent.adapters.sqlite.schema import (
     AttachmentRow,
     AuditLogRow,
+    InvoiceRow,
     ItemRow,
     MessageRow,
     OutgoingRow,
+    PaymentInstructionRow,
     ReviewItemRow,
     StateRow,
     TimesheetRow,
@@ -25,8 +27,10 @@ from finance_ops_agent.adapters.sqlite.schema import (
 from finance_ops_agent.domain.items import (
     AuditEntry,
     EngagementSnapshot,
+    InvoiceRecord,
     Item,
     OutgoingRecord,
+    PaymentInstructionRecord,
     ReviewRecord,
     TimesheetRecord,
 )
@@ -214,6 +218,7 @@ class SqliteStore:
                 from_address=message.from_address,
                 to_addresses=message.to_addresses,
                 subject=message.subject,
+                body_text=message.body_text,
                 received_at=message.received_at.isoformat(),
                 kind=message.kind.value,
                 processed_at=None,
@@ -258,6 +263,7 @@ class SqliteStore:
             from_address=row.from_address,
             to_addresses=row.to_addresses,
             subject=row.subject,
+            body_text=row.body_text,
             received_at=datetime.fromisoformat(row.received_at),
             kind=MessageKind(row.kind),
             processed=row.processed_at is not None,
@@ -280,6 +286,13 @@ class SqliteStore:
 
     def load_file(self, sha256: str) -> bytes:
         return self._file_path(sha256).read_bytes()
+
+    def file_name_for(self, sha256: str) -> str | None:
+        with Session(self._engine) as session:
+            row = session.scalars(
+                select(AttachmentRow).where(AttachmentRow.sha256 == sha256)
+            ).first()
+            return None if row is None else row.filename
 
     def timesheet_seen(self, sha256: str) -> bool:
         with Session(self._engine) as session:
@@ -401,6 +414,9 @@ class SqliteStore:
                     item_id=row.item_id,
                     payload=dict(row.payload),
                     status=row.status,
+                    draft_id=row.draft_id,
+                    attempts=row.attempts,
+                    last_error=row.last_error,
                 )
                 for row in rows
             ]
@@ -417,6 +433,184 @@ class SqliteStore:
                 session.add(StateRow(key=key, value=value))
             else:
                 row.value = value
+
+    def save_file(self, content: bytes) -> str:
+        import hashlib
+
+        sha = hashlib.sha256(content).hexdigest()
+        path = self._file_path(sha)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        return sha
+
+    def update_outgoing(
+        self,
+        idempotency_key: str,
+        *,
+        status: str | None = None,
+        draft_id: str | None = None,
+        error: str | None = None,
+        bump_attempts: bool = False,
+    ) -> OutgoingRecord:
+        with Session(self._engine) as session, session.begin():
+            row = session.scalars(
+                select(OutgoingRow).where(OutgoingRow.idempotency_key == idempotency_key)
+            ).one()
+            if status is not None:
+                row.status = status
+            if draft_id is not None:
+                row.draft_id = draft_id
+            if error is not None:
+                row.last_error = error
+            if bump_attempts:
+                row.attempts += 1
+            session.flush()
+            return OutgoingRecord(
+                kind=row.kind,
+                idempotency_key=row.idempotency_key,
+                item_id=row.item_id,
+                payload=dict(row.payload),
+                status=row.status,
+                draft_id=row.draft_id,
+                attempts=row.attempts,
+                last_error=row.last_error,
+            )
+
+    def record_invoice(self, record: InvoiceRecord) -> InvoiceRecord:
+        with Session(self._engine) as session, session.begin():
+            row = InvoiceRow(
+                item_id=record.item_id,
+                number=record.number,
+                external_id=record.external_id,
+                amount_cents=record.amount_cents,
+                issue_date=record.issue_date,
+                due_date=record.due_date,
+                pdf_sha256=record.pdf_sha256,
+                status=record.status,
+                replaces_invoice_id=None,
+            )
+            session.add(row)
+            session.flush()
+            return self._invoice_record(row, record.replaces_number)
+
+    def _invoice_record(self, row: InvoiceRow, replaces: str | None = None) -> InvoiceRecord:
+        return InvoiceRecord(
+            id=row.id,
+            item_id=row.item_id,
+            number=row.number,
+            external_id=row.external_id or row.number,
+            amount_cents=row.amount_cents,
+            issue_date=row.issue_date,
+            due_date=row.due_date,
+            pdf_sha256=row.pdf_sha256,
+            status=row.status,
+            replaces_number=replaces,
+        )
+
+    def invoices_for_item(self, item_id: int) -> list[InvoiceRecord]:
+        with Session(self._engine) as session:
+            rows = session.scalars(
+                select(InvoiceRow).where(InvoiceRow.item_id == item_id).order_by(InvoiceRow.id)
+            )
+            return [self._invoice_record(row) for row in rows]
+
+    def set_invoice_status(self, external_id: str, status: str) -> None:
+        with Session(self._engine) as session, session.begin():
+            for row in session.scalars(
+                select(InvoiceRow).where(InvoiceRow.external_id == external_id)
+            ):
+                row.status = status
+
+    def record_payment_instruction(self, record: PaymentInstructionRecord) -> bool:
+        with Session(self._engine) as session, session.begin():
+            existing = session.scalars(
+                select(PaymentInstructionRow).where(PaymentInstructionRow.item_id == record.item_id)
+            ).first()
+            if existing is not None:
+                return False
+            session.add(
+                PaymentInstructionRow(
+                    item_id=record.item_id,
+                    payee=record.payee,
+                    amount_cents=record.amount_cents,
+                    due_date=record.due_date,
+                    method=record.method,
+                    emailed_at=None,
+                )
+            )
+            return True
+
+    def payment_instructions_for_item(self, item_id: int) -> list[PaymentInstructionRecord]:
+        with Session(self._engine) as session:
+            rows = session.scalars(
+                select(PaymentInstructionRow)
+                .where(PaymentInstructionRow.item_id == item_id)
+                .order_by(PaymentInstructionRow.id)
+            )
+            return [
+                PaymentInstructionRecord(
+                    item_id=row.item_id,
+                    payee=row.payee,
+                    amount_cents=row.amount_cents,
+                    due_date=row.due_date,
+                    method=row.method,
+                )
+                for row in rows
+            ]
+
+    def answer_review(self, review_id: int, answer: dict[str, object], status: str) -> None:
+        with Session(self._engine) as session, session.begin():
+            row = session.get(ReviewItemRow, review_id)
+            if row is None:
+                raise KeyError(review_id)
+            row.answer = json.loads(json.dumps(answer))
+            row.status = status
+            row.answered_at = self._now().isoformat()
+
+    def reviews_for_item(self, item_id: int) -> list[ReviewRecord]:
+        with Session(self._engine) as session:
+            rows = session.scalars(
+                select(ReviewItemRow)
+                .where(ReviewItemRow.item_id == item_id)
+                .order_by(ReviewItemRow.id)
+            )
+            return [
+                ReviewRecord(
+                    id=row.id,
+                    item_id=row.item_id,
+                    code=row.code,
+                    message=row.message,
+                    status=row.status,
+                )
+                for row in rows
+            ]
+
+    def review_answer(self, review_id: int) -> dict[str, object] | None:
+        with Session(self._engine) as session:
+            row = session.get(ReviewItemRow, review_id)
+            if row is None:
+                raise KeyError(review_id)
+            return None if row.answer is None else dict(row.answer)
+
+    def accept_correction(self, item_id: int) -> None:
+        with Session(self._engine) as session, session.begin():
+            rows = list(
+                session.scalars(
+                    select(TimesheetRow)
+                    .where(TimesheetRow.item_id == item_id)
+                    .order_by(TimesheetRow.id)
+                )
+            )
+            corrections = [row for row in rows if row.is_correction]
+            if not corrections:
+                return
+            keep = corrections[-1]
+            for row in rows:
+                if row.id == keep.id:
+                    row.is_correction = False
+                    row.is_duplicate = False
+                elif not row.is_duplicate and not row.is_correction:
+                    row.is_duplicate = True
 
 
 def _to_item(row: ItemRow) -> Item:
