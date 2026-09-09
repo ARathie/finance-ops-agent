@@ -38,6 +38,10 @@ jobs:
       - name: Download GreenMail
         run: uv run python tests/contract/get_greenmail.py
 
+      - name: Make the runner's own hostname resolve at once (macOS looks it up slowly)
+        if: runner.os == 'macOS'
+        run: echo "127.0.0.1 $(hostname)" | sudo tee -a /etc/hosts
+
       - name: Lint
         run: uv run ruff check .
 

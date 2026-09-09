@@ -8,6 +8,7 @@ everything lives under INBOX) so the agent's own folders land in the right place
 """
 
 import smtplib
+import socket
 import ssl
 from dataclasses import dataclass
 
@@ -71,6 +72,13 @@ def open_imap(account: MailAccount) -> IMAPClient:
     return client
 
 
+def local_hostname() -> str:
+    """The name this machine gives in EHLO. smtplib would look up the fully
+    qualified name, which on some machines (macOS in particular) takes
+    seconds per connection; the plain hostname is enough for a login."""
+    return socket.gethostname() or "localhost"
+
+
 def open_smtp(account: MailAccount) -> smtplib.SMTP:
     try:
         server: smtplib.SMTP
@@ -78,11 +86,17 @@ def open_smtp(account: MailAccount) -> smtplib.SMTP:
             server = smtplib.SMTP_SSL(
                 account.smtp_host,
                 account.smtp_port,
+                local_hostname=local_hostname(),
                 timeout=account.timeout,
                 context=tls_context(),
             )
         else:
-            server = smtplib.SMTP(account.smtp_host, account.smtp_port, timeout=account.timeout)
+            server = smtplib.SMTP(
+                account.smtp_host,
+                account.smtp_port,
+                local_hostname=local_hostname(),
+                timeout=account.timeout,
+            )
             server.ehlo()
             if account.smtp_security == "starttls":
                 server.starttls(context=tls_context())

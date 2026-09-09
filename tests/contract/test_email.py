@@ -86,7 +86,9 @@ def timesheet_email(
 
 def deliver(server: MailServer, message: EmailMessage, to: str = AGENT) -> None:
     """Hand a message to the server over SMTP, as the sender's mail program would."""
-    with smtplib.SMTP(server.host, server.smtp_port, timeout=10) as smtp:
+    with smtplib.SMTP(
+        server.host, server.smtp_port, local_hostname="localhost", timeout=10
+    ) as smtp:
         smtp.sendmail(str(message["From"]), [to], bytes(message))
 
 
@@ -570,7 +572,9 @@ class TestSending:
                 raise smtplib.SMTPRecipientsRefused({"nobody@acme.example": (550, b"no such user")})
 
         def connect(account: MailAccount) -> smtplib.SMTP:
-            return RefusingSmtp(account.smtp_host, account.smtp_port, timeout=10)
+            return RefusingSmtp(
+                account.smtp_host, account.smtp_port, local_hostname="localhost", timeout=10
+            )
 
         sender = SmtpSender(env.server.account(), AGENT, lambda: env.now, connect_smtp=connect)
         email = OutgoingEmail(to=("nobody@acme.example",), subject="Invoice", body="x")
