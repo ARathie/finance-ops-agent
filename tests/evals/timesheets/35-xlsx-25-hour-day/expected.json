@@ -1,0 +1,57 @@
+{
+  "reading": {
+    "consultant_name": {
+      "value": "Aisha Bell",
+      "quote": "Consultant: Aisha Bell",
+      "confidence": "high"
+    },
+    "client_name": {
+      "value": "Pinnacle Media",
+      "quote": "Client: Pinnacle Media",
+      "confidence": "high"
+    },
+    "end_client_name": {
+      "value": null,
+      "quote": null,
+      "confidence": "low"
+    },
+    "period_start": {
+      "value": "2026-04-01",
+      "quote": "2026-04-01",
+      "confidence": "high"
+    },
+    "period_end": {
+      "value": "2026-04-30",
+      "quote": "2026-04-30",
+      "confidence": "high"
+    },
+    "daily_entries": {
+      "value": [
+        {
+          "day": "2026-04-06",
+          "hours_hundredths": 2500
+        }
+      ],
+      "quote": "hours per day",
+      "confidence": "high"
+    },
+    "stated_total_hours_hundredths": {
+      "value": 2500,
+      "quote": "Total: 25.00",
+      "confidence": "high"
+    },
+    "approval": {
+      "value": {
+        "kind": "approver_name_date",
+        "approver": "Grace Okafor",
+        "approval_date": "2026-04-30"
+      },
+      "quote": "Approved by Grace Okafor on 2026-04-30",
+      "confidence": "high"
+    },
+    "unusual_items": []
+  },
+  "review_codes": [
+    "HOURS_UNUSUAL"
+  ]
+}

@@ -1,0 +1,138 @@
+{
+  "consultant_name": {
+    "value": "Marcus Webb",
+    "quote": "Consultant: Marcus Webb",
+    "confidence": "high"
+  },
+  "client_name": {
+    "value": "Bluewater Systems",
+    "quote": "Client: Bluewater Systems",
+    "confidence": "high"
+  },
+  "end_client_name": {
+    "value": null,
+    "quote": null,
+    "confidence": "low"
+  },
+  "period_start": {
+    "value": "2026-01-01",
+    "quote": "2026-01-01",
+    "confidence": "high"
+  },
+  "period_end": {
+    "value": "2026-01-31",
+    "quote": "2026-01-31",
+    "confidence": "high"
+  },
+  "daily_entries": {
+    "value": [
+      {
+        "day": "2026-01-01",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-01-02",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-01-05",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-01-06",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-01-07",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-01-08",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-01-09",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-01-12",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-01-13",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-01-14",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-01-15",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-01-16",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-01-19",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-01-20",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-01-21",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-01-22",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-01-23",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-01-26",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-01-27",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-01-28",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-01-29",
+        "hours_hundredths": 800
+      },
+      {
+        "day": "2026-01-30",
+        "hours_hundredths": 800
+      }
+    ],
+    "quote": "hours per day",
+    "confidence": "high"
+  },
+  "stated_total_hours_hundredths": {
+    "value": 17600,
+    "quote": "Total: 176.00",
+    "confidence": "high"
+  },
+  "approval": {
+    "value": {
+      "kind": "approver_name_date",
+      "approver": "Lee Fontaine",
+      "approval_date": "2026-01-31"
+    },
+    "quote": "Approved by Lee Fontaine on 2026-01-31",
+    "confidence": "high"
+  },
+  "unusual_items": [
+    "Overtime: 6.00 hours at 1.5x"
+  ]
+}

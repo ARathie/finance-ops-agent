@@ -1,0 +1,13 @@
+{
+  "_comment": "The floor fops eval must stay at or above (docs/roadmap.md PR 6). Initial values, set before the first live run; re-record them from real model answers after `fops eval --live` replaces the bootstrap recorded.json files.",
+  "field_accuracy_percent": {
+    "consultant_name": 90,
+    "client_name": 90,
+    "period_start": 90,
+    "period_end": 90,
+    "total_hours": 90,
+    "approval_kind": 90
+  },
+  "mean_hours_error_hundredths_max": 25,
+  "codes_accuracy_percent": 85
+}

@@ -1,0 +1,62 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 843 >>
+stream
+BT /F1 12 Tf 72 760 Td 16 TL
+(TIME REPORT) Tj T*
+(Consultant: Dana Cruz) Tj T*
+(Client: Northwind Bank) Tj T*
+(Period: 2026-06-01 to 2026-06-30) Tj T*
+(2026-06-01  8.00) Tj T*
+(2026-06-02  8.00) Tj T*
+(2026-06-03  8.00) Tj T*
+(2026-06-04  8.00) Tj T*
+(2026-06-05  8.00) Tj T*
+(2026-06-08  8.00) Tj T*
+(2026-06-09  8.00) Tj T*
+(2026-06-10  8.00) Tj T*
+(2026-06-11  8.00) Tj T*
+(2026-06-12  8.00) Tj T*
+(2026-06-15  8.00) Tj T*
+(2026-06-16  8.00) Tj T*
+(2026-06-17  8.00) Tj T*
+(2026-06-18  8.00) Tj T*
+(2026-06-19  8.00) Tj T*
+(2026-06-22  8.00) Tj T*
+(2026-06-23  8.00) Tj T*
+(2026-06-24  8.00) Tj T*
+(2026-06-25  8.00) Tj T*
+(2026-06-26  8.00) Tj T*
+(2026-06-29  8.00) Tj T*
+(2026-06-30  8.00) Tj T*
+(Total: 176.00) Tj T*
+(Approved by Grace Okafor on 2026-06-30) Tj T*
+(A second consultant, Tom Nakamura, is listed on the same sheet) Tj T*
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000001135 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1205
+%%EOF
