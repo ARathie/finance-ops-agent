@@ -1,0 +1,37 @@
+{
+  "exchanges": [
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20Id%2C%20DocNumber%2C%20TotalAmt%2C%20PrivateNote%2C%20Balance%20FROM%20Invoice%20WHERE%20TxnDate%20%3E%3D%20%272026-09-01%27%20ORDERBY%20TxnDate%20DESC%20MAXRESULTS%20100",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {
+            "Invoice": [
+              {
+                "Id": "900",
+                "DocNumber": "1050",
+                "TotalAmt": 999.0,
+                "PrivateNote": "made by hand by the bookkeeper",
+                "Balance": 999.0
+              },
+              {
+                "Id": "145",
+                "DocNumber": "1042",
+                "TotalAmt": 21840.0,
+                "PrivateNote": "fops item 1",
+                "Balance": 21840.0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/invoice/145/pdf",
+      "response": {
+        "status": 200,
+        "content": "%PDF-1.4 quickbooks invoice"
+      }
+    }
+  ]
+}

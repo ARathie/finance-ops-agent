@@ -1,0 +1,17 @@
+{
+  "exchanges": [
+    {
+      "key": "POST https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer",
+      "response": {
+        "status": 200,
+        "json": {
+          "access_token": "new-access-token",
+          "refresh_token": "ROTATED-refresh-token",
+          "expires_in": 3600,
+          "x_refresh_token_expires_in": 8726400,
+          "token_type": "bearer"
+        }
+      }
+    }
+  ]
+}

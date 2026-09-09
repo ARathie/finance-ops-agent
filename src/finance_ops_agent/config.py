@@ -40,6 +40,28 @@ class MicrosoftSettings:
 
 
 @dataclass(frozen=True)
+class QuickBooksSettings:
+    client_id: str
+    client_secret: str
+    environment: str  # sandbox | production
+    item_name: str
+
+    @classmethod
+    def from_env(cls) -> "QuickBooksSettings":
+        environment = os.environ.get("QBO_ENVIRONMENT", "sandbox").strip()
+        if environment not in ("sandbox", "production"):
+            raise MissingSettingError(
+                f"QBO_ENVIRONMENT should be sandbox or production, not {environment!r}"
+            )
+        return cls(
+            client_id=_required("QBO_CLIENT_ID"),
+            client_secret=_required("QBO_CLIENT_SECRET"),
+            environment=environment,
+            item_name=os.environ.get("QBO_ITEM_NAME", "Consulting Services"),
+        )
+
+
+@dataclass(frozen=True)
 class Config:
     mode: Mode
     timezone: str
@@ -49,6 +71,10 @@ class Config:
     agent_mailbox: str
     model: str
     accounting: str  # manual | quickbooks
+
+    @property
+    def qbo_token_path(self) -> Path:
+        return self.data_dir / "qbo_tokens.json"
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -60,6 +86,11 @@ class Config:
             raise MissingSettingError(
                 f"FOPS_MODE should be one of {choices}, not {mode_text!r}"
             ) from error
+        accounting = os.environ.get("FOPS_ACCOUNTING", "manual").strip()
+        if accounting not in ("manual", "quickbooks"):
+            raise MissingSettingError(
+                f"FOPS_ACCOUNTING should be manual or quickbooks, not {accounting!r}"
+            )
         return cls(
             mode=mode,
             # No default: period boundaries and due dates depend on it
@@ -70,5 +101,5 @@ class Config:
             admin_email=_required("FOPS_ADMIN_EMAIL"),
             agent_mailbox=_required("FOPS_AGENT_MAILBOX"),
             model=os.environ.get("FOPS_MODEL", "claude-opus-5"),
-            accounting=os.environ.get("FOPS_ACCOUNTING", "manual"),
+            accounting=accounting,
         )

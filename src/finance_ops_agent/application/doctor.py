@@ -96,3 +96,56 @@ def check_engagement_list(load: Callable[[], tuple[int, list[str]]]) -> Check:
 
 def check_database(describe: Callable[[], str]) -> Check:
     return _run("database", describe)
+
+
+def check_quickbooks_tokens(store: object) -> Check:
+    """Are we connected, and is the refresh token still healthy?"""
+    from finance_ops_agent.adapters.quickbooks.tokens import (
+        NotConnected,
+        TokenStore,
+        utcnow,
+    )
+
+    name = "quickbooks connection"
+    assert isinstance(store, TokenStore)
+    try:
+        tokens = store.load()
+    except NotConnected as error:
+        return Check(name, CheckResult.FAIL, str(error))
+    warning = tokens.refresh_token_warning(utcnow())
+    if warning:
+        return Check(name, CheckResult.FAIL, warning)
+    return Check(
+        name,
+        CheckResult.PASS,
+        f"connected to the {tokens.environment} company {tokens.realm_id},"
+        f" refreshed {tokens.days_since_refresh(utcnow())} day(s) ago",
+    )
+
+
+def check_quickbooks_customers(accounting: object, wanted: Callable[[], list[str]]) -> Check:
+    """Every client the agent may invoice must already exist in QuickBooks:
+    the agent never creates customers."""
+    from finance_ops_agent.adapters.quickbooks.online import QuickBooksOnline
+
+    name = "quickbooks customers"
+    assert isinstance(accounting, QuickBooksOnline)
+
+    def run() -> str:
+        names = wanted()
+        missing: list[str] = []
+        for customer in names:
+            try:
+                accounting.customer_ref(customer)
+            except Exception:
+                missing.append(customer)
+        if missing:
+            raise RuntimeError(
+                "QuickBooks has no customer called "
+                + ", ".join(repr(entry) for entry in missing)
+                + '. Add them in QuickBooks, or fix the "QuickBooks customer"'
+                " column in the engagement list."
+            )
+        return f"all {len(names)} client name(s) exist in QuickBooks"
+
+    return _run(name, run)

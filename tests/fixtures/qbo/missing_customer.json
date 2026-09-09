@@ -1,0 +1,22 @@
+{
+  "exchanges": [
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20Id%2C%20DocNumber%2C%20TotalAmt%2C%20PrivateNote%2C%20Balance%20FROM%20Invoice%20WHERE%20TxnDate%20%3E%3D%20%272026-09-01%27%20ORDERBY%20TxnDate%20DESC%20MAXRESULTS%20100",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {}
+        }
+      }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20Id%2C%20DisplayName%20FROM%20Customer%20WHERE%20DisplayName%20%3D%20%27Acme%20Corporation%27",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {}
+        }
+      }
+    }
+  ]
+}
