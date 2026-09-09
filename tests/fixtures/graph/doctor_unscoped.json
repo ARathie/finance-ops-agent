@@ -1,0 +1,17 @@
+{
+  "exchanges": [
+    {
+      "key": "GET https://graph.microsoft.com/v1.0/users/kevin@icon-technologies.com/mailFolders/inbox/messages?$top=1&$select=id",
+      "response": {
+        "status": 200,
+        "json": {
+          "value": [
+            {
+              "id": "KEV1"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "exchanges": [
+    {
+      "key": "POST https://graph.microsoft.com/v1.0/users/jay@icon-technologies.com/messages",
+      "response": {
+        "status": 201,
+        "json": {
+          "id": "DRAFT-9",
+          "isDraft": true
+        }
+      }
+    },
+    {
+      "key": "POST https://graph.microsoft.com/v1.0/users/jay@icon-technologies.com/messages/DRAFT-9/attachments",
+      "response": {
+        "status": 201,
+        "json": {
+          "id": "ATTACHED-1"
+        }
+      }
+    },
+    {
+      "key": "POST https://graph.microsoft.com/v1.0/users/jay@icon-technologies.com/messages/DRAFT-9/send",
+      "response": {
+        "status": 202,
+        "json": {}
+      }
+    }
+  ]
+}

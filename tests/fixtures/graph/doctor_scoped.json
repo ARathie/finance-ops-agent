@@ -1,0 +1,40 @@
+{
+  "exchanges": [
+    {
+      "key": "GET https://graph.microsoft.com/v1.0/users/jay@icon-technologies.com?$select=mail,displayName",
+      "response": {
+        "status": 200,
+        "json": {
+          "mail": "jay@icon-technologies.com",
+          "displayName": "Billing agent"
+        }
+      }
+    },
+    {
+      "key": "GET https://graph.microsoft.com/v1.0/users/jay@icon-technologies.com/mailFolders/inbox/messages?$top=1&$select=id,subject",
+      "response": {
+        "status": 200,
+        "json": {
+          "value": [
+            {
+              "id": "AAA1",
+              "subject": "August timesheet"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "GET https://graph.microsoft.com/v1.0/users/kevin@icon-technologies.com/mailFolders/inbox/messages?$top=1&$select=id",
+      "response": {
+        "status": 403,
+        "json": {
+          "error": {
+            "code": "ErrorAccessDenied",
+            "message": "Access to OData is disabled."
+          }
+        }
+      }
+    }
+  ]
+}

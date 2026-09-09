@@ -5,6 +5,7 @@ import json
 import tempfile
 from datetime import date
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from finance_ops_agent import __version__
 from finance_ops_agent.adapters.excel.engagement_list import CsvEngagementList
@@ -19,6 +20,10 @@ from finance_ops_agent.adapters.sqlite.store import SqliteStore, open_database
 from finance_ops_agent.application.run import Mode, RunDeps, Settings, run_once
 from finance_ops_agent.domain.reading import TimesheetReading
 from finance_ops_agent.ports.store import Store
+
+if TYPE_CHECKING:
+    from finance_ops_agent.adapters.microsoft365.client import GraphClient
+    from finance_ops_agent.application.doctor import Check
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -60,6 +65,25 @@ def build_parser() -> argparse.ArgumentParser:
 
     status = commands.add_parser("status", help="print the items and open reviews")
     status.add_argument("--data", type=Path, required=True)
+
+    doctor = commands.add_parser(
+        "doctor",
+        help="check every credential and setting; sends nothing to a client",
+    )
+    doctor.add_argument(
+        "--send-test-email",
+        action="store_true",
+        help="also send one test email to FOPS_ADMIN_EMAIL",
+    )
+
+    run_cmd = commands.add_parser("run", help="one real run against the mailbox in the environment")
+    run_cmd.add_argument(
+        "--mode",
+        type=Mode,
+        choices=list(Mode),
+        default=None,
+        help="override FOPS_MODE for this run (dry_run is always safe)",
+    )
 
     evaluate = commands.add_parser(
         "eval", help="score the timesheet reader against the made-up test set"
@@ -136,8 +160,10 @@ def _print_status(store: Store) -> None:
 
 def _command_dry_run(args: argparse.Namespace) -> int:
     if not args.fake:
-        print("Only `fops dry-run --fake` exists so far; the real mailbox arrives with PR 8.")
-        return 2
+        # A real dry run is `fops run` with FOPS_MODE=dry_run (or --mode dry_run),
+        # which is the safest real mode: it sends nothing to a client.
+        args.mode = Mode.DRY_RUN
+        return _command_run(args)
     data: Path = args.data if args.data is not None else Path(tempfile.mkdtemp(prefix="fops-"))
     deps = _build_fake_deps(args.fixtures, data, args.today, args.mode)
     report = run_once(deps)
@@ -152,6 +178,144 @@ def _command_dry_run(args: argparse.Namespace) -> int:
         subject = record.payload.get("subject", "")
         print(f"  [{record.status}] {record.kind}: {subject}")
     return 0
+
+
+def _real_deps(mode_override: "Mode | None" = None) -> RunDeps:
+    """Wire the real adapters from the environment (docs/technical-design.md)."""
+    from finance_ops_agent.adapters.claude.reader import ClaudeReader
+    from finance_ops_agent.adapters.clock import SystemClock
+    from finance_ops_agent.adapters.excel.engagement_list import ExcelEngagementList
+    from finance_ops_agent.adapters.microsoft365.client import GraphClient, token_from_msal
+    from finance_ops_agent.adapters.microsoft365.inbox import GraphInbox
+    from finance_ops_agent.adapters.microsoft365.sender import GraphSender
+    from finance_ops_agent.config import Config, MicrosoftSettings
+
+    config = Config.from_env()
+    microsoft = MicrosoftSettings.from_env()
+    client = GraphClient(
+        microsoft.mailbox,
+        lambda: token_from_msal(microsoft.tenant_id, microsoft.client_id, microsoft.client_secret),
+    )
+    store = _open_store(config.data_dir)
+    renderer = TextPdfRenderer()
+    clock = SystemClock(config.timezone)
+    return RunDeps(
+        engagement_list=ExcelEngagementList(config.engagement_list),
+        inbox=GraphInbox(client),
+        reader=ClaudeReader(model=config.model),
+        store=store,
+        clock=clock,
+        settings=Settings(admin_email=config.admin_email, mode=mode_override or config.mode),
+        sender=GraphSender(client),
+        accounting=ManualQuickBooks(store, renderer, clock.today()),
+        renderer=renderer,
+        tracking_path=config.data_dir / "tracking.xlsx",
+        render_tracking=tracking_sheet_bytes,
+    )
+
+
+def _command_run(args: argparse.Namespace) -> int:
+    from finance_ops_agent.config import MissingSettingError
+
+    try:
+        deps = _real_deps(args.mode)
+    except MissingSettingError as error:
+        print(f"Not configured: {error}. Run `fops doctor` for the whole list.")
+        return 2
+    report = run_once(deps)
+    print(f"Run finished in {deps.settings.mode} mode:")
+    for line in report.lines:
+        print(f"  {line}")
+    print(
+        f"  {report.messages_stored} new message(s),"
+        f" {report.emails_sent} email(s) sent,"
+        f" {report.reviews_opened} review(s) opened"
+    )
+    return 0
+
+
+def _command_doctor(args: argparse.Namespace) -> int:
+    from finance_ops_agent.adapters.excel.engagement_list import ExcelEngagementList
+    from finance_ops_agent.adapters.microsoft365.client import GraphClient, token_from_msal
+    from finance_ops_agent.application import doctor as checks
+    from finance_ops_agent.application.doctor import Check, CheckResult
+    from finance_ops_agent.config import Config, MicrosoftSettings, MissingSettingError
+    from finance_ops_agent.domain.engagements import parse_workbook
+
+    results: list[Check] = []
+    try:
+        config = Config.from_env()
+    except MissingSettingError as error:
+        print(Check("settings", CheckResult.FAIL, str(error)).line())
+        return 1
+    results.append(
+        Check("settings", CheckResult.PASS, f"mode {config.mode}, timezone {config.timezone}")
+    )
+
+    def load_list() -> tuple[int, list[str]]:
+        parsed = parse_workbook(ExcelEngagementList(config.engagement_list).load())
+        return len(parsed.engagements), [
+            f"{problem.sheet} row {problem.row_number}: {problem.message}"
+            for problem in parsed.problems
+        ]
+
+    results.append(checks.check_engagement_list(load_list))
+
+    def describe_database() -> str:
+        store = _open_store(config.data_dir)
+        return f"{len(store.list_items())} item(s) in {config.data_dir / 'agent.db'}"
+
+    results.append(checks.check_database(describe_database))
+
+    try:
+        microsoft = MicrosoftSettings.from_env()
+    except MissingSettingError as error:
+        results.append(Check("mailbox", CheckResult.FAIL, str(error)))
+    else:
+        client = GraphClient(
+            microsoft.mailbox,
+            lambda: token_from_msal(
+                microsoft.tenant_id, microsoft.client_id, microsoft.client_secret
+            ),
+        )
+        results.append(checks.check_token(client))
+        results.append(checks.check_can_read_the_agent_mailbox(client))
+        results.append(checks.check_cannot_read_another_mailbox(client, config.admin_email))
+        if args.send_test_email:
+            results.append(_send_test_email(client, config.admin_email))
+
+    for check in results:
+        print(check.line())
+    failures = [check for check in results if check.result is CheckResult.FAIL]
+    if failures:
+        print(f"\n{len(failures)} check(s) failed. Nothing was sent to a client.")
+        return 1
+    print("\nEverything checks out. Nothing was sent to a client.")
+    return 0
+
+
+def _send_test_email(client: "GraphClient", admin_email: str) -> "Check":
+    from finance_ops_agent.adapters.microsoft365.sender import GraphSender
+    from finance_ops_agent.application.doctor import Check, CheckResult
+    from finance_ops_agent.domain.emails import OutgoingEmail
+
+    try:
+        sender = GraphSender(client)
+        draft_id = sender.create_draft(
+            OutgoingEmail(
+                to=(admin_email,),
+                subject="fops doctor: this mailbox works",
+                body=(
+                    "This is the test email from `fops doctor`. Nothing was sent to"
+                    " any client. If you got this, the agent can read and send mail."
+                ),
+            ),
+            {},
+        )
+        sender.send(draft_id)
+        return Check("test email", CheckResult.PASS, f"sent one email to {admin_email}")
+    except Exception as error:
+        return Check("test email", CheckResult.FAIL, str(error)[:300])
 
 
 def _command_status(args: argparse.Namespace) -> int:
@@ -211,6 +375,10 @@ def main(argv: list[str] | None = None) -> int:
         return _command_status(args)
     if args.command == "eval":
         return _command_eval(args)
+    if args.command == "doctor":
+        return _command_doctor(args)
+    if args.command == "run":
+        return _command_run(args)
     parser.print_help()
     return 0
 
