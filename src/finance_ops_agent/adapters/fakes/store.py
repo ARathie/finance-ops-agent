@@ -139,21 +139,17 @@ class FakeStore:
         return changed
 
     def record_message(self, message: StoredMessage, files: dict[str, bytes]) -> bool:
-        if message.provider_id in self._messages:
+        if message.message_id in self._messages:
             return False
-        if message.internet_message_id and message.internet_message_id in self._internet_ids:
-            return False
-        self._messages[message.provider_id] = replace(message, processed=False)
-        if message.internet_message_id:
-            self._internet_ids.add(message.internet_message_id)
+        self._messages[message.message_id] = replace(message, processed=False)
         self._files.update(files)
         return True
 
     def unprocessed_messages(self) -> list[StoredMessage]:
         return [message for message in self._messages.values() if not message.processed]
 
-    def mark_processed(self, provider_id: str) -> None:
-        self._messages[provider_id] = replace(self._messages[provider_id], processed=True)
+    def mark_processed(self, message_id: str) -> None:
+        self._messages[message_id] = replace(self._messages[message_id], processed=True)
 
     def checkpoint(self) -> None:
         return  # nothing on disk to fold in
@@ -237,15 +233,24 @@ class FakeStore:
         idempotency_key: str,
         *,
         status: str | None = None,
-        draft_id: str | None = None,
+        message_id: str | None = None,
+        started_at: str | None = None,
+        accepted_at: str | None = None,
         error: str | None = None,
         bump_attempts: bool = False,
+        clear_times: bool = False,
     ) -> OutgoingRecord:
         record = self._outgoing[idempotency_key]
         record = replace(
             record,
             status=record.status if status is None else status,
-            draft_id=record.draft_id if draft_id is None else draft_id,
+            message_id=record.message_id if message_id is None else message_id,
+            started_at=None
+            if clear_times
+            else (record.started_at if started_at is None else started_at),
+            accepted_at=None
+            if clear_times
+            else (record.accepted_at if accepted_at is None else accepted_at),
             last_error=record.last_error if error is None else error,
             attempts=record.attempts + 1 if bump_attempts else record.attempts,
         )

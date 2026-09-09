@@ -20,6 +20,7 @@ def test_codes_match_the_docs() -> None:
         "LIST_ROW_PROBLEM",
         "CORRECTION",
         "SEND_FAILED",
+        "SEND_UNCERTAIN",
         "QUICKBOOKS_FAILED",
         "MAILBOX_PROBLEM",
         "QUICKBOOKS_RECONNECT",

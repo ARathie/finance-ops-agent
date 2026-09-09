@@ -1,16 +1,19 @@
 """Whole runs that send: the modes, Kevin's replies, and never-twice sending."""
 
 from dataclasses import replace as dc_replace
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
 from finance_ops_agent.adapters.fakes.sender import FakeSender, SimulatedCrash
 from finance_ops_agent.application.context import Mode
 from finance_ops_agent.application.run import run_once
+from finance_ops_agent.domain.emails import OutgoingEmail
+from finance_ops_agent.domain.items import OutgoingRecord
 from finance_ops_agent.domain.money import Money
 from finance_ops_agent.domain.reading import ReplyAnswer, ReplyAnswerKind, ReplyReading
 from finance_ops_agent.domain.statuses import ItemStatus
+from finance_ops_agent.ports.sender import NotSent, RecipientRefused
 from tests.scenarios.conftest import PRIYA, ScenarioEnv, reading
 
 AUG_START, AUG_END = date(2026, 8, 1), date(2026, 8, 31)
@@ -198,44 +201,134 @@ class TestAutomatic:
         assert env.store.invoices_for_item(september.id) == []
 
 
+def _auto_clean_timesheet(env: ScenarioEnv) -> None:
+    from tests.scenarios.conftest import engagement_row
+
+    env.mode = Mode.AUTO
+    env.workbook.engagements[0] = engagement_row(2, **{"Send automatically": "yes"})
+    clean_timesheet(env)
+
+
+def _billing_record(env: ScenarioEnv) -> OutgoingRecord:
+    return next(record for record in env.store.outgoing_records() if record.kind == "billing_email")
+
+
+def _question_about(env: ScenarioEnv, subject_part: str) -> str:
+    return next(
+        s
+        for s in env.sent_subjects()
+        if s.startswith("Needs your review") and subject_part in s and "I sent" in s
+    )
+
+
+def _billing_emails_sent(sender: FakeSender) -> list[OutgoingEmail]:
+    return [email for email in sender.sent_emails() if email.to == ("ap@acme.example",)]
+
+
+def _crash_on_the_billing_email(env: ScenarioEnv, **crash: bool) -> FakeSender:
+    """Run until the crash lands on the billing email, which is the one that
+    must never go out twice. Each run gets one email further."""
+    crashing = FakeSender(env.sender.outbox, **crash)
+    while True:
+        with pytest.raises(SimulatedCrash):
+            run_once(dc_replace(env.deps(), sender=crashing))
+        billing = next((r for r in env.store.outgoing_records() if r.kind == "billing_email"), None)
+        if billing is not None and billing.status == "in_flight":
+            return crashing
+
+
 class TestNeverTwice:
-    def test_a_crash_between_about_to_send_and_sent_results_in_exactly_one_email(
-        self, env: ScenarioEnv, tmp_path: object
+    """docs/integrations/email-imap-smtp.md, "Never twice": the Message-ID is
+    written down before the send; after a crash the agent checks the Sent
+    folder, waits ten minutes, and then asks Kevin rather than guessing."""
+
+    def test_a_crash_before_the_server_took_it_is_simply_retried(self, env: ScenarioEnv) -> None:
+        _auto_clean_timesheet(env)
+        crashing = _crash_on_the_billing_email(env, crash_before_send=True)
+        assert _billing_emails_sent(crashing) == []
+        billing = _billing_record(env)
+        assert billing.message_id is not None, "the Message-ID was written down first"
+
+        # Restart: nothing in Sent, but the record is fresh, so the agent waits...
+        env.run()
+        assert _billing_record(env).status == "in_flight"
+        assert _billing_emails_sent(env.sender) == []
+
+        # ...and once ten minutes have passed it asks Kevin instead of guessing.
+        env.now = env.deps().clock.now() + timedelta(minutes=11)
+        env.run()
+        assert "SEND_UNCERTAIN" in {review.code for review in env.store.open_reviews()}
+        question = _question_about(env, "invoice FAKE-1")
+        assert _billing_emails_sent(env.sender) == []
+
+        # Kevin never got it and says so: the same email goes out under the same Message-ID.
+        env.reply_from_kevin(question, "resend")
+        env.run()
+        assert _billing_record(env).status == "done"
+        assert _billing_record(env).message_id == billing.message_id
+        assert len(_billing_emails_sent(env.sender)) == 1
+        # Only the billing question was answered; the details email is still in doubt.
+        still_open = [r for r in env.store.open_reviews() if r.code == "SEND_UNCERTAIN"]
+        assert len(still_open) == 1 and "Timesheet received" in still_open[0].message
+
+    def test_a_crash_after_the_server_took_it_results_in_exactly_one_email(
+        self, env: ScenarioEnv
     ) -> None:
-        env.mode = Mode.AUTO
-        from tests.scenarios.conftest import engagement_row
+        _auto_clean_timesheet(env)
+        crashing = _crash_on_the_billing_email(env, crash_after_send=True)
+        assert len(_billing_emails_sent(crashing)) == 1, "the server really did take it"
+        billing = _billing_record(env)
+        assert billing.status == "in_flight" and billing.accepted_at is None
 
-        env.workbook.engagements[0] = engagement_row(2, **{"Send automatically": "yes"})
-        clean_timesheet(env)
-
-        # The provider accepts every send, then the machine dies before the
-        # agent can write down that it was sent. Each run gets one step further,
-        # so the crash lands on the billing email too.
-        crashing = FakeSender(env.sender.outbox, crash_after_send=True)
-        # Run 1 dies on the details email; run 2 recovers it and dies on the
-        # billing email, which is the one that must never go out twice.
-        for _ in range(2):
-            with pytest.raises(SimulatedCrash):
-                run_once(dc_replace(env.deps(), sender=crashing))
-
-        billing = next(
-            record for record in env.store.outgoing_records() if record.kind == "billing_email"
-        )
-        assert billing.status == "in_flight", "the billing send crashed mid-flight"
-        assert len(crashing.sent) == 2, "the provider really did send it"
-
-        # Restart on the provider's own state, with the machine healthy again.
+        # Restart on the server's state: Rackspace keeps no copy in Sent by
+        # itself, so the agent cannot tell yet; it waits ten minutes, then asks.
         recovered = FakeSender(env.sender.outbox)
-        recovered.drafts = crashing.drafts
-        recovered.sent = crashing.sent
+        recovered.sent, recovered.emails = crashing.sent, crashing.emails
+        env.sender = recovered
+        env.run()
+        assert _billing_record(env).status == "in_flight"
+        env.now = env.deps().clock.now() + timedelta(minutes=11)
+        env.run()
+        question = _question_about(env, "invoice FAKE-1")
+        assert "SEND_UNCERTAIN" in {review.code for review in env.store.open_reviews()}
+
+        # Kevin was on CC and got it.
+        env.reply_from_kevin(question, "Received, thanks")
+        env.run()
+        assert _billing_record(env).status == "done"
+        assert len(_billing_emails_sent(recovered)) == 1, "the billing email went out exactly once"
+        assert not any("invoice FAKE-1" in r.message for r in env.store.open_reviews())
+        assert not any("Needs your review" in s for s in env.sent_subjects()[-1:])
+
+    def test_a_copy_in_sent_settles_it_without_asking(self, env: ScenarioEnv) -> None:
+        """A server that files its own Sent copy (or the copy the agent filed
+        before dying) answers the question, so Kevin is never bothered."""
+        _auto_clean_timesheet(env)
+        crashing = _crash_on_the_billing_email(env, crash_after_send=True, provider_saves_sent=True)
+
+        recovered = FakeSender(env.sender.outbox)
+        recovered.sent, recovered.emails = crashing.sent, crashing.emails
+        recovered.sent_copies = crashing.sent_copies
         env.sender = recovered
         env.run()
 
-        assert [record.status for record in env.store.outgoing_records()].count("in_flight") == 0
-        billing_sent = [
-            email for email in recovered.sent_emails() if email.to == ("ap@acme.example",)
-        ]
-        assert len(billing_sent) == 1, "the billing email went out exactly once"
+        assert _billing_record(env).status == "done"
+        assert len(_billing_emails_sent(recovered)) == 1
+        assert not any(s.startswith("Needs your review") for s in env.sent_subjects())
+        assert env.store.open_reviews() == []
+
+    def test_an_answer_that_is_neither_word_is_asked_again(self, env: ScenarioEnv) -> None:
+        _auto_clean_timesheet(env)
+        _crash_on_the_billing_email(env, crash_before_send=True)
+        env.now = env.deps().clock.now() + timedelta(minutes=11)
+        env.run()
+        question = _question_about(env, "invoice FAKE-1")
+
+        env.reply_from_kevin(question, "not sure, let me check")
+        env.run()
+        assert _billing_record(env).status == "in_flight"
+        assert any('"received" or "resend"' in email.body for email in env.sender.sent_emails())
+        assert _billing_emails_sent(env.sender) == []
 
     def test_running_again_sends_nothing_new(self, env: ScenarioEnv) -> None:
         clean_timesheet(env)
@@ -251,18 +344,41 @@ class TestNeverTwice:
         clean_timesheet(env)
 
         class BrokenSender(FakeSender):
-            def send(self, draft_id: str) -> None:
-                raise RuntimeError("the mailbox is not answering")
+            def send(
+                self, email: OutgoingEmail, attachments: dict[str, bytes], message_id: str
+            ) -> None:
+                raise NotSent("the mailbox is not answering")
 
         broken = BrokenSender(env.sender.outbox)
         for _ in range(3):
-            with pytest.raises(RuntimeError):
+            with pytest.raises(NotSent):
                 run_once(dc_replace(env.deps(), sender=broken))
-            # Each failed attempt leaves the record in flight; the next run
-            # reconciles it (the draft is still a draft) and tries again.
+            # The server took nothing, so the record goes straight back to
+            # pending with one more attempt counted; the next run tries again.
 
         codes = {review.code for review in env.store.open_reviews()}
         assert "SEND_FAILED" in codes
+        assert broken.sent == []
+
+    def test_a_refused_address_stops_that_email_and_asks_kevin(self, env: ScenarioEnv) -> None:
+        """A bad recipient is not worth retrying: the first refusal is final."""
+        _auto_clean_timesheet(env)
+
+        class RefusingSender(FakeSender):
+            def send(
+                self, email: OutgoingEmail, attachments: dict[str, bytes], message_id: str
+            ) -> None:
+                if email.to == ("ap@acme.example",):
+                    raise RecipientRefused("550 no such user: ap@acme.example")
+                super().send(email, attachments, message_id)
+
+        refusing = RefusingSender(env.sender.outbox)
+        run_once(dc_replace(env.deps(), sender=refusing))  # the run itself carries on
+
+        assert _billing_record(env).status == "failed"
+        assert _billing_record(env).attempts == 1
+        assert "SEND_FAILED" in {review.code for review in env.store.open_reviews()}
+        assert _billing_emails_sent(refusing) == []
 
 
 class TestReviewReplies:

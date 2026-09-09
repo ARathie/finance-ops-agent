@@ -101,13 +101,13 @@ Replace the Microsoft Graph adapter with an IMAP/SMTP adapter per `integrations/
 
 Done when:
 
-- [ ] A local mail server runs in CI (GreenMail as a service container, or Dovecot) and the adapter passes the port contract suite against it, the same suite the fakes pass.
-- [ ] Reading: new mail by UID; a `UIDVALIDITY` change → full rescan with zero duplicate `messages` rows; a redelivered message skipped by Message-ID; a message without a Message-ID gets a synthetic one; inline images ignored unless alone; `Agent/…` folders created with either delimiter; move by `MOVE` and by copy-delete.
-- [ ] Sending: the Message-ID is stored before the send; `accepted_at` recorded after `250`; a copy in Sent; reconcile → found, too young, and `SEND_UNCERTAIN`, each tested with a killed process; "resend" reuses the Message-ID; a rejected recipient → `SEND_FAILED`; a test asserts TLS verification is on.
-- [ ] Kevin's replies matched by `In-Reply-To`, then by subject.
-- [ ] `MAIL_START_DATE` respected; `fops doctor` output tested with and without settings; the scenario suite is unchanged and green on the fakes.
-- [ ] `grep -ri "microsoft\|graph\|msal\|entra" src tests docs` finds nothing except this roadmap and decision 21.
-- [ ] `.env.example` is committed and lists every setting in `technical-design.md`.
+- [x] A local mail server runs in CI (GreenMail's standalone jar, started by the test fixture; Java installed by the workflow) and the adapter passes the contract suite against it, driven through the same application code the fakes run under.
+- [x] Reading: new mail by UID; a `UIDVALIDITY` change → full rescan with zero duplicate `messages` rows; a redelivered message skipped by Message-ID; a message without a Message-ID gets a synthetic one; inline images ignored unless alone; `Agent/…` folders created with either delimiter; move by `MOVE` and by copy-delete.
+- [x] Sending: the Message-ID is stored before the send; `accepted_at` recorded after `250`; a copy in Sent; reconcile → found, too young, and `SEND_UNCERTAIN`, each tested with a simulated crash (on the fakes) and against the real server; "resend" reuses the Message-ID; a rejected recipient → `SEND_FAILED`; a test asserts TLS verification is on.
+- [x] Kevin's replies matched by `In-Reply-To`, then by subject.
+- [x] `MAIL_START_DATE` respected; `fops doctor` output tested with and without settings; the scenario suite is green on the fakes (the never-twice tests now describe the SMTP behaviour: wait, then ask Kevin).
+- [x] `grep -ri "microsoft\|graph\|msal\|entra" src tests` finds nothing; in `docs` only this roadmap, decisions 13 and 21, and the sentences in the email doc, glossary, and README that say the mailbox is not Microsoft 365.
+- [x] `.env.example` is committed and lists every setting in `technical-design.md`.
 - [ ] **Needs a person:** the agent mailbox exists at Rackspace Email; its address and password are in `.env` on the machine that will run the test; the name of whoever holds Icon's Rackspace admin login is written in `open-questions.md`.
 - [ ] **Needs a person:** `uv run fops doctor --send-test-email` passes every line, Kevin receives the test email, and the copy appears in the agent mailbox's Sent folder.
 - [ ] **Needs a person:** one real email with a timesheet attached, sent from a consultant address that is on the engagement list, is picked up by `uv run fops dry-run` (real mailbox, dry run) and produces the "timesheet received" email to Kevin.

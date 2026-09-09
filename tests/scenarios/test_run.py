@@ -115,7 +115,7 @@ class TestReviews:
 
         assert report.unknown_senders == 1
         assert "UNKNOWN_SENDER" in open_codes(env)
-        assert env.mailbox.folders[name] == "Needs Review"
+        assert env.mailbox.folders[f"<{name}@example>"] == "Needs Review"
         assert len(env.store.list_items()) == 1  # only the expected August item
         assert env.the_item().status is ItemStatus.WAITING_FOR_TIMESHEET
 

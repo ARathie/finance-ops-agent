@@ -61,9 +61,11 @@ class OutgoingEmail:
     cc: tuple[str, ...] = ()
     reply_to: str | None = None
     attachments: tuple[EmailAttachment, ...] = ()
+    in_reply_to: str | None = None  # the Message-ID this answers, so it threads
 
     def payload(self) -> dict[str, object]:
         return {
+            "in_reply_to": self.in_reply_to,
             "to": list(self.to),
             "cc": list(self.cc),
             "reply_to": self.reply_to,
@@ -79,7 +81,9 @@ class OutgoingEmail:
         to, cc = payload["to"], payload["cc"]
         assert isinstance(to, list) and isinstance(cc, list)
         reply_to = payload.get("reply_to")
+        in_reply_to = payload.get("in_reply_to")
         return cls(
+            in_reply_to=None if in_reply_to is None else str(in_reply_to),
             to=tuple(str(address) for address in to),
             cc=tuple(str(address) for address in cc),
             reply_to=None if reply_to is None else str(reply_to),

@@ -92,7 +92,9 @@ class OutgoingRecord:
     item_id: int | None
     payload: dict[str, object]
     status: str  # pending / in_flight / done / failed
-    draft_id: str | None = None
+    message_id: str | None = None  # made by the agent before the send
+    started_at: str | None = None  # when the send began (ISO-8601 UTC)
+    accepted_at: str | None = None  # when the mail server took it
     attempts: int = 0
     last_error: str | None = None
 

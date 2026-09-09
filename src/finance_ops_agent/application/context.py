@@ -41,6 +41,7 @@ def effective_mode(configured: Mode, requested: Mode | None) -> Mode:
 class Settings:
     admin_email: str = "kevin@icon-technologies.com"
     mode: Mode = Mode.DRY_RUN
+    agent_mailbox: str = "jay@icon-technologies.com"
 
 
 @dataclass

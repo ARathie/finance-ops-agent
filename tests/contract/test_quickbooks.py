@@ -29,7 +29,7 @@ from finance_ops_agent.adapters.quickbooks.tokens import (
 )
 from finance_ops_agent.domain.invoices import Invoice, build_invoice
 from finance_ops_agent.domain.money import Money
-from tests.contract.graph_replay import Replay
+from tests.contract.http_replay import Replay
 from tests.scenarios.conftest import ScenarioEnv
 from tests.unit.test_emails import worked_example_item
 

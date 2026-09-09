@@ -18,9 +18,9 @@ class MessageRow(Base):
     __tablename__ = "messages"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    provider_id: Mapped[str] = mapped_column(String, unique=True)
-    internet_message_id: Mapped[str | None]
-    conversation_id: Mapped[str | None]
+    message_id: Mapped[str] = mapped_column(String, unique=True)
+    in_reply_to: Mapped[str | None]
+    references_ids: Mapped[str | None]  # space-separated Message-IDs
     from_address: Mapped[str]
     to_addresses: Mapped[str]
     subject: Mapped[str]
@@ -123,7 +123,9 @@ class OutgoingRow(Base):
     item_id: Mapped[int | None] = mapped_column(ForeignKey("items.id"))
     payload: Mapped[dict[str, object]]
     status: Mapped[str]  # pending / in_flight / done / failed
-    draft_id: Mapped[str | None]
+    message_id: Mapped[str | None]
+    started_at: Mapped[str | None]
+    accepted_at: Mapped[str | None]
     external_id: Mapped[str | None]
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     last_error: Mapped[str | None]

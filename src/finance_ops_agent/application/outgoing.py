@@ -1,12 +1,16 @@
 """Everything that leaves the agent: planned, written down, then sent.
 
 Every email is written to the outgoing table (once, by idempotency key) before
-anything happens, sent draft-then-send, and reconciled after a restart: an
-in-flight record is checked against the provider before any retry, so a crash
-between "about to send" and "sent" still results in exactly one email.
+anything happens. The agent makes the Message-ID and writes it down, hands the
+email to the mail server, records the moment the server accepted it, then
+files a copy in Sent. After a restart an in-flight record is reconciled before
+any retry: found in Sent means done; not found and older than the grace period
+means the agent asks Kevin (who is on CC) rather than guess
+(docs/integrations/email-imap-smtp.md, "Never twice, with SMTP").
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
+from email.utils import make_msgid
 
 from finance_ops_agent.application.context import Mode, RunDeps, RunReport
 from finance_ops_agent.domain import emails
@@ -23,9 +27,10 @@ from finance_ops_agent.domain.money import Money
 from finance_ops_agent.domain.reading import TimesheetReading
 from finance_ops_agent.domain.review import ReviewCode
 from finance_ops_agent.domain.statuses import ItemStatus
-from finance_ops_agent.ports.sender import DraftState
+from finance_ops_agent.ports.sender import NotSent, RecipientRefused
 
 MAX_SEND_ATTEMPTS = 3
+UNCERTAIN_AFTER = timedelta(minutes=10)
 
 EMAIL_KINDS = (
     "details_email",
@@ -273,6 +278,10 @@ def _load_attachments(deps: RunDeps, email: OutgoingEmail) -> dict[str, bytes]:
     }
 
 
+def _now_text(deps: RunDeps) -> str:
+    return deps.clock.now().isoformat()
+
+
 def _open_send_failed_review(deps: RunDeps, record: OutgoingRecord, report: RunReport) -> None:
     deps.store.open_review(
         record.item_id,
@@ -287,63 +296,146 @@ def _open_send_failed_review(deps: RunDeps, record: OutgoingRecord, report: RunR
 def send_pending(deps: RunDeps, report: RunReport) -> None:
     """Reconcile anything in flight, then work through the pending emails."""
     for record in deps.store.outgoing_records():
-        if record.kind not in EMAIL_KINDS:
-            continue
-        if record.status == "in_flight":
+        if record.kind in EMAIL_KINDS and record.status == "in_flight":
             _reconcile(deps, record, report)
     for record in deps.store.outgoing_records():
-        if record.kind not in EMAIL_KINDS or record.status != "pending":
-            continue
-        _send_one(deps, record, report)
+        if record.kind in EMAIL_KINDS and record.status == "pending":
+            _send_one(deps, record, report)
 
 
 def _reconcile(deps: RunDeps, record: OutgoingRecord, report: RunReport) -> None:
-    """Before any retry, ask the provider what really happened to this draft."""
-    if record.draft_id is None:
-        deps.store.update_outgoing(record.idempotency_key, status="pending")
+    """Before any retry, find out what really happened to an in-flight email."""
+    key = record.idempotency_key
+    if record.message_id is None:
+        deps.store.update_outgoing(key, status="pending")  # never got as far as a send
         return
-    state = deps.sender.find_draft(record.draft_id)
-    if state is DraftState.SENT:
-        # The provider sent it before the crash: write that down, never resend.
-        deps.store.update_outgoing(record.idempotency_key, status="done")
-        report.note(f"already sent before the restart: {record.idempotency_key}")
-    elif state is DraftState.STILL_DRAFT:
-        _attempt_send(deps, record, record.draft_id, report)
-    else:
-        deps.store.update_outgoing(record.idempotency_key, status="pending")
+    if record.accepted_at is not None:
+        _file_copy_and_finish(deps, record)  # sent; only the Sent copy was left to do
+        return
+    if deps.sender.find_sent(record.message_id):
+        deps.store.update_outgoing(key, accepted_at=_now_text(deps), status="done")
+        report.note(f"already sent before the restart: {key}")
+        return
+    started = datetime.fromisoformat(record.started_at) if record.started_at else None
+    if started is None or deps.clock.now() - started < UNCERTAIN_AFTER:
+        return  # too soon to tell; the next run looks again
+    _ask_whether_it_arrived(deps, record, report)
 
 
-def _attempt_send(deps: RunDeps, record: OutgoingRecord, draft_id: str, report: RunReport) -> None:
-    """Send an existing draft, counting the attempt and giving up after
-    MAX_SEND_ATTEMPTS with a SEND_FAILED review."""
+def _file_copy_and_finish(deps: RunDeps, record: OutgoingRecord) -> None:
+    """The server took the email; put a copy in Sent (a courtesy) and close out."""
+    assert record.message_id is not None
+    email = OutgoingEmail.from_payload(record.payload)
     try:
-        deps.sender.send(draft_id)
+        deps.sender.save_sent_copy(email, _load_attachments(deps, email), record.message_id)
     except Exception as error:
-        updated = deps.store.update_outgoing(
-            record.idempotency_key, error=str(error), bump_attempts=True
+        # Sent already; the copy is retried next run and nothing is resent.
+        deps.store.update_outgoing(
+            record.idempotency_key, error=f"sent, but the copy to Sent failed: {error}"
         )
-        if updated.attempts >= MAX_SEND_ATTEMPTS:
-            deps.store.update_outgoing(record.idempotency_key, status="failed")
-            _open_send_failed_review(deps, updated, report)
-        # Otherwise the record stays in_flight and the next run reconciles it.
-        raise
+        return
     deps.store.update_outgoing(record.idempotency_key, status="done")
-    report.emails_sent += 1
+
+
+def _uncertain_problem(record: OutgoingRecord) -> str:
+    subject = str(record.payload.get("subject", ""))
+    return (
+        f"I sent \"{subject}\" but couldn't confirm it left the server. You're on CC:"
+        ' reply "received" if you got it, or "resend".'
+    )
+
+
+def _ask_whether_it_arrived(deps: RunDeps, record: OutgoingRecord, report: RunReport) -> None:
+    """Older than the grace period and not in Sent: ask Kevin, never guess."""
+    subject = str(record.payload.get("subject", ""))
+    problem = _uncertain_problem(record)
+    if not deps.store.open_review(record.item_id, ReviewCode.SEND_UNCERTAIN.value, problem):
+        return  # already asked
+    ask = emails.needs_review(deps.settings.admin_email, subject, [problem])
+    enqueue_email(
+        deps,
+        "review_email",
+        f"review:uncertain:{record.idempotency_key}",
+        record.item_id,
+        ask,
+        {"uncertain_key": record.idempotency_key},
+    )
+    report.note(f"asking Kevin whether it arrived: {subject}")
+
+
+def answer_send_uncertain(
+    deps: RunDeps, review_record: OutgoingRecord, body: str, report: RunReport
+) -> None:
+    """Kevin answered a SEND_UNCERTAIN review: "received" closes it, "resend"
+    sends the same email again under the same Message-ID."""
+    key = str(review_record.payload.get("uncertain_key", ""))
+    records = {record.idempotency_key: record for record in deps.store.outgoing_records()}
+    record = records.get(key)
+    if record is None:
+        return
+    first = body.strip().split()[0].strip('".,!').casefold() if body.strip() else ""
+    # Only this email's question: an item can have several emails in doubt at once.
+    reviews = [
+        review
+        for review in deps.store.open_reviews()
+        if review.code == ReviewCode.SEND_UNCERTAIN.value
+        and review.item_id == record.item_id
+        and review.message == _uncertain_problem(record)
+    ]
+    if first == "received":
+        if record.status == "in_flight":
+            deps.store.update_outgoing(key, accepted_at=_now_text(deps), status="done")
+        for review in reviews:
+            deps.store.answer_review(review.id, {"kind": "received"}, "answered")
+        report.note(f"Kevin confirmed it arrived: {key}")
+    elif first == "resend":
+        if record.status == "in_flight":
+            deps.store.update_outgoing(key, status="pending", clear_times=True)
+        for review in reviews:
+            deps.store.answer_review(review.id, {"kind": "resend"}, "answered")
+        report.note(f"Kevin asked for a resend: {key}")
+    else:
+        ask = OutgoingEmail(
+            to=(deps.settings.admin_email,),
+            subject=f"Re: {review_record.payload.get('subject', '')}",
+            body='Sorry - on this one I only understand "received" or "resend".',
+        )
+        enqueue_email(
+            deps, "ask_again_email", f"askword:{key}:{record.attempts}", record.item_id, ask
+        )
+
+
+def _new_message_id(deps: RunDeps) -> str:
+    domain = deps.settings.agent_mailbox.rsplit("@", 1)[-1] or "finance-ops-agent"
+    return make_msgid(domain=domain)
 
 
 def _send_one(deps: RunDeps, record: OutgoingRecord, report: RunReport) -> None:
+    key = record.idempotency_key
     email = OutgoingEmail.from_payload(record.payload)
+    attachments = _load_attachments(deps, email)
+    # The Message-ID is written down before anything is sent, so a crash in
+    # between is reconciled against the Sent folder rather than retried blindly.
+    message_id = record.message_id or _new_message_id(deps)
+    deps.store.update_outgoing(
+        key, status="in_flight", message_id=message_id, started_at=_now_text(deps)
+    )
     try:
-        draft_id = deps.sender.create_draft(email, _load_attachments(deps, email))
-    except Exception as error:
+        deps.sender.send(email, attachments, message_id)
+    except NotSent as error:
+        # The server took nothing: count the attempt and try again next run.
         updated = deps.store.update_outgoing(
-            record.idempotency_key, error=str(error), bump_attempts=True
+            key, status="pending", error=str(error), bump_attempts=True, clear_times=True
         )
-        if updated.attempts >= MAX_SEND_ATTEMPTS:
-            deps.store.update_outgoing(record.idempotency_key, status="failed")
+        if isinstance(error, RecipientRefused) or updated.attempts >= MAX_SEND_ATTEMPTS:
+            deps.store.update_outgoing(key, status="failed")
             _open_send_failed_review(deps, updated, report)
+            return  # a bad address stops this email, not the run
         raise
-    # The draft id is written down before the send, so a crash in between is
-    # reconciled against the provider rather than retried blindly.
-    deps.store.update_outgoing(record.idempotency_key, status="in_flight", draft_id=draft_id)
-    _attempt_send(deps, record, draft_id, report)
+    except Exception as error:
+        # Ambiguous: the server may have it. Stay in flight for the reconcile.
+        deps.store.update_outgoing(key, error=str(error))
+        raise
+    accepted = deps.store.update_outgoing(key, accepted_at=_now_text(deps))
+    report.emails_sent += 1
+    _file_copy_and_finish(deps, accepted)

@@ -79,13 +79,12 @@ class Store(Protocol):
     def record_message(self, message: StoredMessage, files: dict[str, bytes]) -> bool:
         """Store a message with its attachment content (by sha256), unprocessed.
 
-        Returns False (storing nothing) if its provider id or internet message
-        id was already seen."""
+        Returns False (storing nothing) if its Message-ID was already seen."""
         ...
 
     def unprocessed_messages(self) -> list[StoredMessage]: ...
 
-    def mark_processed(self, provider_id: str) -> None: ...
+    def mark_processed(self, message_id: str) -> None: ...
 
     def load_file(self, sha256: str) -> bytes: ...
 
@@ -144,12 +143,16 @@ class Store(Protocol):
         idempotency_key: str,
         *,
         status: str | None = None,
-        draft_id: str | None = None,
+        message_id: str | None = None,
+        started_at: str | None = None,
+        accepted_at: str | None = None,
         error: str | None = None,
         bump_attempts: bool = False,
+        clear_times: bool = False,
     ) -> OutgoingRecord:
         """Advance one outgoing record through pending -> in_flight -> done
-        (or failed), recording the draft id the moment it exists."""
+        (or failed), recording the Message-ID before the send and the moment
+        the server accepted it. `clear_times` forgets both times for a resend."""
         ...
 
     # Invoices and payment instructions

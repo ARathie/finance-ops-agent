@@ -1,11 +1,11 @@
-"""A fake email sender: drafts in memory, sent mail as .eml files in an outbox
-folder. Crash hooks simulate dying between "about to send" and "sent"."""
+"""A fake email sender: sent mail as .eml files in an outbox folder, and a
+pretend Sent folder. Crash hooks simulate dying just before or just after the
+mail server accepts an email."""
 
 from email.message import EmailMessage
 from pathlib import Path
 
 from finance_ops_agent.domain.emails import OutgoingEmail
-from finance_ops_agent.ports.sender import DraftState
 
 AGENT_ADDRESS = "jay@icon-technologies.com"
 
@@ -20,26 +20,20 @@ class FakeSender:
         outbox: Path,
         crash_before_send: bool = False,
         crash_after_send: bool = False,
+        provider_saves_sent: bool = False,
     ) -> None:
         self.outbox = outbox
         self.crash_before_send = crash_before_send
         self.crash_after_send = crash_after_send
-        self.drafts: dict[str, tuple[OutgoingEmail, dict[str, bytes]]] = {}
-        self.sent: list[str] = []
+        # Some providers file a copy in Sent by themselves; Rackspace does not.
+        self.provider_saves_sent = provider_saves_sent
+        self.sent: list[str] = []  # message ids, in the order the server took them
+        self.emails: dict[str, OutgoingEmail] = {}
+        self.sent_copies: set[str] = set()
 
-    def create_draft(self, email: OutgoingEmail, attachments: dict[str, bytes]) -> str:
-        # Derived from the drafts already held, so a sender restarted on the
-        # provider's existing state never reuses an id (as a real one would not).
-        draft_id = f"draft-{len(self.drafts) + 1}"
-        self.drafts[draft_id] = (email, attachments)
-        return draft_id
-
-    def send(self, draft_id: str) -> None:
-        if draft_id not in self.drafts:
-            raise KeyError(draft_id)
+    def send(self, email: OutgoingEmail, attachments: dict[str, bytes], message_id: str) -> None:
         if self.crash_before_send:
-            raise SimulatedCrash("died between 'about to send' and 'sent'")
-        email, attachments = self.drafts[draft_id]
+            raise SimulatedCrash("died before the mail server took it")
         message = EmailMessage()
         message["From"] = AGENT_ADDRESS
         message["To"] = ", ".join(email.to)
@@ -47,7 +41,11 @@ class FakeSender:
             message["Cc"] = ", ".join(email.cc)
         if email.reply_to:
             message["Reply-To"] = email.reply_to
+        if email.in_reply_to:
+            message["In-Reply-To"] = email.in_reply_to
+            message["References"] = email.in_reply_to
         message["Subject"] = email.subject
+        message["Message-ID"] = message_id
         message.set_content(email.body)
         for attachment in email.attachments:
             message.add_attachment(
@@ -57,17 +55,21 @@ class FakeSender:
                 filename=attachment.filename,
             )
         self.outbox.mkdir(parents=True, exist_ok=True)
-        (self.outbox / f"{len(self.sent) + 1:03d}-{draft_id}.eml").write_bytes(bytes(message))
-        self.sent.append(draft_id)
+        (self.outbox / f"{len(self.sent) + 1:03d}.eml").write_bytes(bytes(message))
+        self.sent.append(message_id)
+        self.emails[message_id] = email
+        if self.provider_saves_sent:
+            self.sent_copies.add(message_id)
         if self.crash_after_send:
-            raise SimulatedCrash("died after the provider sent, before writing it down")
+            raise SimulatedCrash("died after the mail server took it, before writing it down")
 
-    def find_draft(self, draft_id: str) -> DraftState:
-        if draft_id in self.sent:
-            return DraftState.SENT
-        if draft_id in self.drafts:
-            return DraftState.STILL_DRAFT
-        return DraftState.MISSING
+    def save_sent_copy(
+        self, email: OutgoingEmail, attachments: dict[str, bytes], message_id: str
+    ) -> None:
+        self.sent_copies.add(message_id)
+
+    def find_sent(self, message_id: str) -> bool:
+        return message_id in self.sent_copies
 
     def sent_emails(self) -> list[OutgoingEmail]:
-        return [self.drafts[draft_id][0] for draft_id in self.sent]
+        return [self.emails[message_id] for message_id in self.sent]

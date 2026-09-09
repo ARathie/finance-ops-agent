@@ -26,6 +26,7 @@ class ReviewCode(StrEnum):
     LIST_ROW_PROBLEM = "LIST_ROW_PROBLEM"
     CORRECTION = "CORRECTION"
     SEND_FAILED = "SEND_FAILED"
+    SEND_UNCERTAIN = "SEND_UNCERTAIN"
     QUICKBOOKS_FAILED = "QUICKBOOKS_FAILED"
     MAILBOX_PROBLEM = "MAILBOX_PROBLEM"
     QUICKBOOKS_RECONNECT = "QUICKBOOKS_RECONNECT"
@@ -60,6 +61,10 @@ REVIEW_MESSAGES: dict[ReviewCode, str] = {
     ),
     ReviewCode.SEND_FAILED: (
         "I couldn't send the billing email. I'll keep trying; please check the mailbox."
+    ),
+    ReviewCode.SEND_UNCERTAIN: (
+        "I sent an email but couldn't confirm it left the server. You're on CC:"
+        ' reply "received" if you got it, or "resend".'
     ),
     ReviewCode.QUICKBOOKS_FAILED: (
         "I couldn't create the invoice in QuickBooks. I'll keep trying;"

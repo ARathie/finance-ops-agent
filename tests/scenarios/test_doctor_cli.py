@@ -9,9 +9,8 @@ REQUIRED = (
     "FOPS_ENGAGEMENT_LIST",
     "FOPS_ADMIN_EMAIL",
     "FOPS_AGENT_MAILBOX",
-    "MS_TENANT_ID",
-    "MS_CLIENT_ID",
-    "MS_CLIENT_SECRET",
+    "MAIL_USERNAME",
+    "MAIL_PASSWORD",
     "FOPS_MODE",
     "FOPS_DATA_DIR",
 )
@@ -43,7 +42,7 @@ def test_doctor_names_the_mailbox_settings_it_still_needs(
 
     assert main(["doctor"]) == 1
     out = capsys.readouterr().out
-    assert "MS_TENANT_ID" in out
+    assert "MAIL_USERNAME" in out
     # It got far enough to check the settings and the engagement list.
     assert "mode dry_run" in out
     assert "engagement list" in out

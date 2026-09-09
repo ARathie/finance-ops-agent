@@ -45,9 +45,8 @@ def real_environment(monkeypatch: pytest.MonkeyPatch, data_dir: Path, mode: str)
         "FOPS_AGENT_MAILBOX": "jay@icon-technologies.com",
         "FOPS_DATA_DIR": str(data_dir),
         "FOPS_ACCOUNTING": "manual",
-        "MS_TENANT_ID": "not-a-real-tenant",
-        "MS_CLIENT_ID": "not-a-real-client",
-        "MS_CLIENT_SECRET": "not-a-real-secret",
+        "MAIL_USERNAME": "jay@icon-technologies.com",
+        "MAIL_PASSWORD": "not-a-real-password",
         "ANTHROPIC_API_KEY": "not-a-real-key",
     }.items():
         monkeypatch.setenv(name, value)

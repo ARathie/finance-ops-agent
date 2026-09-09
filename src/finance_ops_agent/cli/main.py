@@ -24,9 +24,10 @@ from finance_ops_agent.ports.accounting import AccountingSystem
 from finance_ops_agent.ports.store import Store
 
 if TYPE_CHECKING:
-    from finance_ops_agent.adapters.microsoft365.client import GraphClient
+    from finance_ops_agent.adapters.email.client import MailAccount
+    from finance_ops_agent.adapters.email.sender import SmtpSender
     from finance_ops_agent.cli.doctor import Check
-    from finance_ops_agent.config import Config
+    from finance_ops_agent.config import Config, MailSettings
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -227,41 +228,70 @@ def _accounting(
     return QuickBooksOnline(client, settings.item_name, today)
 
 
+def _mail_account(mail: "MailSettings") -> "MailAccount":
+    from finance_ops_agent.adapters.email.client import MailAccount
+
+    return MailAccount(
+        imap_host=mail.imap_host,
+        imap_port=mail.imap_port,
+        imap_security=mail.imap_security,
+        smtp_host=mail.smtp_host,
+        smtp_port=mail.smtp_port,
+        smtp_security=mail.smtp_security,
+        username=mail.username,
+        password=mail.password,
+        folder_prefix=mail.folder_prefix,
+        sent_folder=mail.sent_folder,
+    )
+
+
 def _real_deps(mode_override: "Mode | None" = None) -> RunDeps:
     """Wire the real adapters from the environment (docs/technical-design.md)."""
     from finance_ops_agent.adapters.claude.reader import ClaudeReader
     from finance_ops_agent.adapters.clock import SystemClock
+    from finance_ops_agent.adapters.email.inbox import ImapInbox
+    from finance_ops_agent.adapters.email.sender import SmtpSender
     from finance_ops_agent.adapters.excel.engagement_list import ExcelEngagementList
-    from finance_ops_agent.adapters.microsoft365.client import GraphClient, token_from_msal
-    from finance_ops_agent.adapters.microsoft365.inbox import GraphInbox
-    from finance_ops_agent.adapters.microsoft365.sender import GraphSender
-    from finance_ops_agent.config import Config, MicrosoftSettings
+    from finance_ops_agent.config import Config, MailSettings
 
     config = Config.from_env()
-    microsoft = MicrosoftSettings.from_env()
-    client = GraphClient(
-        microsoft.mailbox,
-        lambda: token_from_msal(microsoft.tenant_id, microsoft.client_id, microsoft.client_secret),
-    )
+    mail = MailSettings.from_env()
+    account = _mail_account(mail)
     store = _open_store(config.data_dir)
     renderer = TextPdfRenderer()
     clock = SystemClock(config.timezone)
+    # The first run reads from today unless MAIL_START_DATE says otherwise, so a
+    # mailbox with history in it is not processed from the beginning of time.
+    start_date = mail.start_date or _remembered_start_date(store, clock.today())
     return RunDeps(
         engagement_list=ExcelEngagementList(config.engagement_list),
-        inbox=GraphInbox(client),
+        inbox=ImapInbox(account, config.agent_mailbox, start_date),
         reader=ClaudeReader(model=config.model),
         store=store,
         clock=clock,
         settings=Settings(
             admin_email=config.admin_email,
             mode=effective_mode(config.mode, mode_override),
+            agent_mailbox=config.agent_mailbox,
         ),
-        sender=GraphSender(client),
+        sender=SmtpSender(account, config.agent_mailbox, clock.now),
         accounting=_accounting(config, store, renderer, clock.today()),
         renderer=renderer,
         tracking_path=config.data_dir / "tracking.xlsx",
         render_tracking=tracking_sheet_bytes,
     )
+
+
+START_DATE_KEY = "mail_start_date"
+
+
+def _remembered_start_date(store: SqliteStore, today: date) -> date:
+    """The day of the first real run, written down once and kept."""
+    remembered = store.get_state(START_DATE_KEY)
+    if remembered:
+        return date.fromisoformat(remembered)
+    store.set_state(START_DATE_KEY, today.isoformat())
+    return today
 
 
 def _command_run(args: argparse.Namespace) -> int:
@@ -303,11 +333,11 @@ def _command_run(args: argparse.Namespace) -> int:
 
 def _command_doctor(args: argparse.Namespace) -> int:
     from finance_ops_agent.adapters.excel.engagement_list import ExcelEngagementList
-    from finance_ops_agent.adapters.microsoft365.client import GraphClient, token_from_msal
     from finance_ops_agent.cli import doctor as checks
     from finance_ops_agent.cli.doctor import Check, CheckResult
-    from finance_ops_agent.config import Config, MicrosoftSettings, MissingSettingError
+    from finance_ops_agent.config import Config, MailSettings, MissingSettingError
     from finance_ops_agent.domain.engagements import parse_workbook
+    from finance_ops_agent.ports.inbox import IGNORED_FOLDER, NEEDS_REVIEW_FOLDER, PROCESSED_FOLDER
 
     results: list[Check] = []
     try:
@@ -316,7 +346,11 @@ def _command_doctor(args: argparse.Namespace) -> int:
         print(Check("settings", CheckResult.FAIL, str(error)).line())
         return 1
     results.append(
-        Check("settings", CheckResult.PASS, f"mode {config.mode}, timezone {config.timezone}")
+        Check(
+            "settings",
+            CheckResult.PASS,
+            f"mode {config.mode}, timezone {config.timezone}, accounting {config.accounting}",
+        )
     )
 
     def load_list() -> tuple[int, list[str]]:
@@ -335,21 +369,28 @@ def _command_doctor(args: argparse.Namespace) -> int:
     results.append(checks.check_database(describe_database))
 
     try:
-        microsoft = MicrosoftSettings.from_env()
+        mail = MailSettings.from_env()
     except MissingSettingError as error:
         results.append(Check("mailbox", CheckResult.FAIL, str(error)))
     else:
-        client = GraphClient(
-            microsoft.mailbox,
-            lambda: token_from_msal(
-                microsoft.tenant_id, microsoft.client_id, microsoft.client_secret
-            ),
+        start = mail.start_date.isoformat() if mail.start_date else "the first run's date"
+        results.append(Check("mail start date", CheckResult.PASS, f"reading mail from {start}"))
+        account = _mail_account(mail)
+        results.append(checks.check_mailbox_is_the_agents(account, config.agent_mailbox))
+        results.append(checks.check_imap_login(account))
+        results.append(
+            checks.check_agent_folders(
+                account, (PROCESSED_FOLDER, NEEDS_REVIEW_FOLDER, IGNORED_FOLDER)
+            )
         )
-        results.append(checks.check_token(client))
-        results.append(checks.check_can_read_the_agent_mailbox(client))
-        results.append(checks.check_cannot_read_another_mailbox(client, config.admin_email))
+        results.append(checks.check_sent_folder(account))
+        results.append(checks.check_smtp_login(account))
         if args.send_test_email:
-            results.append(_send_test_email(client, config.admin_email))
+            from finance_ops_agent.adapters.clock import SystemClock
+            from finance_ops_agent.adapters.email.sender import SmtpSender
+
+            sender = SmtpSender(account, config.agent_mailbox, SystemClock(config.timezone).now)
+            results.append(_send_test_email(sender, config.admin_email))
 
     if config.accounting == "quickbooks":
         results.extend(_quickbooks_checks(config))
@@ -412,26 +453,34 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
     return results
 
 
-def _send_test_email(client: "GraphClient", admin_email: str) -> "Check":
-    from finance_ops_agent.adapters.microsoft365.sender import GraphSender
+def _send_test_email(sender: "SmtpSender", admin_email: str) -> "Check":
+    """Send one email to Kevin and prove the copy landed in Sent."""
+    from email.utils import make_msgid
+
     from finance_ops_agent.cli.doctor import Check, CheckResult
     from finance_ops_agent.domain.emails import OutgoingEmail
 
+    email = OutgoingEmail(
+        to=(admin_email,),
+        subject="fops doctor: this mailbox works",
+        body=(
+            "This is the test email from `fops doctor`. Nothing was sent to"
+            " any client. If you got this, the agent can read and send mail."
+        ),
+    )
+    message_id = make_msgid(domain=admin_email.rsplit("@", 1)[-1])
     try:
-        sender = GraphSender(client)
-        draft_id = sender.create_draft(
-            OutgoingEmail(
-                to=(admin_email,),
-                subject="fops doctor: this mailbox works",
-                body=(
-                    "This is the test email from `fops doctor`. Nothing was sent to"
-                    " any client. If you got this, the agent can read and send mail."
-                ),
-            ),
-            {},
+        sender.send(email, {}, message_id)
+        sender.save_sent_copy(email, {}, message_id)
+        if not sender.find_sent(message_id):
+            return Check(
+                "test email",
+                CheckResult.FAIL,
+                f"sent one email to {admin_email}, but could not find the copy in Sent",
+            )
+        return Check(
+            "test email", CheckResult.PASS, f"sent one email to {admin_email}; copy is in Sent"
         )
-        sender.send(draft_id)
-        return Check("test email", CheckResult.PASS, f"sent one email to {admin_email}")
     except Exception as error:
         return Check("test email", CheckResult.FAIL, str(error)[:300])
 

@@ -1,6 +1,7 @@
 """The Store contract: the fake and the SQLite adapter behave identically."""
 
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -120,11 +121,11 @@ class TestStatusChangesAndTheAuditLog:
         assert store.audit_entries() == store.audit_entries(item_id)
 
 
-def _stored_message(provider_id: str = "m1", internet_id: str = "<m1@example>") -> StoredMessage:
+def _stored_message(message_id: str = "<m1@example>") -> StoredMessage:
     return StoredMessage(
-        provider_id=provider_id,
-        internet_message_id=internet_id,
-        conversation_id="",
+        message_id=message_id,
+        in_reply_to="",
+        references=(),
         from_address="priya@example.com",
         to_addresses="jay@icon-technologies.com",
         subject="August timesheet",
@@ -147,21 +148,34 @@ class TestMessages:
     def test_stored_then_processed(self, store: Store) -> None:
         assert store.record_message(_stored_message(), {"a" * 64: b"PDFDATA"})
         [message] = store.unprocessed_messages()
-        assert message.provider_id == "m1"
+        assert message.message_id == "<m1@example>"
         assert message.attachments[0].sha256 == "a" * 64
         assert store.load_file("a" * 64) == b"PDFDATA"
 
-        store.mark_processed("m1")
+        store.mark_processed("<m1@example>")
         assert store.unprocessed_messages() == []
 
-    def test_the_same_provider_id_is_stored_once(self, store: Store) -> None:
+    def test_the_same_message_id_is_stored_once(self, store: Store) -> None:
+        """A redelivered message (same Message-ID, new UID) is not a new message."""
         assert store.record_message(_stored_message(), {})
-        assert not store.record_message(_stored_message(internet_id="<other@example>"), {})
+        assert not store.record_message(_stored_message(), {})
         assert len(store.unprocessed_messages()) == 1
+        assert store.record_message(_stored_message("<m2@example>"), {})
+        assert len(store.unprocessed_messages()) == 2
 
-    def test_the_same_internet_message_id_is_stored_once(self, store: Store) -> None:
-        assert store.record_message(_stored_message(), {})
-        assert not store.record_message(_stored_message(provider_id="m2"), {})
+    def test_reply_headers_are_kept(self, store: Store) -> None:
+        message = replace(
+            _stored_message(),
+            in_reply_to="<ask@icon-technologies.com>",
+            references=("<first@icon-technologies.com>", "<ask@icon-technologies.com>"),
+        )
+        assert store.record_message(message, {})
+        [stored] = store.unprocessed_messages()
+        assert stored.in_reply_to == "<ask@icon-technologies.com>"
+        assert stored.references == (
+            "<first@icon-technologies.com>",
+            "<ask@icon-technologies.com>",
+        )
 
 
 class TestTimesheetsReviewsOutgoingState:

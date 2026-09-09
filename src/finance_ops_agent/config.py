@@ -6,6 +6,7 @@ reads a rate or a contact: those come only from the engagement list.
 
 import os
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 from finance_ops_agent.application.context import Mode
@@ -22,20 +23,71 @@ def _required(name: str) -> str:
     return value
 
 
+LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
+SECURITY_CHOICES = ("ssl", "starttls", "none")
+
+
+def _security(name: str, host: str, default: str) -> str:
+    value = os.environ.get(name, default).strip().lower()
+    if value not in SECURITY_CHOICES:
+        raise MissingSettingError(f"{name} should be ssl, starttls, or none, not {value!r}")
+    if value == "none" and host not in LOCAL_HOSTS:
+        raise MissingSettingError(
+            f"{name}=none is only for a test server on this machine, not for {host}"
+        )
+    return value
+
+
+def _port(name: str, default: int) -> int:
+    text = os.environ.get(name, "").strip()
+    if not text:
+        return default
+    try:
+        return int(text)
+    except ValueError as error:
+        raise MissingSettingError(f"{name} should be a port number, not {text!r}") from error
+
+
 @dataclass(frozen=True)
-class MicrosoftSettings:
-    tenant_id: str
-    client_id: str
-    client_secret: str
-    mailbox: str
+class MailSettings:
+    """The agent's own mailbox at Rackspace Email: IMAP to read, SMTP to send
+    (docs/integrations/email-imap-smtp.md)."""
+
+    imap_host: str
+    imap_port: int
+    imap_security: str
+    smtp_host: str
+    smtp_port: int
+    smtp_security: str
+    username: str
+    password: str
+    start_date: date | None  # None = from the first run onwards
+    folder_prefix: str
+    sent_folder: str | None
 
     @classmethod
-    def from_env(cls) -> "MicrosoftSettings":
+    def from_env(cls) -> "MailSettings":
+        imap_host = os.environ.get("MAIL_IMAP_HOST", "secure.emailsrvr.com").strip()
+        smtp_host = os.environ.get("MAIL_SMTP_HOST", "secure.emailsrvr.com").strip()
+        start_text = os.environ.get("MAIL_START_DATE", "").strip()
+        try:
+            start_date = date.fromisoformat(start_text) if start_text else None
+        except ValueError as error:
+            raise MissingSettingError(
+                f"MAIL_START_DATE should be a date like 2026-09-09, not {start_text!r}"
+            ) from error
         return cls(
-            tenant_id=_required("MS_TENANT_ID"),
-            client_id=_required("MS_CLIENT_ID"),
-            client_secret=_required("MS_CLIENT_SECRET"),
-            mailbox=_required("FOPS_AGENT_MAILBOX"),
+            imap_host=imap_host,
+            imap_port=_port("MAIL_IMAP_PORT", 993),
+            imap_security=_security("MAIL_IMAP_SECURITY", imap_host, "ssl"),
+            smtp_host=smtp_host,
+            smtp_port=_port("MAIL_SMTP_PORT", 465),
+            smtp_security=_security("MAIL_SMTP_SECURITY", smtp_host, "ssl"),
+            username=_required("MAIL_USERNAME"),
+            password=_required("MAIL_PASSWORD"),
+            start_date=start_date,
+            folder_prefix=os.environ.get("MAIL_FOLDER_PREFIX", "Agent").strip() or "Agent",
+            sent_folder=os.environ.get("MAIL_SENT_FOLDER", "").strip() or None,
         )
 
 

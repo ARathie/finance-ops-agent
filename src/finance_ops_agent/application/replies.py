@@ -1,7 +1,8 @@
 """Kevin's replies: approve/cancel by code, review answers read by Claude.
 
-Only replies from Kevin's address count (the run routes by sender), and a
-reply is matched to what it answers by the subject of the email it replies to.
+Only replies from Kevin's address count (the run routes by sender). A reply is
+matched to what it answers by its In-Reply-To (or References) header naming
+the Message-ID the agent sent, and by the subject as a fallback (decision 17).
 Approvals are checked by code - the first word must be approve or cancel; only
 review answers go through the reader, and code applies them.
 """
@@ -25,12 +26,15 @@ def _stripped_subject(subject: str) -> str:
 
 
 def _matched_record(deps: RunDeps, message: StoredMessage) -> OutgoingRecord | None:
+    records = [record for record in deps.store.outgoing_records() if record.kind in _ANSWERABLE]
+    answered = {message.in_reply_to, *message.references} - {""}
+    if answered:
+        by_id = [record for record in records if record.message_id in answered]
+        if by_id:
+            return by_id[-1]
     subject = _stripped_subject(message.subject).casefold()
     matches = [
-        record
-        for record in deps.store.outgoing_records()
-        if record.kind in _ANSWERABLE
-        and str(record.payload.get("subject", "")).casefold() == subject
+        record for record in records if str(record.payload.get("subject", "")).casefold() == subject
     ]
     return matches[-1] if matches else None
 
@@ -74,13 +78,14 @@ def _handle_approval_reply(
         ask = emails.OutgoingEmail(
             to=(deps.settings.admin_email,),
             subject=f"Re: {record.payload.get('subject', '')}",
+            in_reply_to=message.message_id,
             body=(
                 'Sorry - I only understand replies that start with "approve" or'
                 ' "cancel" on this one. Nothing has been sent.'
             ),
         )
         outgoing.enqueue_email(
-            deps, "ask_again_email", f"askword:{message.provider_id}", item.id, ask
+            deps, "ask_again_email", f"askword:{message.message_id}", item.id, ask
         )
 
 
@@ -127,6 +132,9 @@ def _handle_review_reply(
     report: RunReport,
 ) -> None:
     item = None if record.item_id is None else deps.store.get_item(record.item_id)
+    if record.payload.get("uncertain_key"):
+        outgoing.answer_send_uncertain(deps, record, body, report)
+        return
     open_reviews = [
         review for review in deps.store.open_reviews() if review.item_id == record.item_id
     ]
@@ -143,6 +151,7 @@ def _handle_review_reply(
         ask = emails.OutgoingEmail(
             to=(deps.settings.admin_email,),
             subject=f"Re: {about}",
+            in_reply_to=message.message_id,
             body=(
                 "Sorry to ask again - I couldn't tell what your reply means for"
                 " everything I asked. Could you answer in one of these shapes?\n"
@@ -151,7 +160,7 @@ def _handle_review_reply(
             ),
         )
         outgoing.enqueue_email(
-            deps, "ask_again_email", f"askagain:{message.provider_id}", record.item_id, ask
+            deps, "ask_again_email", f"askagain:{message.message_id}", record.item_id, ask
         )
         return
     if item is None:

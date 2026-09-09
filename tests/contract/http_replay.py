@@ -1,23 +1,17 @@
-"""Replay recorded Graph responses through a real httpx client.
+"""Replay recorded HTTP responses through a real httpx client.
 
-Every recorded response is a JSON file under tests/fixtures/graph/, keyed by
-"METHOD path". A recording carries the status, headers, and body exactly as
-Graph returned them, with secrets removed; the tests below drive the real
-adapter code against them, so no network and no credentials are ever needed.
-
-The recorder is `tests/contract/record_graph.py` (run by hand with real
-credentials); these files were written from the shapes documented in
-docs/integrations/microsoft-365-email.md.
+Used by the QuickBooks Online tests. Every recorded response is a JSON file
+under tests/fixtures/qbo/, keyed by "METHOD url". A recording carries the
+status, headers, and body exactly as the service returned them, with secrets
+removed; the tests drive the real adapter code against them, so no network
+and no credentials are ever needed.
 """
 
 import json
 from collections.abc import Iterable
-from pathlib import Path
 from typing import Any
 
 import httpx
-
-RECORDINGS = Path(__file__).parent.parent / "fixtures" / "graph"
 
 
 class Replay:
@@ -29,20 +23,8 @@ class Replay:
         self.bodies: list[Any] = []
         self.headers: list[dict[str, str]] = []
 
-    @classmethod
-    def from_files(cls, *names: str) -> "Replay":
-        script: dict[str, list[dict[str, Any]]] = {}
-        for name in names:
-            recorded = json.loads((RECORDINGS / f"{name}.json").read_text())
-            for entry in recorded["exchanges"]:
-                script.setdefault(entry["key"], []).append(entry["response"])
-        return cls(script)
-
     def _key(self, request: httpx.Request) -> str:
-        url = str(request.url)
-        # Recorded keys are stable: the method and the url with the graph host
-        # and any tenant-specific mailbox left in, since those are not secret.
-        return f"{request.method} {url}"
+        return f"{request.method} {request.url}"
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         key = self._key(request)

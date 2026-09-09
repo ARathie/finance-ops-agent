@@ -201,20 +201,14 @@ class SqliteStore:
     def record_message(self, message: StoredMessage, files: dict[str, bytes]) -> bool:
         with Session(self._engine) as session, session.begin():
             already = session.scalars(
-                select(MessageRow).where(MessageRow.provider_id == message.provider_id)
+                select(MessageRow).where(MessageRow.message_id == message.message_id)
             ).first()
-            if already is None and message.internet_message_id:
-                already = session.scalars(
-                    select(MessageRow).where(
-                        MessageRow.internet_message_id == message.internet_message_id
-                    )
-                ).first()
             if already is not None:
                 return False
             row = MessageRow(
-                provider_id=message.provider_id,
-                internet_message_id=message.internet_message_id or None,
-                conversation_id=message.conversation_id or None,
+                message_id=message.message_id,
+                in_reply_to=message.in_reply_to or None,
+                references_ids=" ".join(message.references) or None,
                 from_address=message.from_address,
                 to_addresses=message.to_addresses,
                 subject=message.subject,
@@ -257,9 +251,9 @@ class SqliteStore:
             )
         )
         return StoredMessage(
-            provider_id=row.provider_id,
-            internet_message_id=row.internet_message_id or "",
-            conversation_id=row.conversation_id or "",
+            message_id=row.message_id,
+            in_reply_to=row.in_reply_to or "",
+            references=tuple((row.references_ids or "").split()),
             from_address=row.from_address,
             to_addresses=row.to_addresses,
             subject=row.subject,
@@ -277,10 +271,10 @@ class SqliteStore:
             )
             return [self._stored_message(session, row) for row in rows]
 
-    def mark_processed(self, provider_id: str) -> None:
+    def mark_processed(self, message_id: str) -> None:
         with Session(self._engine) as session, session.begin():
             row = session.scalars(
-                select(MessageRow).where(MessageRow.provider_id == provider_id)
+                select(MessageRow).where(MessageRow.message_id == message_id)
             ).one()
             row.processed_at = self._now().isoformat()
 
@@ -396,7 +390,9 @@ class SqliteStore:
                     item_id=item_id,
                     payload=json.loads(json.dumps(payload)),
                     status="pending",
-                    draft_id=None,
+                    message_id=None,
+                    started_at=None,
+                    accepted_at=None,
                     external_id=None,
                     attempts=0,
                     last_error=None,
@@ -419,7 +415,9 @@ class SqliteStore:
                     item_id=row.item_id,
                     payload=dict(row.payload),
                     status=row.status,
-                    draft_id=row.draft_id,
+                    message_id=row.message_id,
+                    started_at=row.started_at,
+                    accepted_at=row.accepted_at,
                     attempts=row.attempts,
                     last_error=row.last_error,
                 )
@@ -453,9 +451,12 @@ class SqliteStore:
         idempotency_key: str,
         *,
         status: str | None = None,
-        draft_id: str | None = None,
+        message_id: str | None = None,
+        started_at: str | None = None,
+        accepted_at: str | None = None,
         error: str | None = None,
         bump_attempts: bool = False,
+        clear_times: bool = False,
     ) -> OutgoingRecord:
         with Session(self._engine) as session, session.begin():
             row = session.scalars(
@@ -463,8 +464,15 @@ class SqliteStore:
             ).one()
             if status is not None:
                 row.status = status
-            if draft_id is not None:
-                row.draft_id = draft_id
+            if message_id is not None:
+                row.message_id = message_id
+            if started_at is not None:
+                row.started_at = started_at
+            if accepted_at is not None:
+                row.accepted_at = accepted_at
+            if clear_times:
+                row.started_at = None
+                row.accepted_at = None
             if error is not None:
                 row.last_error = error
             if bump_attempts:
@@ -476,7 +484,9 @@ class SqliteStore:
                 item_id=row.item_id,
                 payload=dict(row.payload),
                 status=row.status,
-                draft_id=row.draft_id,
+                message_id=row.message_id,
+                started_at=row.started_at,
+                accepted_at=row.accepted_at,
                 attempts=row.attempts,
                 last_error=row.last_error,
             )

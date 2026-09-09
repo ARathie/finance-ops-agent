@@ -36,3 +36,6 @@ evals/private/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Downloaded test tools (the GreenMail jar)
+tests/.cache/

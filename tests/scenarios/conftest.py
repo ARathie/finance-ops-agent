@@ -1,7 +1,7 @@
 """Builders for whole-run scenario tests: a workbook, .eml files, and readings."""
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from email.message import EmailMessage
 from pathlib import Path
 
@@ -157,6 +157,7 @@ class ScenarioEnv:
     accounting: FakeAccounting
     email_count: int = 0
     today: date = TODAY
+    now: datetime | None = None  # None = noon UTC on `today`
     mode: Mode = Mode.DRY_RUN
     replies: dict[str, ReplyReading] = field(default_factory=dict)
     _deps: RunDeps | None = field(default=None, repr=False)
@@ -195,7 +196,7 @@ class ScenarioEnv:
             inbox=self.mailbox,
             reader=FakeReader(self.readings, self.replies),
             store=self.store,
-            clock=FakeClock(self.today),
+            clock=FakeClock(self.today, self.now),
             settings=Settings(mode=self.mode),
             sender=self.sender,
             accounting=self.accounting,

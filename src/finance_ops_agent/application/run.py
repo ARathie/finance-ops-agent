@@ -2,7 +2,7 @@
 
 The order follows docs/technical-design.md. Never twice, at every step:
 messages are stored before they are processed and marked processed only when
-handling finished; the mailbox cursor is saved only after the run's messages
+handling finished; the mailbox position is saved only after the run's messages
 are stored; a second run over the same mailbox changes nothing.
 
 Everything that leaves the agent is composed here, written to the outgoing
@@ -45,10 +45,10 @@ from finance_ops_agent.domain.periods import BillingPeriod, billing_periods
 from finance_ops_agent.domain.reading import ReadingHints, TimesheetReading
 from finance_ops_agent.domain.review import ReviewCode
 from finance_ops_agent.domain.statuses import ItemStatus
-from finance_ops_agent.ports.inbox import NEEDS_REVIEW_FOLDER
+from finance_ops_agent.ports.inbox import IGNORED_FOLDER, NEEDS_REVIEW_FOLDER, PROCESSED_FOLDER
 from finance_ops_agent.ports.reader import CantReadAttachmentError
 
-MAILBOX_CURSOR_KEY = "mailbox_cursor"
+MAILBOX_POSITION_KEY = "mailbox_position"
 
 __all__ = ["Mode", "RunDeps", "RunReport", "Settings", "run_once"]
 
@@ -241,13 +241,13 @@ def _decide_kind(deps: RunDeps, workbook: EngagementWorkbook, email: InboundEmai
 
 
 def _ingest_mailbox(deps: RunDeps, workbook: EngagementWorkbook, report: RunReport) -> None:
-    cursor = deps.store.get_state(MAILBOX_CURSOR_KEY)
-    emails, new_cursor = deps.inbox.new_messages(cursor)
+    position = deps.store.get_state(MAILBOX_POSITION_KEY)
+    emails, new_position = deps.inbox.new_messages(position)
     for email in emails:
         files: dict[str, bytes] = {}
         stored_attachments: list[StoredAttachment] = []
         for attachment in email.attachments:
-            content = deps.inbox.download_attachment(email.provider_id, attachment.attachment_id)
+            content = deps.inbox.download_attachment(email.message_id, attachment.attachment_id)
             sha256 = hashlib.sha256(content).hexdigest()
             files[sha256] = content
             stored_attachments.append(
@@ -259,9 +259,9 @@ def _ingest_mailbox(deps: RunDeps, workbook: EngagementWorkbook, report: RunRepo
                 )
             )
         stored = StoredMessage(
-            provider_id=email.provider_id,
-            internet_message_id=email.internet_message_id,
-            conversation_id=email.conversation_id,
+            message_id=email.message_id,
+            in_reply_to=email.in_reply_to,
+            references=email.references,
             from_address=email.from_address,
             to_addresses=email.to_addresses,
             subject=email.subject,
@@ -273,8 +273,8 @@ def _ingest_mailbox(deps: RunDeps, workbook: EngagementWorkbook, report: RunRepo
         )
         if deps.store.record_message(stored, files):
             report.messages_stored += 1
-    # Only now, with every fetched message stored, is the cursor moved.
-    deps.store.set_state(MAILBOX_CURSOR_KEY, new_cursor)
+    # Only now, with every fetched message stored, is the position moved.
+    deps.store.set_state(MAILBOX_POSITION_KEY, new_position)
 
 
 def _process_messages(deps: RunDeps, workbook: EngagementWorkbook, report: RunReport) -> None:
@@ -290,15 +290,19 @@ def _process_messages(deps: RunDeps, workbook: EngagementWorkbook, report: RunRe
                     f' ("{message.subject}").',
                 ),
             )
-            deps.inbox.move(message.provider_id, NEEDS_REVIEW_FOLDER)
+            deps.inbox.move(message.message_id, NEEDS_REVIEW_FOLDER)
             report.unknown_senders += 1
         elif message.kind is MessageKind.TIMESHEET:
-            _process_timesheet(deps, workbook, message, report)
+            folder = _process_timesheet(deps, workbook, message, report)
+            deps.inbox.move(message.message_id, folder)
         elif message.kind is MessageKind.KEVIN_REPLY:
             reply_steps.handle_kevin_reply(deps, message, report)
-        # Client replies are forwarded unchanged once the real mailbox exists (PR 8);
-        # until then they are recorded and listed in the Monday summary.
-        deps.store.mark_processed(message.provider_id)
+            deps.inbox.move(message.message_id, PROCESSED_FOLDER)
+        else:
+            # Client replies are recorded and listed in the Monday summary
+            # (forwarding them unchanged is later work).
+            deps.inbox.move(message.message_id, PROCESSED_FOLDER)
+        deps.store.mark_processed(message.message_id)
 
 
 def _reading_content_key(reading: TimesheetReading) -> str:
@@ -337,7 +341,10 @@ def _to_needs_review(deps: RunDeps, item: Item) -> None:
 
 def _process_timesheet(
     deps: RunDeps, workbook: EngagementWorkbook, message: StoredMessage, report: RunReport
-) -> None:
+) -> str:
+    """Handle one timesheet email; returns the mailbox folder it is filed in
+    afterwards (a courtesy for anyone looking at the mailbox; the database is
+    the record)."""
     if not message.attachments:
         finding = Finding(
             ReviewCode.NO_ATTACHMENT,
@@ -345,13 +352,13 @@ def _process_timesheet(
             f' ("{message.subject}").',
         )
         _open_review(deps, report, None, finding)
-        _enqueue_review_email(deps, message.provider_id, None, [finding], None, None)
-        return
+        _enqueue_review_email(deps, message.message_id, None, [finding], None, None)
+        return NEEDS_REVIEW_FOLDER
     attachment = message.attachments[0]
     if deps.store.timesheet_seen(attachment.sha256):
         report.duplicates_filed += 1
         report.note(f"duplicate filed quietly: {attachment.filename} from {message.from_address}")
-        return
+        return IGNORED_FOLDER
     content = deps.store.load_file(attachment.sha256)
     try:
         hints = ReadingHints(
@@ -370,13 +377,13 @@ def _process_timesheet(
         _open_review(deps, report, None, finding)
         _enqueue_review_email(
             deps,
-            message.provider_id,
+            message.message_id,
             None,
             [finding],
             None,
             EmailAttachment(attachment.filename, attachment.sha256),
         )
-        return
+        return NEEDS_REVIEW_FOLDER
     report.timesheets_processed += 1
 
     findings: list[Finding] = []
@@ -471,7 +478,7 @@ def _process_timesheet(
             )
         )
     if is_duplicate:
-        return
+        return IGNORED_FOLDER
 
     if is_correction and item is not None:
         findings.append(
@@ -500,17 +507,18 @@ def _process_timesheet(
         deps.settings.admin_email, summary, next_step, timesheet_attachment
     )
     outgoing_steps.enqueue_email(
-        deps, "details_email", f"details:{message.provider_id}", item_id, details
+        deps, "details_email", f"details:{message.message_id}", item_id, details
     )
     if findings:
         _enqueue_review_email(
-            deps, message.provider_id, item_id, findings, summary, timesheet_attachment
+            deps, message.message_id, item_id, findings, summary, timesheet_attachment
         )
-        return
+        return NEEDS_REVIEW_FOLDER
 
     if item is None:
-        return
+        return NEEDS_REVIEW_FOLDER
     complete_if_covered(deps, deps.store.get_item(item.id), report)
+    return PROCESSED_FOLDER
 
 
 def _timesheet_summary(
@@ -542,7 +550,7 @@ def _timesheet_summary(
 
 def _enqueue_review_email(
     deps: RunDeps,
-    provider_id: str,
+    message_id: str,
     item_id: int | None,
     findings: list[Finding],
     summary: TimesheetSummary | None,
@@ -560,4 +568,4 @@ def _enqueue_review_email(
         summary,
         timesheet,
     )
-    outgoing_steps.enqueue_email(deps, "review_email", f"review:{provider_id}", item_id, email)
+    outgoing_steps.enqueue_email(deps, "review_email", f"review:{message_id}", item_id, email)

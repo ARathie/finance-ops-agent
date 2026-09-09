@@ -1,11 +1,12 @@
 """The settings from the environment, including the ones with no safe default."""
 
+from datetime import date
 from pathlib import Path
 
 import pytest
 
 from finance_ops_agent.application.context import Mode
-from finance_ops_agent.config import Config, MicrosoftSettings, MissingSettingError
+from finance_ops_agent.config import Config, MailSettings, MissingSettingError
 
 FULL_ENV = {
     "FOPS_TIMEZONE": "America/New_York",
@@ -22,9 +23,17 @@ def set_env(monkeypatch: pytest.MonkeyPatch, **overrides: str | None) -> None:
         "FOPS_DATA_DIR",
         "FOPS_MODEL",
         "FOPS_ACCOUNTING",
-        "MS_TENANT_ID",
-        "MS_CLIENT_ID",
-        "MS_CLIENT_SECRET",
+        "MAIL_IMAP_HOST",
+        "MAIL_IMAP_PORT",
+        "MAIL_IMAP_SECURITY",
+        "MAIL_SMTP_HOST",
+        "MAIL_SMTP_PORT",
+        "MAIL_SMTP_SECURITY",
+        "MAIL_USERNAME",
+        "MAIL_PASSWORD",
+        "MAIL_START_DATE",
+        "MAIL_FOLDER_PREFIX",
+        "MAIL_SENT_FOLDER",
     ):
         monkeypatch.delenv(name, raising=False)
     for name, value in {**FULL_ENV, **overrides}.items():
@@ -68,12 +77,78 @@ def test_every_mode_parses(monkeypatch: pytest.MonkeyPatch, mode: Mode) -> None:
     assert Config.from_env().mode is mode
 
 
-def test_microsoft_settings_need_all_four(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_mail_settings_need_a_username_and_password(monkeypatch: pytest.MonkeyPatch) -> None:
     set_env(monkeypatch)
-    with pytest.raises(MissingSettingError, match="MS_TENANT_ID"):
-        MicrosoftSettings.from_env()
-    monkeypatch.setenv("MS_TENANT_ID", "tenant")
-    monkeypatch.setenv("MS_CLIENT_ID", "client")
-    monkeypatch.setenv("MS_CLIENT_SECRET", "secret")
-    settings = MicrosoftSettings.from_env()
-    assert settings.mailbox == "jay@icon-technologies.com"
+    with pytest.raises(MissingSettingError, match="MAIL_USERNAME"):
+        MailSettings.from_env()
+    monkeypatch.setenv("MAIL_USERNAME", "jay@icon-technologies.com")
+    with pytest.raises(MissingSettingError, match="MAIL_PASSWORD"):
+        MailSettings.from_env()
+    monkeypatch.setenv("MAIL_PASSWORD", "not-a-real-password")
+    settings = MailSettings.from_env()
+    # Rackspace Email defaults from docs/integrations/email-imap-smtp.md.
+    assert (settings.imap_host, settings.imap_port, settings.imap_security) == (
+        "secure.emailsrvr.com",
+        993,
+        "ssl",
+    )
+    assert (settings.smtp_host, settings.smtp_port, settings.smtp_security) == (
+        "secure.emailsrvr.com",
+        465,
+        "ssl",
+    )
+    assert settings.start_date is None
+    assert settings.folder_prefix == "Agent"
+    assert settings.sent_folder is None
+
+
+def _mail_env(monkeypatch: pytest.MonkeyPatch, **overrides: str) -> None:
+    set_env(monkeypatch, MAIL_USERNAME="jay@icon-technologies.com", MAIL_PASSWORD="pw", **overrides)
+
+
+def test_the_start_date_is_a_date(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mail_env(monkeypatch, MAIL_START_DATE="2026-09-09")
+    assert MailSettings.from_env().start_date == date(2026, 9, 9)
+    _mail_env(monkeypatch, MAIL_START_DATE="Sept 9")
+    with pytest.raises(MissingSettingError, match="MAIL_START_DATE"):
+        MailSettings.from_env()
+
+
+def test_ports_must_be_numbers(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mail_env(monkeypatch, MAIL_IMAP_PORT="nine-nine-three")
+    with pytest.raises(MissingSettingError, match="MAIL_IMAP_PORT"):
+        MailSettings.from_env()
+    _mail_env(monkeypatch, MAIL_SMTP_PORT="587", MAIL_SMTP_SECURITY="starttls")
+    settings = MailSettings.from_env()
+    assert (settings.smtp_port, settings.smtp_security) == (587, "starttls")
+
+
+def test_security_choices_are_checked(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mail_env(monkeypatch, MAIL_IMAP_SECURITY="plain")
+    with pytest.raises(MissingSettingError, match="MAIL_IMAP_SECURITY"):
+        MailSettings.from_env()
+
+
+def test_no_encryption_is_only_allowed_for_a_local_test_server(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A real mail server always gets TLS; "none" exists only for the test server in CI.
+    _mail_env(monkeypatch, MAIL_SMTP_SECURITY="none")
+    with pytest.raises(MissingSettingError, match="secure.emailsrvr.com"):
+        MailSettings.from_env()
+    _mail_env(
+        monkeypatch,
+        MAIL_IMAP_HOST="127.0.0.1",
+        MAIL_IMAP_SECURITY="none",
+        MAIL_SMTP_HOST="localhost",
+        MAIL_SMTP_SECURITY="none",
+    )
+    settings = MailSettings.from_env()
+    assert (settings.imap_security, settings.smtp_security) == ("none", "none")
+
+
+def test_folder_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mail_env(monkeypatch, MAIL_FOLDER_PREFIX="  ", MAIL_SENT_FOLDER="Sent Items")
+    settings = MailSettings.from_env()
+    assert settings.folder_prefix == "Agent"  # blank means the default
+    assert settings.sent_folder == "Sent Items"

@@ -4,7 +4,7 @@ An email-based assistant for Icon Technologies, a small IT consulting and staffi
 
 Today all of this is done by hand from emails, Excel, and QuickBooks. The goal is that Kevin only has to step in when something needs a decision.
 
-**Status: built, not yet used for real.** The whole flow runs end to end on fakes and fixtures with no network. Before Icon can use it: the mailbox adapter has to be rebuilt for Icon's actual email host, Rackspace Email (an ordinary IMAP/SMTP mailbox, not Microsoft 365 as first assumed); the timesheet reader has to be scored against the real model and real timesheets; then one billing cycle in dry run on a Mac; then a move to a server so nothing depends on anyone's computer; then ask-first mode for real. The order, and every step that needs a person rather than code, is in [`docs/roadmap.md`](docs/roadmap.md).
+**Status: built, not yet used for real.** The whole flow runs end to end on fakes and fixtures with no network, and the mailbox adapter (plain IMAP and SMTP, for Icon's mailbox at Rackspace Email) is tested against a local mail server. Before Icon can use it: the agent's own mailbox has to exist at Rackspace; the timesheet reader has to be scored against the real model and real timesheets; then one billing cycle in dry run on a Mac; then a move to a server so nothing depends on anyone's computer; then ask-first mode for real. The order, and every step that needs a person rather than code, is in [`docs/roadmap.md`](docs/roadmap.md).
 
 Start with [`docs/README.md`](docs/README.md); coding agents should read [`CLAUDE.md`](CLAUDE.md) first. [`docs/running-it.md`](docs/running-it.md) is how it is installed and run day to day.
 
