@@ -50,6 +50,18 @@ def build_parser() -> argparse.ArgumentParser:
     status = commands.add_parser("status", help="print the items and open reviews")
     status.add_argument("--data", type=Path, required=True)
 
+    evaluate = commands.add_parser(
+        "eval", help="score the timesheet reader against the made-up test set"
+    )
+    evaluate.add_argument("--cases", type=Path, default=Path("tests/evals/timesheets"))
+    evaluate.add_argument("--thresholds", type=Path, default=Path("tests/evals/thresholds.json"))
+    evaluate.add_argument(
+        "--live",
+        action="store_true",
+        help="call the real model (costs money; needs ANTHROPIC_API_KEY)"
+        " and overwrite each case's recorded.json",
+    )
+
     return parser
 
 
@@ -128,6 +140,49 @@ def _command_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_eval(args: argparse.Namespace) -> int:
+    from finance_ops_agent.application.eval_runner import (
+        EvalCase,
+        Thresholds,
+        below_thresholds,
+        load_cases,
+        run_eval,
+    )
+
+    cases = load_cases(args.cases)
+    if args.live:
+        import os
+
+        from finance_ops_agent.adapters.claude.reader import ClaudeReader
+
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            print("The live run needs ANTHROPIC_API_KEY. CI replays recorded.json only.")
+            return 2
+        reader = ClaudeReader(model=os.environ.get("FOPS_MODEL", "claude-opus-5"))
+
+        def read(case: EvalCase) -> TimesheetReading:
+            reading = reader.read_timesheet(case.input_path.read_bytes(), case.input_path.name, "")
+            recorded = case.input_path.parent / "recorded.json"
+            recorded.write_text(reading.model_dump_json(indent=2))
+            return reading
+
+    else:
+
+        def read(case: EvalCase) -> TimesheetReading:
+            recorded = case.input_path.parent / "recorded.json"
+            if not recorded.exists():
+                raise SystemExit(f"{case.name} has no recorded.json; run `fops eval --live` once")
+            return TimesheetReading.model_validate(json.loads(recorded.read_text()))
+
+    report = run_eval(cases, read)
+    print(report.format())
+    thresholds = Thresholds.model_validate(json.loads(args.thresholds.read_text()))
+    problems = below_thresholds(report, thresholds)
+    for problem in problems:
+        print(f"BELOW THRESHOLD: {problem}")
+    return 1 if problems else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -135,6 +190,8 @@ def main(argv: list[str] | None = None) -> int:
         return _command_dry_run(args)
     if args.command == "status":
         return _command_status(args)
+    if args.command == "eval":
+        return _command_eval(args)
     parser.print_help()
     return 0
 

@@ -6,7 +6,7 @@ import pytest
 
 from finance_ops_agent.domain.money import Hours, Money
 from finance_ops_agent.domain.periods import BillingPeriod
-from finance_ops_agent.domain.reading import TimesheetReading
+from finance_ops_agent.domain.reading import ReadingHints, TimesheetReading
 from finance_ops_agent.domain.statuses import ItemStatus
 from finance_ops_agent.ports.reader import CantReadAttachmentError
 from tests.scenarios.conftest import DANA, PRIYA, ScenarioEnv, reading
@@ -261,8 +261,15 @@ class TestNeverTwice:
         crashing = env.readings.copy()
 
         class CrashingReader:
+            model_name = "fake"
+            prompt_version = "0"
+
             def read_timesheet(
-                self, content: bytes, filename: str, mime_type: str
+                self,
+                content: bytes,
+                filename: str,
+                mime_type: str,
+                hints: ReadingHints | None = None,
             ) -> TimesheetReading:
                 if filename == "dana-week.pdf":
                     raise RuntimeError("the machine went down here")

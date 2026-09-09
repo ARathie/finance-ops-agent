@@ -77,3 +77,70 @@ class TimesheetReading(BaseModel):
         if not entries:
             return None
         return sum(entry.hours_hundredths for entry in entries)
+
+
+class ClassifiedKind(StrEnum):
+    """What the model says an ambiguous email is (docs/integrations/claude-extraction.md).
+
+    Code applies its simple rules first (sender is Kevin, sender unknown); the
+    model only sees the ambiguous ones, and its answer still goes through the
+    checks like everything else.
+    """
+
+    TIMESHEET = "timesheet"
+    CORRECTED_TIMESHEET = "corrected_timesheet"
+    APPROVAL_FROM_CLIENT = "approval_from_client"
+    REPLY_FROM_KEVIN = "reply_from_kevin"
+    CLIENT_REPLY = "client_reply"
+    OTHER = "other"
+
+
+class EmailClassification(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    kind: ClassifiedKind
+    reason: str  # one line
+
+
+class ReplyAnswerKind(StrEnum):
+    """What kind of answer Kevin's reply gives for one review reason."""
+
+    CONSULTANT_NAME = "consultant_name"
+    CLIENT_NAME = "client_name"
+    PERIOD_START = "period_start"
+    PERIOD_END = "period_end"
+    HOURS = "hours"
+    APPROVAL_NOTE = "approval_note"
+    IGNORE = "ignore"
+    USE_NEW_ONE = "use_new_one"
+    UNCLEAR = "unclear"
+
+
+class ReplyAnswer(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    review_code: str  # which review reason this answers
+    kind: ReplyAnswerKind
+    value: str | None = None  # dates as YYYY-MM-DD, hours as written ("152"), names as written
+    quote: str | None = None  # Kevin's words
+
+
+class ReplyReading(BaseModel):
+    """The model's reading of Kevin's reply. Code applies it; `unclear` means ask again."""
+
+    model_config = ConfigDict(frozen=True)
+
+    answers: list[ReplyAnswer]
+
+
+class ReadingHints(BaseModel):
+    """What the reader may see besides the attachment: the email text, and the
+    consultant and client names from the engagement list for spelling only.
+    Never rates, never email addresses."""
+
+    model_config = ConfigDict(frozen=True)
+
+    email_subject: str = ""
+    email_text: str = ""
+    consultant_names: list[str] = Field(default_factory=list)
+    client_names: list[str] = Field(default_factory=list)
