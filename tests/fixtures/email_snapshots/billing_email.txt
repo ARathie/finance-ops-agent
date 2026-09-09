@@ -1,0 +1,14 @@
+To: ap@acme.example
+Cc: kevin@icon-technologies.com, jane.doe@acme.example
+Reply-To: kevin@icon-technologies.com
+Subject: Icon Technologies invoice ICON-2026-1001 — Priya Shah — Aug 2026
+Attachments: invoice-ICON-2026-1001.pdf, priya-august.pdf
+
+Hello,
+
+Please find attached Icon Technologies invoice ICON-2026-1001 for Priya Shah's services for Aug 1–31, 2026 (156.00 approved hours), along with the approved timesheet. Payment terms are 30 days; the invoice is due 2026-10-03.
+
+Please let us know if you have any questions.
+
+Thank you,
+Icon Technologies

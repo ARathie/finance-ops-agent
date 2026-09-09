@@ -52,10 +52,10 @@ The three Claude calls, prompt files with versions, attachment conversion (PDF, 
 
 All email templates from `emails.md`; reply handling (approve/cancel by code, review answers via Claude); the invoice PDF and manual-mode numbering; the payment instruction; the Monday summary; the `outgoing` table with draft-then-send and restart reconciliation.
 
-- [ ] Snapshot test for every email.
-- [ ] `fops dry-run --fake` shows, for a fixture mailbox, every email that would be sent.
-- [ ] A simulated crash between "about to send" and "sent" results in exactly one email after restart.
-- [ ] The pay rate never appears in client emails and the bill rate never in the payment instruction (tested).
+- [x] Snapshot test for every email.
+- [x] `fops dry-run --fake` shows, for a fixture mailbox, every email that would be sent.
+- [x] A simulated crash between "about to send" and "sent" results in exactly one email after restart.
+- [x] The pay rate never appears in client emails and the bill rate never in the payment instruction (tested).
 
 ## PR 8 — Microsoft 365
 

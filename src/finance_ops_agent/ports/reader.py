@@ -7,7 +7,7 @@ port with the Claude adapter (see docs/integrations/claude-extraction.md).
 
 from typing import Protocol
 
-from finance_ops_agent.domain.reading import ReadingHints, TimesheetReading
+from finance_ops_agent.domain.reading import ReadingHints, ReplyReading, TimesheetReading
 
 
 class CantReadAttachmentError(Exception):
@@ -33,4 +33,8 @@ class TimesheetReader(Protocol):
         hints: ReadingHints | None = None,
     ) -> TimesheetReading:
         """Fill in the whole form, or raise CantReadAttachmentError. Never partial."""
+        ...
+
+    def read_reply(self, reply_text: str, questions: list[tuple[str, str]]) -> ReplyReading:
+        """Kevin's short reply, read into typed answers per review reason asked."""
         ...

@@ -8,7 +8,6 @@ from finance_ops_agent.domain.money import Hours, Money
 from finance_ops_agent.domain.periods import BillingPeriod
 from finance_ops_agent.domain.reading import ReadingHints, TimesheetReading
 from finance_ops_agent.domain.statuses import ItemStatus
-from finance_ops_agent.ports.reader import CantReadAttachmentError
 from tests.scenarios.conftest import DANA, PRIYA, ScenarioEnv, reading
 
 AUG_START, AUG_END = date(2026, 8, 1), date(2026, 8, 31)
@@ -30,8 +29,8 @@ class TestHappyPath:
         assert item.invoice_amount == Money(2_184_000)  # the worked example
         assert item.amount_owed == Money(1_560_000)
         assert open_codes(env) == set()
-        kinds = [record.kind for record in env.store.outgoing_records()]
-        assert kinds == ["details_to_kevin"]
+        kinds = {record.kind for record in env.store.outgoing_records()}
+        assert kinds == {"details_email", "preview_email", "payment_email"}
 
     def test_the_expected_item_is_reused_not_duplicated(self, env: ScenarioEnv) -> None:
         env.run()  # first run: period ended, no timesheet yet
@@ -54,7 +53,8 @@ class TestDuplicates:
         assert report.duplicates_filed == 1
         assert len(env.store.list_items()) == 1
         assert open_codes(env) == set()
-        assert [r.kind for r in env.store.outgoing_records()] == ["details_to_kevin"]
+        details = [r for r in env.store.outgoing_records() if r.kind == "details_email"]
+        assert len(details) == 1
 
     def test_same_file_forwarded_by_someone_else(self, env: ScenarioEnv) -> None:
         env.add_email(PRIYA, scripted_reading=reading(AUG_START, AUG_END))
@@ -160,12 +160,11 @@ class TestReviews:
         env.run()
         assert {"NO_APPROVAL", "HOURS_UNUSUAL"} <= open_codes(env)
         review_emails = [
-            record for record in env.store.outgoing_records() if record.kind == "review_to_kevin"
+            record for record in env.store.outgoing_records() if record.kind == "review_email"
         ]
         assert len(review_emails) == 1
-        codes = review_emails[0].payload["codes"]
-        assert isinstance(codes, list)
-        assert {"NO_APPROVAL", "HOURS_UNUSUAL"} <= set(codes)
+        body = str(review_emails[0].payload["body"])
+        assert "approved" in body.lower() and "unusual" in body.lower()
 
 
 class TestWeeklyIntoMonthly:
@@ -258,12 +257,12 @@ class TestNeverTwice:
         )
 
         # The run dies in the middle of the second timesheet.
-        crashing = env.readings.copy()
+        from dataclasses import replace as dc_replace
 
-        class CrashingReader:
-            model_name = "fake"
-            prompt_version = "0"
+        from finance_ops_agent.adapters.fakes.reader import FakeReader
+        from finance_ops_agent.application.run import run_once
 
+        class CrashingReader(FakeReader):
             def read_timesheet(
                 self,
                 content: bytes,
@@ -273,23 +272,9 @@ class TestNeverTwice:
             ) -> TimesheetReading:
                 if filename == "dana-week.pdf":
                     raise RuntimeError("the machine went down here")
-                try:
-                    return crashing[filename]
-                except KeyError as error:
-                    raise CantReadAttachmentError(filename) from error
+                return super().read_timesheet(content, filename, mime_type, hints)
 
-        from finance_ops_agent.adapters.fakes.clock import FakeClock
-        from finance_ops_agent.adapters.fakes.engagement_list import FakeEngagementList
-        from finance_ops_agent.application.run import RunDeps, Settings, run_once
-
-        crashing_deps = RunDeps(
-            engagement_list=FakeEngagementList(env.workbook),
-            inbox=env.mailbox,
-            reader=CrashingReader(),
-            store=env.store,
-            clock=FakeClock(env.today),
-            settings=Settings(),
-        )
+        crashing_deps = dc_replace(env.deps(), reader=CrashingReader(env.readings.copy()))
         with pytest.raises(RuntimeError):
             run_once(crashing_deps)
 
@@ -299,7 +284,7 @@ class TestNeverTwice:
         assert ("Priya Shah", ItemStatus.READY) in items
         assert ("Dana Cruz", ItemStatus.RECEIVED) in items
         details = [
-            record for record in env.store.outgoing_records() if record.kind == "details_to_kevin"
+            record for record in env.store.outgoing_records() if record.kind == "details_email"
         ]
         assert len(details) == 2  # one per timesheet, never twice
         assert len(env.store.list_items()) == 2
