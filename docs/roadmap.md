@@ -69,9 +69,9 @@ The real mailbox adapter, `fops doctor`, and the setup checklist in `integration
 
 `fops qbo-connect`, token storage with rotation, customer and item lookup, invoice create with the total check, PDF fetch, daily paid check, void; sandbox first; then ask first mode live.
 
-- [ ] Recorded tests including a mismatched total (voided and reported) and a rotated refresh token.
-- [ ] After a simulated crash the agent finds the invoice it already created by its private note and does not create another.
-- [ ] Ask first mode runs live with the sandbox, then with the real company.
+- [x] Recorded tests including a mismatched total (voided and reported) and a rotated refresh token.
+- [x] After a simulated crash the agent finds the invoice it already created by its private note and does not create another.
+- [ ] Ask first mode runs live with the sandbox, then with the real company. *(Needs an Intuit app and a sandbox company, then `fops qbo-connect`. Code-complete; waiting on credentials — and on Icon's Desktop → Online move for the real company.)*
 
 ## PR 10 — Running it day to day
 

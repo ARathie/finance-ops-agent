@@ -69,3 +69,7 @@ Every email to a client and every invoice creation is written down before it hap
 ## 17. Kevin's replies are matched by the subject of the email he replies to
 
 `technical-design.md` says replies are matched by conversation id *and* an item reference in the subject. On fakes there is no provider conversation id yet, so the agent matches the reply to the exact subject line of the email it answers, and the outgoing table holds those subjects. Consequence: reply handling is fully testable now; when the real mailbox arrives (PR 8) the conversation id becomes the primary key for matching and the subject stays as the fallback.
+
+## 18. The application records the invoice, not the accounting adapter
+
+An `AccountingSystem` adapter creates the invoice in the accounting system and returns its number, external id, and PDF; writing the agent's own `invoices` row is the application's job. The first cut had manual mode write that row as a side effect, which silently left QuickBooks Online mode with no invoice rows at all — so the tracking sheet, the daily paid check, and replacement invoices would all have quietly stopped working once the mode changed. Consequence: `application/outgoing.py` writes the row once for whichever adapter made the invoice, and `create_invoice` stays idempotent per item so a crash mid-run cannot produce a second one (in QuickBooks by recognising the item id in the invoice's private note).

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from finance_ops_agent.adapters.fakes.accounting import FakeAccounting
 from finance_ops_agent.adapters.fakes.clock import FakeClock
 from finance_ops_agent.adapters.fakes.engagement_list import FakeEngagementList
 from finance_ops_agent.adapters.fakes.mailbox import FakeMailbox
@@ -14,7 +15,6 @@ from finance_ops_agent.adapters.fakes.reader import FakeReader
 from finance_ops_agent.adapters.fakes.sender import FakeSender
 from finance_ops_agent.adapters.fakes.store import FakeStore
 from finance_ops_agent.adapters.pdf.writer import TextPdfRenderer
-from finance_ops_agent.adapters.quickbooks.manual import ManualQuickBooks
 from finance_ops_agent.application.run import Mode, RunDeps, RunReport, Settings, run_once
 from finance_ops_agent.domain.engagements import RawRow, RawWorkbook
 from finance_ops_agent.domain.items import Item
@@ -154,6 +154,7 @@ class ScenarioEnv:
     readings: dict[str, TimesheetReading]
     workbook: RawWorkbook
     sender: FakeSender
+    accounting: FakeAccounting
     email_count: int = 0
     today: date = TODAY
     mode: Mode = Mode.DRY_RUN
@@ -197,12 +198,15 @@ class ScenarioEnv:
             clock=FakeClock(self.today),
             settings=Settings(mode=self.mode),
             sender=self.sender,
-            accounting=ManualQuickBooks(self.store, TextPdfRenderer(), self.today),
+            accounting=self.accounting,
             renderer=TextPdfRenderer(),
         )
 
     def run(self) -> RunReport:
         return run_once(self.deps())
+
+    def report(self) -> RunReport:
+        return RunReport()
 
     def sent_subjects(self) -> list[str]:
         return [email.subject for email in self.sender.sent_emails()]
@@ -232,4 +236,5 @@ def env(tmp_path: Path) -> ScenarioEnv:
         readings={},
         workbook=default_workbook(),
         sender=FakeSender(tmp_path / "outbox"),
+        accounting=FakeAccounting(),
     )
