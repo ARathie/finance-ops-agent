@@ -27,6 +27,7 @@ class Invoice:
     issue_date: date
     due_date: date
     replaces_number: str | None = None
+    quickbooks_customer: str = ""  # blank means "the same as the legal name"
 
     def line_description(self) -> str:
         role = f" — {self.role}" if self.role else ""
@@ -52,4 +53,5 @@ def build_invoice(
         issue_date=issue_date,
         due_date=issue_date + timedelta(days=item.snapshot.payment_terms_days),
         replaces_number=replaces_number,
+        quickbooks_customer=item.snapshot.quickbooks_customer,
     )

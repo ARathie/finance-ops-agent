@@ -15,6 +15,7 @@ import hashlib
 from datetime import date
 
 from finance_ops_agent.application import outgoing as outgoing_steps
+from finance_ops_agent.application import paid_check
 from finance_ops_agent.application import replies as reply_steps
 from finance_ops_agent.application import summary as summary_steps
 from finance_ops_agent.application.completion import complete_if_covered
@@ -59,6 +60,7 @@ def run_once(deps: RunDeps, report: RunReport | None = None) -> RunReport:
     _ingest_mailbox(deps, workbook, report)
     _process_messages(deps, workbook, report)
     outgoing_steps.plan_outgoing(deps, report)
+    paid_check.check_paid_invoices(deps, report)
     tracking_sha = _write_tracking(deps)
     summary_steps.enqueue_monday_summary(deps, report, tracking_sha)
     outgoing_steps.send_pending(deps, report)
@@ -169,6 +171,7 @@ def _build_snapshot(
         engagement_row_number=rate_row.row_number,
         role=rate_row.role,
         client_legal_name=client.legal_name,
+        quickbooks_customer=client.quickbooks_customer,
         client_delivery=client.delivery.value,
         send_automatically=rate_row.send_automatically,
     )

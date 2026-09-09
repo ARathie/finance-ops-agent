@@ -1,0 +1,37 @@
+{
+  "exchanges": [
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/companyinfo/9130350000000",
+      "response": {
+        "status": 401,
+        "json": {
+          "fault": {
+            "type": "AUTHENTICATION"
+          }
+        }
+      }
+    },
+    {
+      "key": "POST https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer",
+      "response": {
+        "status": 200,
+        "json": {
+          "access_token": "new-access-token",
+          "refresh_token": "ROTATED-2",
+          "expires_in": 3600
+        }
+      }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/companyinfo/9130350000000",
+      "response": {
+        "status": 200,
+        "json": {
+          "CompanyInfo": {
+            "CompanyName": "Icon Technologies (sandbox)"
+          }
+        }
+      }
+    }
+  ]
+}

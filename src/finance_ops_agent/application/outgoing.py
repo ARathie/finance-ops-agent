@@ -13,6 +13,7 @@ from finance_ops_agent.domain import emails
 from finance_ops_agent.domain.emails import EmailAttachment, OutgoingEmail
 from finance_ops_agent.domain.invoices import DRAFT_NUMBER, build_invoice
 from finance_ops_agent.domain.items import (
+    InvoiceRecord,
     Item,
     OutgoingRecord,
     PaymentInstructionRecord,
@@ -76,14 +77,34 @@ def approve_item(deps: RunDeps, item: Item, report: RunReport) -> None:
         if record.status == "cancelled"
     ]
     replaces = replaced[-1] if replaced else None
-    created = deps.accounting.find_invoice(item.id)
-    if created is None:
-        draft = build_invoice(item, DRAFT_NUMBER, deps.clock.today(), replaces)
-        created = deps.accounting.create_invoice(draft, item.id)
-        report.invoices_created += 1
-        report.note(f"invoice {created.number} created for {item.consultant} at {item.client}")
+    # create_invoice is idempotent per item: an adapter returns the invoice it
+    # already made rather than making a second one (in QuickBooks that means
+    # recognising the item id in the invoice's private note). So this asks once
+    # and never needs a lookup of its own.
+    known = {record.external_id for record in deps.store.invoices_for_item(item.id)}
+    draft = build_invoice(item, DRAFT_NUMBER, deps.clock.today(), replaces)
+    created = deps.accounting.create_invoice(draft, item.id)
     invoice = build_invoice(item, created.number, deps.clock.today(), replaces)
     pdf_sha = deps.store.save_file(created.pdf)
+    if created.external_id not in known:
+        report.invoices_created += 1
+        report.note(f"invoice {created.number} created for {item.consultant} at {item.client}")
+        # The agent's own record of the invoice, written here rather than inside
+        # an adapter so manual mode and QuickBooks Online behave identically.
+        deps.store.record_invoice(
+            InvoiceRecord(
+                id=0,
+                item_id=item.id,
+                number=created.number,
+                external_id=created.external_id,
+                amount_cents=invoice.total.cents,
+                issue_date=invoice.issue_date,
+                due_date=invoice.due_date,
+                pdf_sha256=pdf_sha,
+                status="created",
+                replaces_number=replaces,
+            )
+        )
     attachments = tuple(
         attachment
         for attachment in (
@@ -104,7 +125,9 @@ def approve_item(deps: RunDeps, item: Item, report: RunReport) -> None:
         f"billing:{item.id}:{created.number}",
         item.id,
         billing,
-        {"invoice_number": created.number},
+        # Both: the number is what Kevin and the client see, the external id is
+        # what the accounting system and the agent's own records key on.
+        {"invoice_number": created.number, "invoice_external_id": created.external_id},
     )
 
 
@@ -190,8 +213,9 @@ def advance_after_sends(deps: RunDeps, report: RunReport) -> None:
             report.note(f"invoice sent: {item.consultant} at {item.client}")
         if item.status is ItemStatus.INVOICE_SENT:
             number = record.payload.get("invoice_number")
-            if isinstance(number, str):
-                deps.store.set_invoice_status(number, "sent")
+            external_id = record.payload.get("invoice_external_id")
+            if isinstance(external_id, str):
+                deps.store.set_invoice_status(external_id, "sent")
             _enqueue_payment(deps, item, number if isinstance(number, str) else None)
 
 
