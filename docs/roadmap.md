@@ -61,9 +61,9 @@ All email templates from `emails.md`; reply handling (approve/cancel by code, re
 
 The real mailbox adapter, `fops doctor`, and the setup checklist in `integrations/microsoft-365-email.md`, then dry run mode on the real mailbox.
 
-- [ ] Recorded-response tests for delta paging and expiry, attachment download, draft + attachments + send, 429 backoff, and reconciling an in-flight draft.
-- [ ] `fops doctor` proves the app can read only the agent mailbox.
-- [ ] The agent runs in dry run against the real mailbox for at least one billing cycle and Kevin confirms the readings match what he did by hand.
+- [x] Recorded-response tests for delta paging and expiry, attachment download, draft + attachments + send, 429 backoff, and reconciling an in-flight draft.
+- [x] `fops doctor` proves the app can read only the agent mailbox.
+- [ ] The agent runs in dry run against the real mailbox for at least one billing cycle and Kevin confirms the readings match what he did by hand. *(Needs Icon's tenant: the app registration, admin consent, and the application access policy from `integrations/microsoft-365-email.md`, then `fops doctor`. Code-complete; waiting on credentials and a cycle of real mail.)*
 
 ## PR 9 — QuickBooks Online
 
@@ -75,7 +75,7 @@ The real mailbox adapter, `fops doctor`, and the setup checklist in `integration
 
 ## PR 10 — Running it day to day
 
-Scheduler instructions (Windows Task Scheduler and systemd), the lock file, JSON logs, `fops backup` and a tested restore, token-expiry warnings, the automatic-mode guardrails.
+Scheduler instructions (launchd on the Mac this runs on, and systemd for a Linux box), the lock file, JSON logs, `fops backup` and a tested restore, token-expiry warnings, the automatic-mode guardrails.
 
 - [ ] Two overlapping runs cannot happen.
 - [ ] Backup and restore round-trip a populated data folder.
