@@ -42,6 +42,23 @@ class TestDryRun:
         assert any("Payment due 2026-09-15" in s and "$15,600.00" in s for s in subjects)
         assert any("Timesheet received" in s for s in subjects)
 
+    def test_it_stays_a_dry_run_even_when_every_guardrail_would_pass(
+        self, env: ScenarioEnv
+    ) -> None:
+        """The kill switch is checked before the guardrails, not after them."""
+        from tests.scenarios.conftest import engagement_row
+
+        env.workbook.engagements[0] = engagement_row(2, **{"Send automatically": "yes"})
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        assert item.status is ItemStatus.READY  # not invoice_sent
+        assert env.store.invoices_for_item(item.id) == []
+        assert not env.accounting.invoices
+        for email in env.sender.sent_emails():
+            assert email.to == ("kevin@icon-technologies.com",)
+
 
 class TestAskFirst:
     def test_kevin_is_asked_and_approving_sends_the_invoice(self, env: ScenarioEnv) -> None:
@@ -119,6 +136,66 @@ class TestAutomatic:
         billing = [email for email in env.sender.sent_emails() if email.to == ("ap@acme.example",)]
         assert len(billing) == 1
         assert "kevin@icon-technologies.com" in billing[0].cc
+
+    def test_anything_less_than_certain_is_asked_about_instead(self, env: ScenarioEnv) -> None:
+        """Medium confidence is good enough to work with, not to send unasked."""
+        from finance_ops_agent.domain.reading import Confidence
+        from tests.scenarios.conftest import engagement_row
+
+        env.mode = Mode.AUTO
+        env.workbook.engagements[0] = engagement_row(2, **{"Send automatically": "yes"})
+        env.add_email(
+            PRIYA,
+            scripted_reading=reading(AUG_START, AUG_END, confidence=Confidence.MEDIUM),
+        )
+        report = env.run()
+
+        assert env.the_item().status is ItemStatus.WAITING_FOR_APPROVAL
+        assert any("not completely sure" in line for line in report.lines)
+        assert not any(email.to == ("ap@acme.example",) for email in env.sender.sent_emails())
+
+    def test_anything_open_for_kevin_makes_it_ask(self, env: ScenarioEnv) -> None:
+        """Belt and braces: the flow already keeps an item out of ready while a
+        review is open, so the review here is opened directly. The guardrail is
+        the second lock on the same door, and it holds."""
+        from tests.scenarios.conftest import engagement_row
+
+        env.workbook.engagements[0] = engagement_row(2, **{"Send automatically": "yes"})
+        clean_timesheet(env)
+        env.run()  # dry run: the item becomes ready, nothing goes out
+        item = env.the_item()
+        assert item.status is ItemStatus.READY
+        env.store.open_review(item.id, "NOT_SURE", "Something needs your eyes.")
+
+        env.mode = Mode.AUTO
+        report = env.run()
+
+        assert env.store.get_item(item.id).status is ItemStatus.WAITING_FOR_APPROVAL
+        assert any("need your review" in line for line in report.lines)
+        assert not any(email.to == ("ap@acme.example",) for email in env.sender.sent_emails())
+
+    def test_an_amount_unlike_the_recent_ones_makes_it_ask(self, env: ScenarioEnv) -> None:
+        """The last invoice was for 156 hours; 40 is not a small difference."""
+        from tests.scenarios.conftest import engagement_row
+
+        env.mode = Mode.AUTO
+        env.workbook.engagements[0] = engagement_row(2, **{"Send automatically": "yes"})
+        clean_timesheet(env)
+        env.run()
+        assert env.the_item().status is ItemStatus.INVOICE_SENT
+
+        env.today = date(2026, 10, 6)
+        env.add_email(
+            PRIYA,
+            attachment=("timesheet-september.pdf", b"PDFDATA-SEP"),
+            scripted_reading=reading(date(2026, 9, 1), date(2026, 9, 30), total_hundredths=4_000),
+        )
+        report = env.run()
+
+        september = next(i for i in env.store.list_items() if i.period.start == date(2026, 9, 1))
+        assert env.store.get_item(september.id).status is ItemStatus.WAITING_FOR_APPROVAL
+        assert any("25% away from the recent invoices" in line for line in report.lines)
+        assert env.store.invoices_for_item(september.id) == []
 
 
 class TestNeverTwice:

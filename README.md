@@ -4,7 +4,9 @@ An email-based assistant for Icon Technologies, a small IT consulting and staffi
 
 Today all of this is done by hand from emails, Excel, and QuickBooks. The goal is that Kevin only has to step in when something needs a decision.
 
-**Status: documentation only.** There is no code yet. The docs describe the business, the process the agent follows, and the technical plan so that a coding agent can build it PR by PR. Start with [`docs/README.md`](docs/README.md). Coding agents should read [`CLAUDE.md`](CLAUDE.md) first. What to build next is in [`docs/roadmap.md`](docs/roadmap.md).
+**Status: built, and waiting on credentials to go live.** Every PR in [`docs/roadmap.md`](docs/roadmap.md) is done: the whole flow runs end to end, on fakes and fixtures, with no network. Two things need a person rather than more code — a full billing cycle in dry run against Icon's real mailbox, and QuickBooks Online (an Intuit app, and Icon's move off QuickBooks Desktop). Until then manual mode numbers and renders the invoice and Kevin enters it.
+
+Start with [`docs/README.md`](docs/README.md); coding agents should read [`CLAUDE.md`](CLAUDE.md) first. [`docs/running-it.md`](docs/running-it.md) is how it is installed and run day to day.
 
 ## The happy path
 
@@ -37,6 +39,15 @@ The difference is Icon's margin. The two rates are never mixed up, and neither i
 - Paying anyone. The agent tells Kevin what is owed; Kevin pays.
 - Tracking whether consultants were paid, or sending reminders to anyone.
 
-## Stack (planned)
+## Stack
 
 Python 3.11+ with `uv`, `ruff`, `mypy`, and `pytest`; Microsoft 365 for the mailbox; QuickBooks Online for invoices (manual entry into QuickBooks Desktop until the move); Claude for reading timesheets. Details in [`docs/technical-design.md`](docs/technical-design.md).
+
+```
+uv sync
+uv run fops dry-run --fake    # the whole flow on fixtures, no network, nothing sent
+uv run fops doctor            # every credential and permission; sends nothing to a client
+uv run pytest
+```
+
+`FOPS_MODE` is `dry_run`, `ask_first`, or `auto`. `dry_run` is the stop button: while it is set, nothing reaches a client and nothing is created in QuickBooks, whatever else it is told.

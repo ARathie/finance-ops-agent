@@ -127,6 +127,14 @@ class Store(Protocol):
         """Store content by its sha256 and return the sha."""
         ...
 
+    def checkpoint(self) -> None:
+        """Make the database file complete on its own, before it is copied.
+
+        With SQLite in WAL mode, committed data can still be sitting in the
+        `-wal` sidecar, so copying only the `.db` file would lose it. Backups
+        call this first."""
+        ...
+
     def file_name_for(self, sha256: str) -> str | None:
         """The filename an attachment with this content arrived under, if known."""
         ...

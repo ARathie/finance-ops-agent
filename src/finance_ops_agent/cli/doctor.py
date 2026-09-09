@@ -3,6 +3,10 @@
 The important check is the scoping one: the application access policy must
 make a second mailbox unreadable. A doctor run that cannot prove that fails,
 because an app that can read all of Icon's mail is not what was asked for.
+
+The doctor lives with the command line because every check is about a concrete
+adapter - a Graph URL, a QuickBooks token file - and `application/` never
+imports an adapter.
 """
 
 from collections.abc import Callable

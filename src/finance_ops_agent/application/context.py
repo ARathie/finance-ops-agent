@@ -24,6 +24,19 @@ class Mode(StrEnum):
     AUTO = "auto"
 
 
+def effective_mode(configured: Mode, requested: Mode | None) -> Mode:
+    """The mode a run really uses, given the setting and a command-line ask.
+
+    `FOPS_MODE=dry_run` overrides everything (docs/decisions.md #10): it is the
+    kill switch, so while it is set, no flag can make the agent send anything to
+    a client. A flag may still lower a live mode to dry run, which is always
+    safe.
+    """
+    if configured is Mode.DRY_RUN or requested is Mode.DRY_RUN:
+        return Mode.DRY_RUN
+    return requested or configured
+
+
 @dataclass(frozen=True)
 class Settings:
     admin_email: str = "kevin@icon-technologies.com"

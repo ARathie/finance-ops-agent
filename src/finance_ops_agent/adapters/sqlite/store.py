@@ -284,6 +284,11 @@ class SqliteStore:
             ).one()
             row.processed_at = self._now().isoformat()
 
+    def checkpoint(self) -> None:
+        """Fold the write-ahead log into the database file (see the port)."""
+        with self._engine.begin() as connection:
+            connection.exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)")
+
     def load_file(self, sha256: str) -> bytes:
         return self._file_path(sha256).read_bytes()
 
