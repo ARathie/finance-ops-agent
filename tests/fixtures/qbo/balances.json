@@ -1,0 +1,52 @@
+{
+  "exchanges": [
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/invoice/145",
+      "response": {
+        "status": 200,
+        "json": {
+          "Invoice": {
+            "Id": "145",
+            "DocNumber": "1042",
+            "TotalAmt": 21840.0,
+            "SyncToken": "0",
+            "PrivateNote": "fops item 1",
+            "Balance": 0.0
+          }
+        }
+      }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/invoice/146",
+      "response": {
+        "status": 200,
+        "json": {
+          "Invoice": {
+            "Id": "146",
+            "DocNumber": "1043",
+            "TotalAmt": 21840.0,
+            "SyncToken": "0",
+            "PrivateNote": "fops item 1",
+            "Balance": 10000.0
+          }
+        }
+      }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/invoice/147",
+      "response": {
+        "status": 200,
+        "json": {
+          "Invoice": {
+            "Id": "147",
+            "DocNumber": "1044",
+            "TotalAmt": 21840.0,
+            "SyncToken": "0",
+            "PrivateNote": "fops item 1",
+            "Balance": 21840.0
+          }
+        }
+      }
+    }
+  ]
+}

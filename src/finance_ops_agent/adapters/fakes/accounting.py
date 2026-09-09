@@ -11,6 +11,7 @@ class FakeAccounting:
         self.invoices: dict[int, CreatedInvoice] = {}
         self.cancelled: list[str] = []
         self.paid: set[str] = set()
+        self.asked: list[str] = []
         self._counter = 0
 
     def create_invoice(self, invoice: Invoice, item_id: int) -> CreatedInvoice:
@@ -35,4 +36,5 @@ class FakeAccounting:
         self.cancelled.append(external_id)
 
     def paid_status(self, external_ids: list[str]) -> dict[str, bool]:
+        self.asked.extend(external_ids)
         return {external_id: external_id in self.paid for external_id in external_ids}

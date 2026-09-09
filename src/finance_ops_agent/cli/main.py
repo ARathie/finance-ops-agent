@@ -19,11 +19,13 @@ from finance_ops_agent.adapters.quickbooks.manual import ManualQuickBooks
 from finance_ops_agent.adapters.sqlite.store import SqliteStore, open_database
 from finance_ops_agent.application.run import Mode, RunDeps, Settings, run_once
 from finance_ops_agent.domain.reading import TimesheetReading
+from finance_ops_agent.ports.accounting import AccountingSystem
 from finance_ops_agent.ports.store import Store
 
 if TYPE_CHECKING:
     from finance_ops_agent.adapters.microsoft365.client import GraphClient
     from finance_ops_agent.application.doctor import Check
+    from finance_ops_agent.config import Config
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -83,6 +85,16 @@ def build_parser() -> argparse.ArgumentParser:
         choices=list(Mode),
         default=None,
         help="override FOPS_MODE for this run (dry_run is always safe)",
+    )
+
+    connect = commands.add_parser(
+        "qbo-connect", help="the one-time QuickBooks sign-in (run with Kevin present)"
+    )
+    connect.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="loopback port for the redirect (must match the Intuit app)",
     )
 
     evaluate = commands.add_parser(
@@ -180,6 +192,24 @@ def _command_dry_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def _accounting(
+    config: "Config", store: SqliteStore, renderer: TextPdfRenderer, today: date
+) -> AccountingSystem:
+    """Manual mode until QuickBooks Online is connected (docs/decisions.md #11)."""
+    if config.accounting != "quickbooks":
+        return ManualQuickBooks(store, renderer, today)
+    from finance_ops_agent.adapters.quickbooks.client import QuickBooksClient
+    from finance_ops_agent.adapters.quickbooks.online import QuickBooksOnline
+    from finance_ops_agent.adapters.quickbooks.tokens import TokenStore
+    from finance_ops_agent.config import QuickBooksSettings
+
+    settings = QuickBooksSettings.from_env()
+    client = QuickBooksClient(
+        TokenStore(config.qbo_token_path), settings.client_id, settings.client_secret
+    )
+    return QuickBooksOnline(client, settings.item_name, today)
+
+
 def _real_deps(mode_override: "Mode | None" = None) -> RunDeps:
     """Wire the real adapters from the environment (docs/technical-design.md)."""
     from finance_ops_agent.adapters.claude.reader import ClaudeReader
@@ -207,7 +237,7 @@ def _real_deps(mode_override: "Mode | None" = None) -> RunDeps:
         clock=clock,
         settings=Settings(admin_email=config.admin_email, mode=mode_override or config.mode),
         sender=GraphSender(client),
-        accounting=ManualQuickBooks(store, renderer, clock.today()),
+        accounting=_accounting(config, store, renderer, clock.today()),
         renderer=renderer,
         tracking_path=config.data_dir / "tracking.xlsx",
         render_tracking=tracking_sheet_bytes,
@@ -284,6 +314,18 @@ def _command_doctor(args: argparse.Namespace) -> int:
         if args.send_test_email:
             results.append(_send_test_email(client, config.admin_email))
 
+    if config.accounting == "quickbooks":
+        results.extend(_quickbooks_checks(config))
+    else:
+        results.append(
+            Check(
+                "accounting",
+                CheckResult.SKIP,
+                "manual mode: I number and render the invoice, you enter it into"
+                " QuickBooks Desktop",
+            )
+        )
+
     for check in results:
         print(check.line())
     failures = [check for check in results if check.result is CheckResult.FAIL]
@@ -292,6 +334,45 @@ def _command_doctor(args: argparse.Namespace) -> int:
         return 1
     print("\nEverything checks out. Nothing was sent to a client.")
     return 0
+
+
+def _quickbooks_checks(config: "Config") -> list["Check"]:
+    from finance_ops_agent.adapters.excel.engagement_list import ExcelEngagementList
+    from finance_ops_agent.adapters.quickbooks.client import QuickBooksClient
+    from finance_ops_agent.adapters.quickbooks.online import QuickBooksOnline
+    from finance_ops_agent.adapters.quickbooks.tokens import TokenStore
+    from finance_ops_agent.application.doctor import (
+        Check,
+        CheckResult,
+        check_quickbooks_customers,
+        check_quickbooks_tokens,
+    )
+    from finance_ops_agent.config import MissingSettingError, QuickBooksSettings
+    from finance_ops_agent.domain.engagements import parse_workbook
+
+    try:
+        settings = QuickBooksSettings.from_env()
+    except MissingSettingError as error:
+        return [Check("quickbooks", CheckResult.FAIL, str(error))]
+    store = TokenStore(config.qbo_token_path)
+    results = [check_quickbooks_tokens(store)]
+    if results[0].result is CheckResult.FAIL:
+        return results
+    client = QuickBooksClient(store, settings.client_id, settings.client_secret)
+    accounting = QuickBooksOnline(client, settings.item_name, date.today())  # noqa: DTZ011
+
+    def wanted_customers() -> list[str]:
+        parsed = parse_workbook(ExcelEngagementList(config.engagement_list).load())
+        return sorted(
+            {
+                client_row.quickbooks_customer or client_row.legal_name
+                for client_row in parsed.clients
+                if client_row.active
+            }
+        )
+
+    results.append(check_quickbooks_customers(accounting, wanted_customers))
+    return results
 
 
 def _send_test_email(client: "GraphClient", admin_email: str) -> "Check":
@@ -316,6 +397,39 @@ def _send_test_email(client: "GraphClient", admin_email: str) -> "Check":
         return Check("test email", CheckResult.PASS, f"sent one email to {admin_email}")
     except Exception as error:
         return Check("test email", CheckResult.FAIL, str(error)[:300])
+
+
+def _command_qbo_connect(args: argparse.Namespace) -> int:
+    from finance_ops_agent.adapters.quickbooks.client import QuickBooksReconnect
+    from finance_ops_agent.adapters.quickbooks.connect import DEFAULT_PORT, connect
+    from finance_ops_agent.adapters.quickbooks.tokens import TokenStore
+    from finance_ops_agent.config import Config, MissingSettingError, QuickBooksSettings
+
+    try:
+        config = Config.from_env()
+        settings = QuickBooksSettings.from_env()
+    except MissingSettingError as error:
+        print(f"Not configured: {error}")
+        return 2
+    store = TokenStore(config.qbo_token_path)
+    try:
+        tokens = connect(
+            store,
+            settings.client_id,
+            settings.client_secret,
+            settings.environment,
+            port=args.port or DEFAULT_PORT,
+        )
+    except QuickBooksReconnect as error:
+        print(f"Could not connect: {error}")
+        return 1
+    print(
+        f"Connected to the {tokens.environment} company {tokens.realm_id}."
+        f" Tokens are in {store.path} (only you can read them)."
+    )
+    if settings.environment == "sandbox":
+        print("This is the sandbox. Set QBO_ENVIRONMENT=production when you are ready.")
+    return 0
 
 
 def _command_status(args: argparse.Namespace) -> int:
@@ -379,6 +493,8 @@ def main(argv: list[str] | None = None) -> int:
         return _command_doctor(args)
     if args.command == "run":
         return _command_run(args)
+    if args.command == "qbo-connect":
+        return _command_qbo_connect(args)
     parser.print_help()
     return 0
 

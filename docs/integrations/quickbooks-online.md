@@ -15,8 +15,8 @@ Icon uses QuickBooks Desktop today and plans to move to QuickBooks Online (QBO).
 1. Icon finishes the Desktop → Online move. The Customers list in QBO must contain every client, with names matching the "QuickBooks customer" column of the engagement list. The agent never creates customers.
 2. Create one service item, for example "Consulting Services", and note its name (`QBO_ITEM_NAME`). Create the payment terms used (Net 30 etc.).
 3. Create an app in the Intuit developer portal (accounting scope). Use its sandbox company first. Store the client id and secret in `.env`.
-4. Run `fops qbo-connect`: it opens the Intuit sign-in page in a browser, Kevin (or the developer, with Kevin present) signs in and approves, and the local callback stores the realm id and tokens in `data/qbo_tokens.json` (restricted permissions).
-5. `fops doctor` reads the company info, lists customers, and checks that every "QuickBooks customer" name in the engagement list exists.
+4. Run `fops qbo-connect`: it prints and opens the Intuit sign-in page, Kevin (or the developer, with Kevin present) signs in and approves, and a one-shot loopback server on `http://localhost:8723/callback` (register that redirect URI in the Intuit app; `--port` changes it) stores the realm id and tokens in `data/qbo_tokens.json` with owner-only permissions. The `state` value is checked, so another tab's redirect cannot be mistaken for this one.
+5. `fops doctor` then reports two more checks: **quickbooks connection** (connected, and the refresh token is not near expiry) and **quickbooks customers** (every active client's "QuickBooks customer" name — or its legal name where that column is blank — exists in QuickBooks). In manual mode both are skipped with a line saying so.
 
 ### Tokens
 
@@ -59,4 +59,8 @@ All development and the first ask-first runs use a sandbox company (separate rea
 
 ## Testing
 
-Recorded JSON responses for create, read-back with matching and mismatching totals, PDF fetch, balance check, void, and token refresh (including a rotated refresh token). A sandbox smoke test behind `FOPS_LIVE_TESTS=1`.
+Recorded JSON responses in `tests/fixtures/qbo/`, replayed through a real `httpx` client so the adapter's own code runs (`tests/contract/test_quickbooks.py`): a create whose total agrees, a create whose total does **not** agree (voided, with both amounts in the message), finding an invoice by its private note after a crash, a missing customer, a missing service item, balances (paid, partly paid, unpaid), a void that reads the current `SyncToken` first, a token refresh that rotates the refresh token, a refused refresh, and a 401 that one refresh fixes. No network, no credentials, no real company.
+
+Two facts worth keeping straight in tests and in code: the invoice **number** (`DocNumber`) is what Kevin and the client see, and the **external id** (`Id`) is what QuickBooks and the agent's own invoice rows key on. In manual mode they happen to be the same string; in QuickBooks Online they are not.
+
+A sandbox smoke test behind `FOPS_LIVE_TESTS=1` is still to come; the first real exercise is ask first mode against the sandbox company (see the roadmap).

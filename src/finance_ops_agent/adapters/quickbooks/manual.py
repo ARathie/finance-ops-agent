@@ -3,14 +3,15 @@ invoice and renders the PDF; Kevin types it into QuickBooks Desktop himself.
 
 Numbering continues one counter kept in the agent's own state
 (ICON-<year>-<number>, starting from the seed Kevin chooses); creating is
-idempotent by item, so a restart never numbers the same work twice.
+idempotent by item, so a restart never numbers the same work twice - here by
+looking at the invoice rows the application wrote, which is the same question
+QuickBooksOnline answers by reading the invoice's private note.
 """
 
 from dataclasses import replace
 from datetime import date
 
 from finance_ops_agent.domain.invoices import Invoice
-from finance_ops_agent.domain.items import InvoiceRecord
 from finance_ops_agent.ports.accounting import CreatedInvoice
 from finance_ops_agent.ports.pdf import PdfRenderer
 from finance_ops_agent.ports.store import Store
@@ -35,21 +36,6 @@ class ManualQuickBooks:
             return existing
         numbered = replace(invoice, number=self._next_number())
         pdf = self._renderer.invoice_pdf(numbered)
-        pdf_sha = self._store.save_file(pdf)
-        self._store.record_invoice(
-            InvoiceRecord(
-                id=0,
-                item_id=item_id,
-                number=numbered.number,
-                external_id=numbered.number,
-                amount_cents=numbered.total.cents,
-                issue_date=numbered.issue_date,
-                due_date=numbered.due_date,
-                pdf_sha256=pdf_sha,
-                status="created",
-                replaces_number=invoice.replaces_number,
-            )
-        )
         return CreatedInvoice(number=numbered.number, external_id=numbered.number, pdf=pdf)
 
     def find_invoice(self, item_id: int) -> CreatedInvoice | None:

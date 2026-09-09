@@ -1,0 +1,33 @@
+{
+  "exchanges": [
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/invoice/145",
+      "response": {
+        "status": 200,
+        "json": {
+          "Invoice": {
+            "Id": "145",
+            "DocNumber": "1042",
+            "SyncToken": "3",
+            "TotalAmt": 21840.0
+          }
+        }
+      }
+    },
+    {
+      "key": "POST https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/invoice?operation=void",
+      "response": {
+        "status": 200,
+        "json": {
+          "Invoice": {
+            "Id": "145",
+            "DocNumber": "1042",
+            "TotalAmt": 21840.0,
+            "SyncToken": "0",
+            "PrivateNote": "fops item 1"
+          }
+        }
+      }
+    }
+  ]
+}
