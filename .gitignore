@@ -15,6 +15,7 @@ htmlcov/
 # Secrets and local settings
 .env
 .env.*
+!.env.example
 secrets/
 
 # Runtime data: database, stored attachments, tokens, tracking sheet

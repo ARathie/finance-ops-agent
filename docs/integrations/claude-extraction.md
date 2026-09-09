@@ -11,7 +11,7 @@ The agent uses Claude (Anthropic's model) for three narrow jobs: deciding what k
 
 ## SDK usage (Python `anthropic` 1.x)
 
-- Client: `anthropic.Anthropic()` (reads `ANTHROPIC_API_KEY`). `anthropic` 1.x is built on `httpx2`; do not pass `httpx` objects to it. The agent's own Microsoft and QuickBooks clients use `httpx` separately.
+- Client: `anthropic.Anthropic()` (reads `ANTHROPIC_API_KEY`). `anthropic` 1.x is built on `httpx2`; do not pass `httpx` objects to it. The agent's own QuickBooks client uses `httpx` separately.
 - Structured reading: `client.messages.parse(model=FOPS_MODEL, max_tokens=16000, system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}], messages=[...], output_format=TimesheetReading)` and use `response.parsed_output`. The system prompt is fixed text (no dates, no ids) so it caches; the document goes in the user message after it.
 - Thinking is on by default for this model, and the default effort is `high`; the adapter relies on those defaults rather than passing `output_config` alongside `parse` (a lower effort may be enough for clean system exports — tune on the test set before changing it).
 - Attachments: PDFs as `{"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": ...}}` (limit 32 MB per request and 600 pages; refuse larger files with `CANT_READ_ATTACHMENT`); images as `{"type": "image", "source": {"type": "base64", "media_type": "image/png", ...}}` (downscale very large screenshots first); spreadsheets (`.xlsx`, `.csv`) are converted to text tables with `openpyxl` (first 500 rows per sheet) and sent as text; `.docx` is converted to text; anything else is `CANT_READ_ATTACHMENT`.

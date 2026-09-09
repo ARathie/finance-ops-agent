@@ -17,6 +17,11 @@ Things only Icon can answer. Until they are answered, the agent will use the def
 | Any sales tax on invoices? | None. |
 | Invoice numbering: should the agent continue Kevin's current sequence? | In manual mode `ICON-<year>-<number>` starting from a number Kevin chooses; in QuickBooks Online mode, QuickBooks assigns the number. |
 | Can Kevin share a few real timesheets (with names changed) to test with? | Made-up timesheets only until then. |
-| Which machine will the agent run on? | An always-on Mac at Icon, checking mail every 15 minutes (launchd, and sleep disabled). Answered: macOS. |
-| Where should backups go? | A folder on OneDrive/SharePoint, copied nightly. |
+| Which server will the agent run on for real? | A 1 vCPU / 1 GB Ubuntu LTS virtual machine at DigitalOcean, Hetzner, or AWS Lightsail, running the agent as a container (`running-it.md` stage 2). The Mac is for the first test only. |
+| Who holds Icon's Rackspace Email admin login, to create the agent's mailbox? | Kevin, or whoever set up Icon's email. |
+| Will the agent's mailbox be a standard Rackspace Email (IMAP) mailbox like Kevin's, not Hosted Exchange? | Rackspace Email, the same kind as Kevin's. |
+| Does Rackspace offer an app-specific password or two-step verification for the agent's mailbox? | Use it if offered; otherwise a long random password. |
+| Who gets the heartbeat alert when the agent stops checking in? | Ash and Kevin. |
+| How does Kevin's engagement list reach the server? | A shared folder (OneDrive, Dropbox, or Google Drive) the server pulls from before every run; a copy by hand as the fallback. |
+| Where should backups go? | An object-storage bucket the business controls (Backblaze B2, or the server provider's own storage), uploaded nightly; OneDrive/SharePoint only during the Mac test. |
 | What should the Monday summary include or leave out? | Everything listed in `emails.md`. |

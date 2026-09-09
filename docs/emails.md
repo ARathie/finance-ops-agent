@@ -86,7 +86,7 @@ The billing email never mentions the pay rate. The payment instruction never men
 
 ## Before anything goes to a client
 
-The agent checks, and records that it checked, that: the billing email address is the one on the client's row; the consultant, client, and period on the invoice match the timesheet item; the total is hours × the bill rate from the engagement list; the invoice PDF and the original timesheet file are attached; Kevin is on CC; and no invoice has already been sent for this consultant and period. It writes down that it is about to send, then sends, then writes down that it did. If the agent restarts in between, it looks for the email it was about to send before trying again, so nothing goes out twice.
+The agent checks, and records that it checked, that: the billing email address is the one on the client's row; the consultant, client, and period on the invoice match the timesheet item; the total is hours × the bill rate from the engagement list; the invoice PDF and the original timesheet file are attached; Kevin is on CC; and no invoice has already been sent for this consultant and period. It writes down that it is about to send, then sends, then writes down that it did. If the agent restarts in between, it checks its Sent folder for the email before trying again. In the rare case where it cannot tell (the program stopped in the instant between the mail server accepting the email and the agent noting it down), it does not guess: it asks Kevin, who is on CC, whether his copy arrived (`SEND_UNCERTAIN`).
 
 ## Client replies
 

@@ -19,14 +19,15 @@ Read in this order the first time. `context/` is the business's own description 
 - `timesheet-checks.md` — what the agent reads from a timesheet, the checks, and every reason it asks Kevin for a review.
 - `status-tracking.md` — the statuses, duplicates, corrections, and the tracking sheet.
 - `emails.md` — every email the agent sends and how Kevin replies.
-- `running-it.md` — installing it on the Mac so it runs by itself, the schedule, logs, backups, and what to do when something looks wrong.
+- `running-it.md` — installing it: the temporary Mac test setup and the server it runs on for real, the schedule, logs, backups, the heartbeat, and what to do when something looks wrong.
+- `first-cycle.md` — the tally sheet for the first real billing cycles (dry run, then ask first): what arrived, what was right, what needed Kevin.
 - `open-questions.md` — things only Kevin can answer, with the defaults used meanwhile.
 
 ## How it is built (for coding agents)
 
 - `technical-design.md` — components, ports and adapters, database, money, never-twice rules, modes, configuration, running it.
 - `engineering-conventions.md` — tooling, layout, naming, tests, definition of done.
-- `integrations/microsoft-365-email.md` — the mailbox: setup, reading, sending, testing.
+- `integrations/email-imap-smtp.md` — the mailbox at Rackspace Email: setup, reading (IMAP), sending (SMTP), never twice, testing.
 - `integrations/quickbooks-online.md` — invoices: manual mode now, QuickBooks Online later.
 - `integrations/claude-extraction.md` — reading timesheets and replies with Claude.
 - `decisions.md` — settled choices and why.

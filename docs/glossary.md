@@ -26,5 +26,7 @@ Plain definitions of the words used across these docs. If a word here conflicts 
 - **Dry run / Ask first / Automatic** — the three modes the agent can run in. See `how-it-works.md`.
 - **QuickBooks Online (QBO)** — the online version of QuickBooks the business plans to move to. Once connected, the agent creates invoices there directly and can see when they are paid.
 - **Manual QuickBooks entry** — until QuickBooks Online is connected, the agent makes the invoice PDF and Kevin types the invoice into QuickBooks Desktop himself, as today.
-- **Microsoft 365** — where the agent's mailbox lives. The agent reads and sends mail through Microsoft's programming interface (Microsoft Graph).
+- **Rackspace Email** — the company that hosts Icon's email (Kevin's account settings point at `secure.emailsrvr.com`). The agent's mailbox lives there too. The agent reads it with IMAP and sends with SMTP, the two ordinary email protocols; no Microsoft or Google account is involved, and it does not matter which mail program Kevin uses.
+- **Heartbeat** — a check-in the agent sends to a small monitoring service after every run. If the check-ins stop, the service emails Ash and Kevin. It is how anyone finds out the agent has stopped, since a stopped agent cannot say so itself.
+- **Server** — the always-on Linux machine, rented from a cloud provider, that the agent runs on for real. Not anyone's personal computer. The Mac is only for the first test.
 - **Claude** — the AI model (from Anthropic) the agent uses to read timesheets in whatever format they arrive.

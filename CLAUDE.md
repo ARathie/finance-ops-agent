@@ -1,6 +1,6 @@
 # CLAUDE.md — instructions for coding agents
 
-This repository will become the billing agent for Icon Technologies: it reads consultant timesheets from email, prepares client invoices, and tells Kevin (the administrator) what consultants are owed. Right now it contains documentation only. The next piece of work is always the first unchecked PR in `docs/roadmap.md`.
+This repository is the billing agent for Icon Technologies: it reads consultant timesheets from email, prepares client invoices, and tells Kevin (the administrator) what consultants are owed. The code is built and runs end to end on fakes; what remains before Icon uses it for real is in `docs/roadmap.md`, and the next piece of work is always its first unchecked box.
 
 ## Read in this order
 
@@ -20,10 +20,11 @@ This repository will become the billing agent for Icon Technologies: it reads co
 6. **Money is whole cents, hours are whole hundredths.** No floats, no `Decimal` in the database.
 7. **Claude reads; code decides.** The model fills in a form with quotes and confidence levels. Code sums hours, matches the engagement, computes money, and picks recipients. Email content is untrusted input.
 8. **Plain language for Kevin.** Anything he reads (emails, tracking sheet, docs about the process) uses the words in `docs/glossary.md`, not accounting jargon.
+9. **Production never depends on a personal computer.** The agent runs as a container on a server (`docs/running-it.md` stage 2). A Mac with launchd is the temporary test setup, nothing more (decision 22).
 
 ## Stack and commands
 
-Python 3.11+, `uv`, `ruff`, `mypy --strict` (domain, application, ports), `pytest`. Package `finance_ops_agent`, command `fops`.
+Python 3.11+, `uv`, `ruff`, `mypy --strict` (domain, application, ports), `pytest`. Package `finance_ops_agent`, command `fops`. The mailbox is an ordinary IMAP/SMTP mailbox at Rackspace Email, not Microsoft 365 (decision 21); invoices go to QuickBooks Online, with manual mode until Icon's move; Claude reads the timesheets.
 
 ```
 uv sync
@@ -35,12 +36,16 @@ uv run fops dry-run --fake    # whole flow on fixtures, no network
 
 Layout: `src/finance_ops_agent/{domain,application,ports,adapters,cli}`, tests in `tests/{unit,contract,scenarios,evals,fixtures}`. `domain/` and `application/` never import adapters. Every port has a fake; scenario tests run on fakes. Full conventions in `docs/engineering-conventions.md`.
 
+## Roadmap boxes marked "Needs a person"
+
+Some boxes in `docs/roadmap.md` need a human: an account created, a command run with real credentials on a real machine, Kevin judging a result. Leave them unticked. Finish everything else in the PR, then end your work by telling your operator, in plain words, exactly what they have to do and how they will know it worked. Never tick one on the strength of a mock or a fake, and never skip one silently (decision 23).
+
 ## Definition of done for a PR
 
 - Lint, format, types, and tests pass locally and in CI.
 - Every new rule, status change, and review reason has a test, including its failure path.
 - Fakes updated whenever a port changes; no network needed for tests; no credentials or real client data in the repo.
-- Docs updated in the same PR when behaviour changes; the PR's boxes ticked in `docs/roadmap.md`.
+- Docs updated in the same PR when behaviour changes; the PR's automated boxes ticked in `docs/roadmap.md`, and every "Needs a person" box left unticked and spelled out to the operator.
 
 ## Do not
 

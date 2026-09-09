@@ -24,7 +24,7 @@ The unique key (consultant, client, period) is what prevents duplicate invoices.
 
 ## 6. Ports and adapters, with fakes as first-class code
 
-Microsoft 365, QuickBooks Online, Claude, Excel, and the database sit behind small interfaces with fake versions. Consequence: the whole flow runs and is tested with no network; adapters are swapped by settings.
+The mailbox (IMAP and SMTP), QuickBooks Online, Claude, Excel, and the database sit behind small interfaces with fake versions. Consequence: the whole flow runs and is tested with no network; adapters are swapped by settings.
 
 ## 7. SQLite plus a tracking spreadsheet
 
@@ -50,9 +50,9 @@ The move from QuickBooks Desktop is planned but not done. The agent works fully 
 
 Objective 5 ends at the payment instruction email. Paying, and knowing whether it was paid, stays with Kevin. Consequence: no bank or payroll integration, no reminders, no "paid" status for consultants.
 
-## 13. Microsoft Graph with a small hand-written client
+## 13. Microsoft Graph with a small hand-written client (superseded by 21)
 
-`msal` for tokens and `httpx` for a handful of endpoints, restricted by an application access policy to the agent mailbox. Consequence: easy to record and replay in tests; the app cannot read other mailboxes.
+Superseded: Icon's email is not on Microsoft 365. Kept for the record. `msal` for tokens and `httpx` for a handful of endpoints, restricted by an application access policy to the agent mailbox. Consequence: easy to record and replay in tests; the app cannot read other mailboxes.
 
 ## 14. Claude reads; code decides
 
@@ -81,3 +81,15 @@ A run takes a POSIX advisory lock (`fcntl.flock`) on `data/run.lock`; a run that
 ## 20. `dry_run` wins over any command-line flag
 
 `FOPS_MODE=dry_run` is the stop button, so `fops run --mode auto` still runs as a dry run and says so; a flag may only lower a live mode to `dry_run`, never raise one. A kill switch that a flag can argue with is not a kill switch, and the flag is the easiest thing to get wrong in a scheduler file nobody rereads. Consequence: changing what the agent may send is a deliberate change to `.env`, and `effective_mode` is one small function with the whole matrix under test.
+
+## 21. The mailbox is IMAP and SMTP at Rackspace Email, not Microsoft 365
+
+The first planning conversation assumed Microsoft 365, and PR 8 built a Microsoft Graph adapter on that assumption. Kevin's account settings show the truth: Icon's email is hosted at Rackspace Email (`secure.emailsrvr.com`, IMAP on 993, SMTP on 465, password login). Decision: the real mailbox adapter speaks plain IMAP and SMTP (`adapters/email/`, per `integrations/email-imap-smtp.md`); the Graph adapter, its fixtures and tests, and the `msal` dependency are removed in PR 11 rather than kept as a second option nobody uses. Consequences: setup is a mailbox and a password in the Rackspace control panel, with no app registration, admin consent, or access policy; the credentials reach one mailbox by construction; message identity is the `Message-ID` header plus a content hash instead of provider ids; "never twice" for sending rests on a self-made Message-ID recorded before the send, the Sent folder for reconcile, and, in the rare case the process dies between the server accepting the email and the agent noting it, asking Kevin (`SEND_UNCERTAIN`) instead of guessing; Kevin's own mail program is irrelevant. Supersedes decision 13.
+
+## 22. Production runs on a server, never on someone's computer
+
+The Mac with launchd (PR 10) is fine for the first real-life test and wrong for production: it stops when the Mac sleeps, logs out, or leaves the building, and nobody is told. Decision: the agent is a real service. It ships as a container image built by CI, runs `fops serve` (a run every 15 minutes, a backup nightly, a heartbeat after each) on a small always-on Linux server or any container host with a persistent disk, keeps its data on a mounted volume, copies backups to object storage off the machine, and checks in with a heartbeat service that emails Ash and Kevin when the check-ins stop. Serverless was considered and deferred: SQLite and a folder of files are exactly right for a dozen consultants and one operator, and a serverless platform would force a managed database, object storage for every file, and a secrets service in exchange for nothing this workload needs; the `Store` port keeps that door open (a Postgres adapter) if the picture changes. Consequences: a `Dockerfile`, `docker-compose.yml`, `fops serve`, `FOPS_HEARTBEAT_URL`, and `FOPS_BACKUP_TARGET` (PR 14); `running-it.md` has a temporary stage 1 (Mac) and a permanent stage 2 (server); the agent listens on no port and needs no inbound firewall rule.
+
+## 23. Roadmap boxes that need a person are marked, never faked
+
+Some steps cannot be verified by a test: creating the mailbox, running the doctor with real credentials, Kevin judging a cycle of readings. Decision: such boxes carry **Needs a person** in `roadmap.md`. A coding agent leaves them unticked and ends its work by telling its operator exactly what to do and how they will know it worked; it never ticks one on the strength of a mock, and never skips one silently. Consequences: the legend at the top of `roadmap.md`, a rule in `CLAUDE.md`, and PRs 11 to 17 written with the split between automated and human verification made explicit.

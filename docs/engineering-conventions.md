@@ -26,7 +26,7 @@ docs/               these documents
 - Statuses and review codes exactly as spelled in `status-tracking.md` and `timesheet-checks.md`; define each once as a `StrEnum` in `domain/`.
 - Kevin-facing text (emails, tracking sheet headers, messages in review emails) uses the plain words from `glossary.md`; no accounting jargon.
 - `domain/`, `application/`, and `ports/` never import from `adapters/` or `cli/`; `tests/unit/test_layering.py` checks every file, including imports inside functions. Anything that needs a concrete adapter belongs in `cli/` (the composition root), which is why `fops doctor` lives in `cli/doctor.py`.
-- Adapter modules are named after the real thing: `adapters/microsoft365`, `adapters/quickbooks`, `adapters/claude`, `adapters/excel`, `adapters/sqlite`, `adapters/pdf`, `adapters/fakes`.
+- Adapter modules are named after the real thing: `adapters/email` (IMAP and SMTP), `adapters/quickbooks`, `adapters/claude`, `adapters/excel`, `adapters/sqlite`, `adapters/pdf`, `adapters/fakes`.
 - Alembic migrations live inside the package (`adapters/sqlite/alembic/`), so `fops` can migrate its database wherever it runs from; apply them through `adapters.sqlite.migrations.upgrade_to_head` (which `open_database` does).
 - Email snapshots live in `tests/fixtures/email_snapshots/`. Regenerate them deliberately with `FOPS_UPDATE_SNAPSHOTS=1 uv run pytest tests/unit/test_emails.py`, and read the diff before committing: these are the words Kevin and the client see.
 

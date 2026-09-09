@@ -69,6 +69,7 @@ The code is what the software uses; the message is what Kevin sees. Every review
 | `LIST_ROW_PROBLEM` | A row in the engagement list is incomplete or contradicts another row. | Fix the row named in the email. |
 | `CORRECTION` | This looks like a corrected version of a timesheet I already handled. | Reply "use the new one" or "ignore". See `status-tracking.md`. |
 | `SEND_FAILED` | I couldn't send the billing email. I'll keep trying; please check the mailbox. | Usually fixes itself; otherwise check the mailbox connection. |
+| `SEND_UNCERTAIN` | I sent the billing email for <item> but couldn't confirm it left the server. You're on CC: reply "received" if you got it, or "resend". | Reply "received" or "resend". |
 | `QUICKBOOKS_FAILED` | I couldn't create the invoice in QuickBooks. I'll keep trying; please check the connection. | Reconnect QuickBooks (steps are in the email). |
 | `MAILBOX_PROBLEM` | I can't read the mailbox. | Follow the steps in the email. |
 | `QUICKBOOKS_RECONNECT` | QuickBooks needs to be reconnected. | Follow the steps in the email. |

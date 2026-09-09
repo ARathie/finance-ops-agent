@@ -4,7 +4,7 @@ An email-based assistant for Icon Technologies, a small IT consulting and staffi
 
 Today all of this is done by hand from emails, Excel, and QuickBooks. The goal is that Kevin only has to step in when something needs a decision.
 
-**Status: built, and waiting on credentials to go live.** Every PR in [`docs/roadmap.md`](docs/roadmap.md) is done: the whole flow runs end to end, on fakes and fixtures, with no network. Two things need a person rather than more code — a full billing cycle in dry run against Icon's real mailbox, and QuickBooks Online (an Intuit app, and Icon's move off QuickBooks Desktop). Until then manual mode numbers and renders the invoice and Kevin enters it.
+**Status: built, not yet used for real.** The whole flow runs end to end on fakes and fixtures with no network. Before Icon can use it: the mailbox adapter has to be rebuilt for Icon's actual email host, Rackspace Email (an ordinary IMAP/SMTP mailbox, not Microsoft 365 as first assumed); the timesheet reader has to be scored against the real model and real timesheets; then one billing cycle in dry run on a Mac; then a move to a server so nothing depends on anyone's computer; then ask-first mode for real. The order, and every step that needs a person rather than code, is in [`docs/roadmap.md`](docs/roadmap.md).
 
 Start with [`docs/README.md`](docs/README.md); coding agents should read [`CLAUDE.md`](CLAUDE.md) first. [`docs/running-it.md`](docs/running-it.md) is how it is installed and run day to day.
 
@@ -41,7 +41,7 @@ The difference is Icon's margin. The two rates are never mixed up, and neither i
 
 ## Stack
 
-Python 3.11+ with `uv`, `ruff`, `mypy`, and `pytest`; Microsoft 365 for the mailbox; QuickBooks Online for invoices (manual entry into QuickBooks Desktop until the move); Claude for reading timesheets. Details in [`docs/technical-design.md`](docs/technical-design.md).
+Python 3.11+ with `uv`, `ruff`, `mypy`, and `pytest`; an ordinary IMAP/SMTP mailbox at Rackspace Email; QuickBooks Online for invoices (manual entry into QuickBooks Desktop until the move); Claude for reading timesheets; in production, a container on a small Linux server with a heartbeat and off-machine backups. Details in [`docs/technical-design.md`](docs/technical-design.md).
 
 ```
 uv sync
