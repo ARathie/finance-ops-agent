@@ -21,10 +21,10 @@ from finance_ops_agent.domain.reading import (
     ReplyReading,
     TimesheetReading,
 )
-from finance_ops_agent.ports.reader import CantReadAttachmentError
+from finance_ops_agent.ports.reader import CantReadAttachmentError, TokenUsage
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
-TIMESHEET_PROMPT_VERSION = "timesheet_v1"
+TIMESHEET_PROMPT_VERSION = "timesheet_v2"
 CLASSIFY_PROMPT_VERSION = "classify_v1"
 REPLY_PROMPT_VERSION = "reply_v1"
 MAX_TOKENS = 16000
@@ -34,6 +34,23 @@ _M = TypeVar("_M", bound=BaseModel)
 
 def _prompt(version: str) -> str:
     return (PROMPTS_DIR / f"{version}.md").read_text()
+
+
+def _count(usage: object, field: str) -> int:
+    """One usage field, or zero. A response that reports no usage is not an error."""
+    value = getattr(usage, field, None)
+    return value if isinstance(value, int) else 0
+
+
+def _usage_of(response: object) -> TokenUsage:
+    usage = getattr(response, "usage", None)
+    return TokenUsage(
+        requests=1,
+        input_tokens=_count(usage, "input_tokens"),
+        output_tokens=_count(usage, "output_tokens"),
+        cache_creation_input_tokens=_count(usage, "cache_creation_input_tokens"),
+        cache_read_input_tokens=_count(usage, "cache_read_input_tokens"),
+    )
 
 
 class ClaudeReader:
@@ -47,6 +64,8 @@ class ClaudeReader:
         self.model_name = model
         self.prompt_version = TIMESHEET_PROMPT_VERSION
         self._save_raw = save_raw
+        self.usage = TokenUsage()
+        """Tokens spent by this reader so far. `fops eval --live` reports it."""
 
     def _parse(
         self,
@@ -71,6 +90,8 @@ class ClaudeReader:
         except anthropic.BadRequestError as error:
             # Permanent: the request itself is unreadable (too large, bad media).
             raise CantReadAttachmentError(str(error)) from error
+        # Before the stop_reason checks below: a refusal costs tokens too.
+        self.usage = self.usage + _usage_of(response)
         if self._save_raw is not None:
             self._save_raw(response.to_json().encode("utf-8"))
         if response.stop_reason == "refusal":

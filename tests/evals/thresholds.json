@@ -1,5 +1,9 @@
 {
-  "_comment": "The floor fops eval must stay at or above (docs/roadmap.md PR 6). Initial values, set before the first live run; re-record them from real model answers after `fops eval --live` replaces the bootstrap recorded.json files.",
+  "_comment": "The floor fops eval must stay at or above (docs/roadmap.md PR 6). While \"source\" is \"bootstrap\" every recorded.json is a copy of its expected.json, so the scores prove the harness, not the reading; `fops eval --live` replaces the recorded answers and stamps the provenance below (docs/roadmap.md PR 12).",
+  "source": "bootstrap",
+  "model": null,
+  "prompt_version": null,
+  "recorded_on": null,
   "field_accuracy_percent": {
     "consultant_name": 90,
     "client_name": 90,

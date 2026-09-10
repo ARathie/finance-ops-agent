@@ -6,13 +6,22 @@ and sends one review email listing everything wrong with a timesheet.
 """
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
+from typing import TypeVar
 
 from finance_ops_agent.domain.engagements import Consultant, Engagement
 from finance_ops_agent.domain.periods import BillingPeriod, period_containing
-from finance_ops_agent.domain.reading import ApprovalKind, Confidence, TimesheetReading
-from finance_ops_agent.domain.review import ReviewCode
+from finance_ops_agent.domain.reading import (
+    ApprovalKind,
+    Confidence,
+    ReadField,
+    TimesheetReading,
+)
+from finance_ops_agent.domain.review import REVIEW_MESSAGES, ReviewCode
+
+T = TypeVar("T")
 
 QUARTER_HOUR_HUNDREDTHS = 25
 FULL_DAY_HUNDREDTHS = 800  # full time is 8 hours per weekday
@@ -173,8 +182,21 @@ def check_hours(reading: TimesheetReading) -> tuple[int | None, list[Finding]]:
     anything wrong with them. The printed total is what gets invoiced."""
     stated = reading.stated_total_hours_hundredths.value
     summed = reading.summed_daily_hundredths()
-    total = stated if stated is not None else summed
+    rows = reading.summed_row_hundredths()
+    straddling = reading.rows_outside_period()
+    # A weekly row running past the period's end holds hours from both periods.
+    # Summing it would overbill, and how it splits is never the model's to
+    # guess (decision 24): the printed total settles it, or Kevin does.
+    row_total = None if straddling else rows
+    total = stated if stated is not None else (summed if summed is not None else row_total)
     if total is None:
+        if straddling:
+            return None, [
+                Finding(
+                    ReviewCode.PART_WEEK_UNCLEAR,
+                    REVIEW_MESSAGES[ReviewCode.PART_WEEK_UNCLEAR],
+                )
+            ]
         return None, [
             Finding(ReviewCode.HOURS_MISSING, "I can't find the hours on this timesheet.")
         ]
@@ -184,6 +206,18 @@ def check_hours(reading: TimesheetReading) -> tuple[int | None, list[Finding]]:
             Finding(
                 ReviewCode.HOURS_DONT_ADD_UP,
                 "The daily hours don't add up to the total.",
+            )
+        )
+    if (
+        stated is not None
+        and rows is not None
+        and not straddling
+        and abs(stated - rows) > QUARTER_HOUR_HUNDREDTHS
+    ):
+        findings.append(
+            Finding(
+                ReviewCode.HOURS_DONT_ADD_UP,
+                "The weekly hours don't add up to the total.",
             )
         )
     entries = reading.daily_entries.value or []
@@ -257,3 +291,98 @@ def period_fully_covered(period: BillingPeriod, spans: list[tuple[date, date]]) 
             return False
         day += timedelta(days=1)
     return True
+
+
+def _kind_of(reading: TimesheetReading) -> ApprovalKind:
+    approval = reading.approval.value
+    return approval.kind if approval else ApprovalKind.NONE
+
+
+def _better(left: ReadField[T], right: ReadField[T]) -> ReadField[T]:
+    """The more useful of two answers: a value beats a blank, surer beats less sure."""
+    if left.value is None:
+        return right
+    if right.value is None:
+        return left
+    order = {Confidence.HIGH: 2, Confidence.MEDIUM: 1, Confidence.LOW: 0}
+    return right if order[right.confidence] > order[left.confidence] else left
+
+
+def combine_readings(
+    readings: Sequence[TimesheetReading],
+) -> tuple[TimesheetReading, list[Finding]]:
+    """One reading from every attachment on one email (decision 24).
+
+    A consultant working through their own firm sends the approved timesheet
+    and the firm's invoice for the same hours in the same email. The timesheet
+    is the proof of the hours and the approval; the invoice is where a printed
+    total usually is. So the timesheet leads and the rest fill its gaps — and
+    where the two disagree about who, which client, or which dates, nobody
+    guesses: it goes to Kevin.
+    """
+    if not readings:
+        raise ValueError("combine_readings needs at least one reading")
+    if len(readings) == 1:
+        return readings[0], []
+
+    # The document that shows approval is the timesheet; it leads.
+    with_approval = [r for r in readings if _kind_of(r) is not ApprovalKind.NONE]
+    base = with_approval[0] if with_approval else readings[0]
+    others = [r for r in readings if r is not base]
+
+    findings: list[Finding] = []
+    merged = base
+    for other in others:
+        for field_name in ("consultant_name", "client_name"):
+            mine = getattr(merged, field_name).value
+            theirs = getattr(other, field_name).value
+            if mine is not None and theirs is not None and not names_match(mine, theirs):
+                findings.append(
+                    Finding(
+                        ReviewCode.NOT_SURE,
+                        f"The attachments on this email disagree about the {_plain(field_name)}:"
+                        f' "{mine}" and "{theirs}".',
+                    )
+                )
+        for field_name in ("period_start", "period_end"):
+            mine = getattr(merged, field_name).value
+            theirs = getattr(other, field_name).value
+            if mine is not None and theirs is not None and mine != theirs:
+                findings.append(
+                    Finding(
+                        ReviewCode.PERIOD_UNCLEAR,
+                        "The attachments on this email disagree about the"
+                        f" {_plain(field_name)}: {mine} and {theirs}.",
+                    )
+                )
+        merged = merged.model_copy(
+            update={
+                name: _better(getattr(merged, name), getattr(other, name))
+                for name in (
+                    "consultant_name",
+                    "client_name",
+                    "end_client_name",
+                    "period_start",
+                    "period_end",
+                    "stated_total_hours_hundredths",
+                    "approval",
+                )
+            }
+        )
+        if not (merged.row_entries.value or []) and (other.row_entries.value or []):
+            merged = merged.model_copy(update={"row_entries": other.row_entries})
+        if not (merged.daily_entries.value or []) and (other.daily_entries.value or []):
+            merged = merged.model_copy(update={"daily_entries": other.daily_entries})
+        merged = merged.model_copy(
+            update={"unusual_items": [*merged.unusual_items, *other.unusual_items]}
+        )
+    return merged, findings
+
+
+def _plain(field_name: str) -> str:
+    return {
+        "consultant_name": "consultant",
+        "client_name": "client",
+        "period_start": "first date",
+        "period_end": "last date",
+    }[field_name]

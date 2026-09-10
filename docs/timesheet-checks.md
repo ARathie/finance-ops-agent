@@ -62,6 +62,7 @@ The code is what the software uses; the message is what Kevin sees. Every review
 | `HOURS_MISSING` | I can't find the hours on this timesheet. | Reply with the approved hours. |
 | `HOURS_DONT_ADD_UP` | The daily hours don't add up to the total. | Reply with the hours to use. |
 | `HOURS_UNUSUAL` | The hours look unusually high, or are zero. | Reply "hours are right" or with the correct hours. |
+| `PART_WEEK_UNCLEAR` | A week on this timesheet runs past the end of the period I'm billing, and nothing on it says how many of that week's hours belong to this period. | Reply with the hours from that week that belong to this period. |
 | `NO_APPROVAL` | I can't see that the client approved these hours. | Forward the client's approval, or reply "approved by <name> on <date>". |
 | `NOT_SURE` | I read this timesheet but I'm not confident about <field>. | Confirm or correct the field. |
 | `RATE_MISSING` | The engagement list has no rate for these dates. | Add a row with the rate and its start date. |

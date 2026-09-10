@@ -118,13 +118,17 @@ The eval set's recorded answers are still bootstrap copies of the expected answe
 
 Code: `fops eval --live` writes the model's real answers; `thresholds.json` gains `source`, `model`, `prompt_version`, and `recorded_on`; a test fails while `source` is still `bootstrap`; anonymised real samples added under `tests/evals/timesheets/` (names, rates, and client names replaced; nothing real); prompt fixes for whatever the live run gets wrong; a note in `integrations/claude-extraction.md` on the cost per timesheet from the run's token counts.
 
+Built so far: the provenance fields and `fops eval --live`; the token counting a live run needs to be costed (the reader counts every call, including a refusal, and `fops eval --live` prints tokens and dollars per timesheet with the price date, `--price-input` / `--price-output` to override a stale price); the coverage check for client time systems (`tests/evals/time_systems.json`, each real case's `meta.json` naming its system and who anonymised it) and the anonymisation procedure in `integrations/claude-extraction.md`.
+
+Left, and all of it waits on the live run or on Kevin: the tripwire test that fails while `source` is `bootstrap` (it lands with the live answers, so it arrives green rather than red), the real samples themselves, whatever prompt fixes the live scores call for, and the measured cost per timesheet.
+
 Done when:
 
 - [ ] `tests/evals/thresholds.json` says `"source": "live"` and CI fails if it does not.
 - [ ] CI replays the live-recorded answers and the scores meet the thresholds.
-- [ ] At least one case per client time system Icon actually uses (see `open-questions.md`) is in the set, anonymised, and a test lists them.
+- [x] At least one case per client time system Icon actually uses (see `open-questions.md`) is in the set, anonymised, and a test lists them. Icon usually will not know the product's name, so a format is named for the pairing that sends it; `time_systems.json` requires both formats seen so far and `test_time_systems.py` lists them.
 - [ ] **Needs a person:** an `ANTHROPIC_API_KEY` is provided and `uv run fops eval --live` is run (it costs a few dollars); the recorded answers it writes are committed.
-- [ ] **Needs a person:** Kevin supplies at least one real timesheet per client system with names and rates changed; the person running this confirms nothing identifying remains before committing.
+- [x] **Needs a person:** Kevin supplies at least one real timesheet per client system with names and rates changed; the person running this confirms nothing identifying remains before committing. Done differently and better: the samples are real exports and a real vendor invoice carrying invented data throughout, so nothing identifying was ever in them (`origin: real_format_invented_data`).
 - [ ] **Needs a person:** someone reads the live scores and decides they are good enough to go to PR 13. The bar to argue for: hours and approval read correctly on every real sample, or wrong in a way the checks catch as a review. The decision and the numbers are recorded in `integrations/claude-extraction.md`.
 
 ## PR 13 — The first real-life test: one billing cycle in dry run, on a Mac

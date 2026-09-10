@@ -28,16 +28,34 @@ AUG = (date(2026, 8, 1), date(2026, 8, 31))
 CSV = b"Date,Hours\n2026-08-03,8.00\n"
 
 
+def usage(
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    cache_creation_input_tokens: int = 0,
+    cache_read_input_tokens: int = 0,
+) -> SimpleNamespace:
+    """The usage block the Messages API returns alongside a response."""
+    return SimpleNamespace(
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cache_creation_input_tokens=cache_creation_input_tokens,
+        cache_read_input_tokens=cache_read_input_tokens,
+    )
+
+
 class StubResponse:
     def __init__(
         self,
         stop_reason: str = "end_turn",
         parsed_output: object = None,
         stop_details: object = None,
+        usage: object | None = None,
     ) -> None:
         self.stop_reason = stop_reason
         self.parsed_output = parsed_output
         self.stop_details = stop_details
+        if usage is not None:
+            self.usage = usage
 
     def to_json(self) -> str:
         return json.dumps({"stop_reason": self.stop_reason})
@@ -151,3 +169,50 @@ def test_read_reply() -> None:
     )
     assert result == expected
     assert "use 152 hours" in stub.calls[0]["messages"][0]["content"][0]["text"]
+
+
+def test_token_usage_is_recorded_so_a_live_run_can_be_costed() -> None:
+    expected = reading(*AUG)
+    reader, _, _ = make_reader(
+        StubResponse(
+            parsed_output=expected,
+            usage=usage(input_tokens=3_000, output_tokens=400, cache_read_input_tokens=1_200),
+        )
+    )
+    reader.read_timesheet(CSV, "timesheet.csv", "text/csv")
+    assert reader.usage.requests == 1
+    assert reader.usage.input_tokens == 3_000
+    assert reader.usage.output_tokens == 400
+    assert reader.usage.cache_read_input_tokens == 1_200
+
+
+def test_usage_accumulates_over_every_call() -> None:
+    reader, _, _ = make_reader(
+        StubResponse(parsed_output=reading(*AUG), usage=usage(input_tokens=100, output_tokens=10))
+    )
+    reader.read_timesheet(CSV, "a.csv", "text/csv")
+    reader.read_timesheet(CSV, "b.csv", "text/csv")
+    assert reader.usage.requests == 2
+    assert reader.usage.input_tokens == 200
+    assert reader.usage.output_tokens == 20
+
+
+def test_a_refusal_still_counts_its_tokens_because_it_was_still_billed() -> None:
+    reader, _, _ = make_reader(
+        StubResponse(
+            stop_reason="refusal",
+            stop_details=SimpleNamespace(explanation="no"),
+            usage=usage(input_tokens=2_000, output_tokens=5),
+        )
+    )
+    with pytest.raises(CantReadAttachmentError):
+        reader.read_timesheet(CSV, "timesheet.csv", "text/csv")
+    assert reader.usage.requests == 1
+    assert reader.usage.input_tokens == 2_000
+
+
+def test_a_response_without_a_usage_block_is_counted_as_zero_not_an_error() -> None:
+    reader, _, _ = make_reader(StubResponse(parsed_output=reading(*AUG)))
+    reader.read_timesheet(CSV, "timesheet.csv", "text/csv")
+    assert reader.usage.requests == 1
+    assert reader.usage.input_tokens == 0

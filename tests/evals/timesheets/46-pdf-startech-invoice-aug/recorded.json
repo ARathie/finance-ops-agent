@@ -1,0 +1,83 @@
+{
+  "consultant_name": {
+    "value": null,
+    "quote": null,
+    "confidence": "low"
+  },
+  "client_name": {
+    "value": "Mastec",
+    "quote": "MasTec Consulting Service for Mastec",
+    "confidence": "high"
+  },
+  "end_client_name": {
+    "value": "Mastec",
+    "quote": "Consulting Service for Mastec",
+    "confidence": "high"
+  },
+  "period_start": {
+    "value": "2026-08-01",
+    "quote": null,
+    "confidence": "high"
+  },
+  "period_end": {
+    "value": "2026-08-31",
+    "quote": null,
+    "confidence": "high"
+  },
+  "daily_entries": {
+    "value": [],
+    "quote": null,
+    "confidence": "low"
+  },
+  "row_entries": {
+    "value": [
+      {
+        "label": "08/01/2026",
+        "first_day": "2026-08-01",
+        "last_day": "2026-08-07",
+        "hours_hundredths": 4000
+      },
+      {
+        "label": "08/08/2026",
+        "first_day": "2026-08-08",
+        "last_day": "2026-08-14",
+        "hours_hundredths": 4000
+      },
+      {
+        "label": "08/15/2026",
+        "first_day": "2026-08-15",
+        "last_day": "2026-08-21",
+        "hours_hundredths": 4000
+      },
+      {
+        "label": "08/22/2026",
+        "first_day": "2026-08-22",
+        "last_day": "2026-08-28",
+        "hours_hundredths": 4000
+      },
+      {
+        "label": "08/29/2026",
+        "first_day": "2026-08-29",
+        "last_day": "2026-09-04",
+        "hours_hundredths": 800
+      }
+    ],
+    "quote": null,
+    "confidence": "high"
+  },
+  "stated_total_hours_hundredths": {
+    "value": 16800,
+    "quote": "168 hours * $110 = $18.480",
+    "confidence": "high"
+  },
+  "approval": {
+    "value": null,
+    "quote": null,
+    "confidence": "low"
+  },
+  "unusual_items": [
+    "The column is headed 'WEEK ENDING' but the dates are each week's first day.",
+    "A rate of 110.00 an hour is printed on every line.",
+    "This is the consultant's vendor company's invoice to Icon, not a timesheet."
+  ]
+}

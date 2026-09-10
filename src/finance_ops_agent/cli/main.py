@@ -24,10 +24,13 @@ from finance_ops_agent.ports.accounting import AccountingSystem
 from finance_ops_agent.ports.store import Store
 
 if TYPE_CHECKING:
+    from finance_ops_agent.adapters.claude.reader import ClaudeReader as ClaudeReaderType
     from finance_ops_agent.adapters.email.client import MailAccount
     from finance_ops_agent.adapters.email.sender import SmtpSender
+    from finance_ops_agent.application.eval_runner import UsageReport
     from finance_ops_agent.cli.doctor import Check
     from finance_ops_agent.config import Config, MailSettings
+    from finance_ops_agent.ports.reader import TokenUsage
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -125,6 +128,18 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="call the real model (costs money; needs ANTHROPIC_API_KEY)"
         " and overwrite each case's recorded.json",
+    )
+    evaluate.add_argument(
+        "--price-input",
+        type=int,
+        default=None,
+        help="cents per million input tokens, if the built-in price is stale",
+    )
+    evaluate.add_argument(
+        "--price-output",
+        type=int,
+        default=None,
+        help="cents per million output tokens, if the built-in price is stale",
     )
 
     return parser
@@ -335,15 +350,29 @@ def _command_doctor(args: argparse.Namespace) -> int:
     from finance_ops_agent.adapters.excel.engagement_list import ExcelEngagementList
     from finance_ops_agent.cli import doctor as checks
     from finance_ops_agent.cli.doctor import Check, CheckResult
-    from finance_ops_agent.config import Config, MailSettings, MissingSettingError
+    from finance_ops_agent.config import ENV_FILE, Config, MailSettings, MissingSettingError
     from finance_ops_agent.domain.engagements import parse_workbook
     from finance_ops_agent.ports.inbox import IGNORED_FOLDER, NEEDS_REVIEW_FOLDER, PROCESSED_FOLDER
 
     results: list[Check] = []
+    env_path = Path(ENV_FILE)
+    if env_path.is_file():
+        results.append(Check("settings file", CheckResult.PASS, f"read {env_path.resolve()}"))
+    else:
+        results.append(
+            Check(
+                "settings file",
+                CheckResult.SKIP,
+                f"no {ENV_FILE} in {Path.cwd()};"
+                " settings have to come from the environment instead",
+            )
+        )
     try:
         config = Config.from_env()
     except MissingSettingError as error:
-        print(Check("settings", CheckResult.FAIL, str(error)).line())
+        results.append(Check("settings", CheckResult.FAIL, str(error)))
+        for check in results:
+            print(check.line())
         return 1
     results.append(
         Check(
@@ -367,6 +396,7 @@ def _command_doctor(args: argparse.Namespace) -> int:
         return f"{len(store.list_items())} item(s) in {config.data_dir / 'agent.db'}"
 
     results.append(checks.check_database(describe_database))
+    results.append(checks.check_claude_api(config.model))
 
     try:
         mail = MailSettings.from_env()
@@ -582,8 +612,49 @@ def _command_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _stamp_live_thresholds(path: Path, model: str, prompt_version: str) -> None:
+    """Record which model and prompt wrote the answers now in `recorded.json`.
+
+    The threshold numbers themselves are not touched: a person reads the live
+    scores and decides what the floor should be (docs/roadmap.md PR 12).
+    """
+    from finance_ops_agent.application.eval_runner import Thresholds, stamp_live_provenance
+
+    raw = json.loads(path.read_text())
+    stamped = stamp_live_provenance(
+        Thresholds.model_validate(raw),
+        model=model,
+        prompt_version=prompt_version,
+        recorded_on=date.today(),
+    )
+    raw.update(json.loads(stamped.model_dump_json(include=set(_LIVE_PROVENANCE_FIELDS))))
+    path.write_text(json.dumps(raw, indent=2) + "\n")
+
+
+_LIVE_PROVENANCE_FIELDS = ("source", "model", "prompt_version", "recorded_on")
+
+
+def _usage_report(
+    usage: "TokenUsage", cases: int, model: str, args: argparse.Namespace
+) -> "UsageReport":
+    """What the live run spent. Overridden prices beat the built-in table."""
+    from finance_ops_agent.application.eval_runner import MODEL_PRICES, ModelPrices, UsageReport
+
+    prices = MODEL_PRICES.get(model)
+    if args.price_input is not None and args.price_output is not None:
+        # Cache rates follow input: 1.25x to write, 0.1x to read.
+        prices = ModelPrices(
+            input_cents_per_million=args.price_input,
+            output_cents_per_million=args.price_output,
+            cache_write_cents_per_million=args.price_input * 125 // 100,
+            cache_read_cents_per_million=args.price_input // 10,
+        )
+    return UsageReport(usage=usage, cases=cases, prices=prices, model=model)
+
+
 def _command_eval(args: argparse.Namespace) -> int:
     from finance_ops_agent.application.eval_runner import (
+        BOOTSTRAP_WARNING,
         EvalCase,
         Thresholds,
         below_thresholds,
@@ -592,15 +663,22 @@ def _command_eval(args: argparse.Namespace) -> int:
     )
 
     cases = load_cases(args.cases)
+    live_model: str | None = None
+    live_prompt_version: str | None = None
+    live_reader: ClaudeReaderType | None = None
     if args.live:
         import os
 
         from finance_ops_agent.adapters.claude.reader import ClaudeReader
 
-        if not os.environ.get("ANTHROPIC_API_KEY"):
-            print("The live run needs ANTHROPIC_API_KEY. CI replays recorded.json only.")
+        try:
+            reader = ClaudeReader(model=os.environ.get("FOPS_MODEL", "claude-opus-5"))
+        except Exception as error:
+            print(f"The live run needs Claude credentials: {error}")
+            print("Set ANTHROPIC_API_KEY. CI replays recorded.json only.")
             return 2
-        reader = ClaudeReader(model=os.environ.get("FOPS_MODEL", "claude-opus-5"))
+        live_model, live_prompt_version = reader.model_name, reader.prompt_version
+        live_reader = reader
 
         def read(case: EvalCase) -> TimesheetReading:
             reading = reader.read_timesheet(case.input_path.read_bytes(), case.input_path.name, "")
@@ -618,7 +696,19 @@ def _command_eval(args: argparse.Namespace) -> int:
 
     report = run_eval(cases, read)
     print(report.format())
+
+    if live_reader is not None and live_model is not None:
+        print()
+        print(_usage_report(live_reader.usage, len(cases), live_model, args).format())
+
+    if live_model is not None and live_prompt_version is not None:
+        _stamp_live_thresholds(args.thresholds, live_model, live_prompt_version)
+        print(f"\nRecorded answers are now the model's own ({live_model}, {live_prompt_version}).")
+        print("Read the scores above and decide whether they are good enough (roadmap PR 12).")
+
     thresholds = Thresholds.model_validate(json.loads(args.thresholds.read_text()))
+    if thresholds.proves_the_harness_only():
+        print(f"\nWARNING: {BOOTSTRAP_WARNING}")
     problems = below_thresholds(report, thresholds)
     for problem in problems:
         print(f"BELOW THRESHOLD: {problem}")
@@ -626,8 +716,13 @@ def _command_eval(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from finance_ops_agent.config import ENV_FILE, load_env_file
+
     parser = build_parser()
     args = parser.parse_args(argv)
+    # Run by hand there is nothing to put the settings in the environment, so
+    # read .env from the folder we are in first (docs/running-it.md).
+    load_env_file(Path(ENV_FILE))
     if args.command == "dry-run":
         return _command_dry_run(args)
     if args.command == "status":

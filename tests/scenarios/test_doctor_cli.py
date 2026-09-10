@@ -1,5 +1,7 @@
 """`fops doctor` and `fops run` refuse to guess when the environment is unset."""
 
+from pathlib import Path
+
 import pytest
 
 from finance_ops_agent.cli.main import main
@@ -13,13 +15,25 @@ REQUIRED = (
     "MAIL_PASSWORD",
     "FOPS_MODE",
     "FOPS_DATA_DIR",
+    # Cleared so the claude check stops before it would reach the network.
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
 )
 
 
 @pytest.fixture(autouse=True)
-def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def clean_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Nothing in the environment, and an empty folder to run in.
+
+    The commands read `.env` from the folder they run in, so these have to run
+    somewhere without one: otherwise a developer's own `.env` decides whether
+    the test passes.
+    """
     for name in REQUIRED:
         monkeypatch.delenv(name, raising=False)
+    empty = tmp_path / "elsewhere"
+    empty.mkdir()
+    monkeypatch.chdir(empty)
 
 
 def test_doctor_with_nothing_configured_says_what_is_missing(
@@ -46,6 +60,9 @@ def test_doctor_names_the_mailbox_settings_it_still_needs(
     # It got far enough to check the settings and the engagement list.
     assert "mode dry_run" in out
     assert "engagement list" in out
+    # And it says the timesheet reader has no key, rather than staying quiet.
+    assert "claude api" in out
+    assert "ANTHROPIC_API_KEY is not set" in out
     # And it never claims to have sent anything.
     assert "Nothing was sent to a client." in out
 
@@ -62,3 +79,37 @@ def test_dry_run_without_fake_is_a_real_dry_run_and_needs_configuration(
 ) -> None:
     assert main(["dry-run"]) == 2
     assert "Not configured" in capsys.readouterr().out
+
+
+def test_doctor_reads_the_env_file_in_the_folder_it_runs_in(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    """Copying `.env.example` to `.env` is enough to run a command by hand.
+
+    Without this the settings are only ever set by launchd, docker, or systemd,
+    and `cp .env.example .env && fops doctor` fails on the first setting.
+    """
+    folder = tmp_path / "checkout"
+    folder.mkdir()
+    (folder / ".env").write_text(
+        "FOPS_TIMEZONE=America/New_York\n"
+        f"FOPS_ENGAGEMENT_LIST={folder / 'engagements.xlsx'}\n"
+        "FOPS_ADMIN_EMAIL=kevin@icon-technologies.com\n"
+        "FOPS_AGENT_MAILBOX=jay@icon-technologies.com\n"
+        f"FOPS_DATA_DIR={folder / 'data'}\n"
+    )
+    monkeypatch.chdir(folder)
+
+    main(["doctor"])
+    out = capsys.readouterr().out
+    assert "ok   settings file" in out
+    assert "timezone America/New_York" in out
+    assert "FOPS_TIMEZONE is not set" not in out
+
+
+def test_doctor_says_when_there_is_no_env_file(capsys: pytest.CaptureFixture[str]) -> None:
+    """The likeliest reason a setting is missing is that the file is elsewhere."""
+    assert main(["doctor"]) == 1
+    out = capsys.readouterr().out
+    assert "no .env in" in out
+    assert "FOPS_TIMEZONE is not set" in out

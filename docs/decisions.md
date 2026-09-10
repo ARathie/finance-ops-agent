@@ -93,3 +93,20 @@ The Mac with launchd (PR 10) is fine for the first real-life test and wrong for 
 ## 23. Roadmap boxes that need a person are marked, never faked
 
 Some steps cannot be verified by a test: creating the mailbox, running the doctor with real credentials, Kevin judging a cycle of readings. Decision: such boxes carry **Needs a person** in `roadmap.md`. A coding agent leaves them unticked and ends its work by telling its operator exactly what to do and how they will know it worked; it never ticks one on the strength of a mock, and never skips one silently. Consequences: the legend at the top of `roadmap.md`, a rule in `CLAUDE.md`, and PRs 11 to 17 written with the split between automated and human verification made explicit.
+
+## 24. Timesheets are weekly, and a part week is Kevin's to settle
+
+Icon's timesheets list hours **per week**, not per day: one row per week against a printed date, with a `State` column showing the client's approval and the approver's name. Daily entries are the exception, so the reading form carries `row_entries` as well as `daily_entries` and the prompt asks for the weekly rows exactly as printed.
+
+A week at either end of a month covers days on both sides of it. Its hours are therefore **not** all billable in the period, and how they split is not something the model may guess and not something code may assume. Code never apportions a straddling week by spreading it over working days: on the July sample that computes 19.2 hours where the vendor's invoice says 16, which would overbill the client.
+
+So the hours to bill come, in order:
+
+1. the total printed on the document — a vendor invoice prints one (`176 hours * $110`);
+2. the daily entries, summed by code, when the timesheet gives days;
+3. the weekly rows, summed by code, but **only when every row falls inside the period**.
+
+When none of those holds and a row straddles the period, the item becomes a `PART_WEEK_UNCLEAR` review and Kevin replies with the hours for that week. That is decision 14 and the "ask Kevin" rule applied to the one number nobody has written down.
+
+An email may carry the approved timesheet **and** the consultant's vendor company's invoice for the same hours, or the timesheet alone when there is no vendor. The timesheet is the proof of the hours and the approval. The rate printed on a vendor invoice is never used for anything (decision 4); Kevin compares it with the payment instruction himself.
+

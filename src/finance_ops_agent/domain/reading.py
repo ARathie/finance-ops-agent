@@ -50,6 +50,35 @@ class DailyEntry(BaseModel):
     hours_hundredths: Annotated[int, Field(ge=0)]
 
 
+class RowEntry(BaseModel):
+    """One dated row of hours covering a stretch of days, usually a week.
+
+    Icon's timesheets are weekly, not daily: a row carries a week's hours
+    against one printed date (docs/open-questions.md). `label` keeps that date
+    exactly as printed, because a document may head the column "week ending"
+    while printing the week's first day; `first_day` and `last_day` are the
+    span the reader believes the row covers. Nothing here is added up or
+    apportioned by the model — code does that against the billing period.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    label: str | None = None
+    first_day: date | None = None
+    last_day: date | None = None
+    hours_hundredths: Annotated[int, Field(ge=0)]
+
+    def straddles(self, period_start: date, period_end: date) -> bool:
+        """True when part of this row falls outside the billing period.
+
+        Then the row's hours are not all billable in this period, and how many
+        are is not something the model may guess.
+        """
+        if self.first_day is None or self.last_day is None:
+            return False
+        return self.first_day < period_start or self.last_day > period_end
+
+
 class Approval(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -67,6 +96,7 @@ class TimesheetReading(BaseModel):
     period_start: ReadField[date]
     period_end: ReadField[date]
     daily_entries: ReadField[list[DailyEntry]]
+    row_entries: ReadField[list[RowEntry]] = ReadField[list[RowEntry]](value=[])
     stated_total_hours_hundredths: ReadField[int]
     approval: ReadField[Approval]
     unusual_items: list[str] = Field(default_factory=list)
@@ -77,6 +107,20 @@ class TimesheetReading(BaseModel):
         if not entries:
             return None
         return sum(entry.hours_hundredths for entry in entries)
+
+    def summed_row_hundredths(self) -> int | None:
+        """Code sums the weekly rows itself; None when the timesheet showed none."""
+        rows = self.row_entries.value
+        if not rows:
+            return None
+        return sum(row.hours_hundredths for row in rows)
+
+    def rows_outside_period(self) -> list[RowEntry]:
+        """Rows running past either end of the period the timesheet says it covers."""
+        start, end = self.period_start.value, self.period_end.value
+        if start is None or end is None:
+            return []
+        return [row for row in self.row_entries.value or [] if row.straddles(start, end)]
 
 
 class ClassifiedKind(StrEnum):
