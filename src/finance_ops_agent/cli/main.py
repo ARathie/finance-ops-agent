@@ -660,9 +660,11 @@ def _command_eval(args: argparse.Namespace) -> int:
         below_thresholds,
         load_cases,
         run_eval,
+        run_eval_by_origin,
     )
 
     cases = load_cases(args.cases)
+    seen: dict[str, TimesheetReading] = {}
     live_model: str | None = None
     live_prompt_version: str | None = None
     live_reader: ClaudeReaderType | None = None
@@ -694,8 +696,17 @@ def _command_eval(args: argparse.Namespace) -> int:
                 raise SystemExit(f"{case.name} has no recorded.json; run `fops eval --live` once")
             return TimesheetReading.model_validate(json.loads(recorded.read_text()))
 
-    report = run_eval(cases, read)
+    def read_once(case: EvalCase) -> TimesheetReading:
+        seen[case.name] = read(case)
+        return seen[case.name]
+
+    report = run_eval(cases, read_once)
     print(report.format())
+    by_origin = run_eval_by_origin(cases, lambda case: seen[case.name])
+    if len(by_origin) > 1:
+        for group, part in sorted(by_origin.items()):
+            print(f"\n{group}:")
+            print("\n".join(part.format().splitlines()[1:]))
 
     if live_reader is not None and live_model is not None:
         print()

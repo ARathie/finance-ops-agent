@@ -1,0 +1,88 @@
+{
+  "reading": {
+    "consultant_name": {
+      "value": "Elena Petrov",
+      "quote": "Consultant: Elena Petrov",
+      "confidence": "high"
+    },
+    "client_name": {
+      "value": "Cardinal Foods",
+      "quote": "Client: Cardinal Foods",
+      "confidence": "high"
+    },
+    "end_client_name": {
+      "value": null,
+      "quote": null,
+      "confidence": "low"
+    },
+    "period_start": {
+      "value": "2026-08-01",
+      "quote": "2026-08-01",
+      "confidence": "high"
+    },
+    "period_end": {
+      "value": "2026-08-31",
+      "quote": "2026-08-31",
+      "confidence": "high"
+    },
+    "daily_entries": {
+      "value": [],
+      "quote": null,
+      "confidence": "low"
+    },
+    "row_entries": {
+      "value": [
+        {
+          "label": "08/01/2026",
+          "first_day": "2026-08-01",
+          "last_day": "2026-08-07",
+          "hours_hundredths": 4000
+        },
+        {
+          "label": "08/08/2026",
+          "first_day": "2026-08-08",
+          "last_day": "2026-08-14",
+          "hours_hundredths": 4000
+        },
+        {
+          "label": "08/15/2026",
+          "first_day": "2026-08-15",
+          "last_day": "2026-08-21",
+          "hours_hundredths": 4000
+        },
+        {
+          "label": "08/22/2026",
+          "first_day": "2026-08-22",
+          "last_day": "2026-08-28",
+          "hours_hundredths": 4000
+        },
+        {
+          "label": "08/29/2026",
+          "first_day": "2026-08-29",
+          "last_day": "2026-09-04",
+          "hours_hundredths": 4000
+        }
+      ],
+      "quote": "hours per week",
+      "confidence": "high"
+    },
+    "stated_total_hours_hundredths": {
+      "value": null,
+      "quote": null,
+      "confidence": "high"
+    },
+    "approval": {
+      "value": {
+        "kind": "approved_status",
+        "approver": "Grace Okafor",
+        "approval_date": null
+      },
+      "quote": "State: Approved",
+      "confidence": "high"
+    },
+    "unusual_items": []
+  },
+  "review_codes": [
+    "PART_WEEK_UNCLEAR"
+  ]
+}

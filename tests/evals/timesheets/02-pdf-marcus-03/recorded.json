@@ -118,6 +118,11 @@
     "quote": "hours per day",
     "confidence": "high"
   },
+  "row_entries": {
+    "value": [],
+    "quote": null,
+    "confidence": "low"
+  },
   "stated_total_hours_hundredths": {
     "value": 17600,
     "quote": "Total: 176.00",

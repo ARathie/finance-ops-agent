@@ -1,0 +1,83 @@
+{
+  "consultant_name": {
+    "value": "Dana Cruz",
+    "quote": "Consultant: Dana Cruz",
+    "confidence": "high"
+  },
+  "client_name": {
+    "value": "Northwind Bank",
+    "quote": "Client: Northwind Bank",
+    "confidence": "high"
+  },
+  "end_client_name": {
+    "value": null,
+    "quote": null,
+    "confidence": "low"
+  },
+  "period_start": {
+    "value": "2026-06-01",
+    "quote": "2026-06-01",
+    "confidence": "high"
+  },
+  "period_end": {
+    "value": "2026-06-30",
+    "quote": "2026-06-30",
+    "confidence": "high"
+  },
+  "daily_entries": {
+    "value": [],
+    "quote": null,
+    "confidence": "low"
+  },
+  "row_entries": {
+    "value": [
+      {
+        "label": "05/30/2026",
+        "first_day": "2026-05-30",
+        "last_day": "2026-06-05",
+        "hours_hundredths": 4000
+      },
+      {
+        "label": "06/06/2026",
+        "first_day": "2026-06-06",
+        "last_day": "2026-06-12",
+        "hours_hundredths": 4000
+      },
+      {
+        "label": "06/13/2026",
+        "first_day": "2026-06-13",
+        "last_day": "2026-06-19",
+        "hours_hundredths": 4000
+      },
+      {
+        "label": "06/20/2026",
+        "first_day": "2026-06-20",
+        "last_day": "2026-06-26",
+        "hours_hundredths": 4000
+      },
+      {
+        "label": "06/27/2026",
+        "first_day": "2026-06-27",
+        "last_day": "2026-07-03",
+        "hours_hundredths": 4000
+      }
+    ],
+    "quote": "hours per week",
+    "confidence": "high"
+  },
+  "stated_total_hours_hundredths": {
+    "value": null,
+    "quote": null,
+    "confidence": "high"
+  },
+  "approval": {
+    "value": {
+      "kind": "approved_status",
+      "approver": "Sam Ortiz",
+      "approval_date": null
+    },
+    "quote": "State: Approved",
+    "confidence": "high"
+  },
+  "unusual_items": []
+}

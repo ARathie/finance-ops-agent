@@ -29,6 +29,11 @@
     "quote": null,
     "confidence": "low"
   },
+  "row_entries": {
+    "value": [],
+    "quote": null,
+    "confidence": "low"
+  },
   "stated_total_hours_hundredths": {
     "value": 26000,
     "quote": "Total: 260.00",

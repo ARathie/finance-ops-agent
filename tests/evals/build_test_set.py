@@ -11,6 +11,7 @@ model's real answers.
 import csv
 import io
 import json
+import shutil
 import zipfile
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -25,6 +26,7 @@ from finance_ops_agent.domain.reading import (
     Confidence,
     DailyEntry,
     ReadField,
+    RowEntry,
     TimesheetReading,
 )
 
@@ -59,11 +61,39 @@ class Case:
     end: date
     stated_total: int | None  # hundredths
     dailies: list[tuple[date, int]] = field(default_factory=list)
+    # (week start, hours on that row). Icon's real timesheets are weekly, and a
+    # week at either end of a month covers days on both sides of it.
+    weeks: list[tuple[date, int]] = field(default_factory=list)
+    week_label: str = "Week starts on"
     approval: Approval = field(default_factory=lambda: Approval(kind=ApprovalKind.APPROVED_STATUS))
     approval_quote: str | None = "Status: Approved"
     confidence: Confidence = Confidence.HIGH
     unusual: list[str] = field(default_factory=list)
     codes: list[str] = field(default_factory=list)
+
+
+def saturday_weeks(start: date, end: date, per_week: int) -> list[tuple[date, int]]:
+    """Saturday-start weeks touching the period, as the real exports show them.
+
+    The first and last week reach outside the period, which is the whole point:
+    that is the case code must not sum (docs/decisions.md #24).
+    """
+    first = start - timedelta(days=(start.weekday() - 5) % 7)
+    weeks: list[tuple[date, int]] = []
+    week = first
+    while week <= end:
+        weeks.append((week, per_week))
+        week += timedelta(days=7)
+    return weeks
+
+
+def weeks_inside(start: date, end: date, per_week: int) -> list[tuple[date, int]]:
+    """Only the weeks that fall wholly inside the period, so they can be summed."""
+    return [
+        (week, hours)
+        for week, hours in saturday_weeks(start, end, per_week)
+        if week >= start and week + timedelta(days=6) <= end
+    ]
 
 
 def weekday_dailies(start: date, end: date, per_day: int) -> list[tuple[date, int]]:
@@ -103,6 +133,19 @@ def reading_for(case: Case) -> TimesheetReading:
             quote="hours per day" if case.dailies else None,
             confidence=case.confidence if case.dailies else Confidence.LOW,
         ),
+        row_entries=ReadField[list[RowEntry]](
+            value=[
+                RowEntry(
+                    label=week.strftime("%m/%d/%Y"),
+                    first_day=week,
+                    last_day=week + timedelta(days=6),
+                    hours_hundredths=hours,
+                )
+                for week, hours in case.weeks
+            ],
+            quote="hours per week" if case.weeks else None,
+            confidence=case.confidence if case.weeks else Confidence.LOW,
+        ),
         stated_total_hours_hundredths=ReadField[int](
             value=total,
             quote=None if total is None else f"Total: {hours_text(total)}",
@@ -124,6 +167,14 @@ def document_lines(case: Case) -> list[str]:
     ]
     for day, hours in case.dailies:
         lines.append(f"{day.isoformat()}  {hours_text(hours)}")
+    if case.weeks:
+        approver = case.approval.approver or "the client"
+        lines.append(f"{case.week_label} | Total Hours | State | Time Sheet Approver")
+        for week, hours in case.weeks:
+            state = "Approved" if hours else "Pending"
+            lines.append(
+                f"{week.strftime('%m/%d/%Y')} | {hours_text(hours)} | {state} | {approver}"
+            )
     if case.stated_total is not None:
         lines.append(f"Total: {hours_text(case.stated_total)}")
     if case.approval_quote:
@@ -271,11 +322,71 @@ def month_case(index: int, fmt: str, month: int, **overrides: object) -> Case:
     return case
 
 
+def week_case(
+    index: int,
+    fmt: str,
+    month: int,
+    *,
+    straddles: bool = True,
+    printed_total: bool = True,
+    per_week: int = 4000,
+) -> Case:
+    """A weekly timesheet, the shape Icon actually receives.
+
+    `straddles` decides whether a week reaches outside the month, which is the
+    normal case and the one code must not sum. `printed_total` decides whether
+    the document says what the month comes to, as a vendor invoice does.
+    """
+    consultant = CONSULTANTS[index % len(CONSULTANTS)]
+    client = CLIENTS[index % len(CLIENTS)]
+    approver = APPROVERS[index % len(APPROVERS)]
+    start = date(2026, month, 1)
+    end = (date(2026, month + 1, 1) - timedelta(days=1)) if month < 12 else date(2026, 12, 31)
+    weeks = (
+        saturday_weeks(start, end, per_week) if straddles else weeks_inside(start, end, per_week)
+    )
+    if not straddles:
+        start, end = weeks[0][0], weeks[-1][0] + timedelta(days=6)
+    inside = sum(hours for week, hours in weeks if week >= start)
+    total = inside if printed_total else None
+    codes: list[str] = []
+    if straddles and not printed_total:
+        codes = ["PART_WEEK_UNCLEAR"]
+    name = f"w{index:02d}-{fmt}-{consultant.split()[0].lower()}-{month:02d}"
+    return Case(
+        name=name,
+        fmt=fmt,
+        consultant=consultant,
+        client=client,
+        start=start,
+        end=end,
+        stated_total=total,
+        weeks=weeks,
+        approval=Approval(kind=ApprovalKind.APPROVED_STATUS, approver=approver),
+        approval_quote="State: Approved",
+        codes=codes,
+    )
+
+
 def build_cases() -> list[Case]:
     cases: list[Case] = []
     formats = ["csv", "xlsx", "pdf", "png", "docx"]
-    # 30 clean timesheets across formats, months, names, and approval styles.
-    for index in range(30):
+    # Weekly is what Icon actually receives (docs/open-questions.md), so the
+    # set is mostly weekly: clean months across formats, with and without a
+    # printed total, straddling the month end and not.
+    for index in range(24):
+        cases.append(
+            week_case(
+                index,
+                formats[index % len(formats)],
+                1 + index % 8,
+                straddles=index % 3 != 2,
+                printed_total=index % 2 == 0,
+            )
+        )
+    # A handful of daily timesheets remain: some clients may still send them,
+    # and they are the regression net for the daily path.
+    for index in range(12):
         case = month_case(index, formats[index % len(formats)], 1 + index % 8)
         if index % 4 == 0:
             case.approval = Approval(kind=ApprovalKind.APPROVED_STATUS)
@@ -418,9 +529,29 @@ def build_cases() -> list[Case]:
     return cases
 
 
+def stale_invented_cases(kept: set[str]) -> list[Path]:
+    """Generated cases this run no longer produces.
+
+    Only ever invented ones: a case carrying a `meta.json` that says it came
+    from a real document is not this script's to delete.
+    """
+    stale: list[Path] = []
+    for case_dir in sorted(path for path in CASES_DIR.iterdir() if path.is_dir()):
+        if case_dir.name in kept:
+            continue
+        meta = case_dir / "meta.json"
+        if meta.exists() and '"invented"' not in meta.read_text():
+            continue
+        stale.append(case_dir)
+    return stale
+
+
 def main() -> None:
     CASES_DIR.mkdir(parents=True, exist_ok=True)
     cases = build_cases()
+    for case_dir in stale_invented_cases({case.name for case in cases}):
+        shutil.rmtree(case_dir)
+        print(f"removed stale case {case_dir.name}")
     for case in cases:
         case_dir = CASES_DIR / case.name
         case_dir.mkdir(exist_ok=True)

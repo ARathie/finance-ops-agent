@@ -123,3 +123,31 @@ def test_a_timesheet_with_no_rows_at_all_is_still_hours_missing() -> None:
     total, findings = check_hours(reading([], stated=None))
     assert total is None
     assert [f.code for f in findings] == [ReviewCode.HOURS_MISSING]
+
+
+def test_a_well_read_weekly_timesheet_is_not_called_unsure() -> None:
+    """The hours are in the weekly rows, so the empty daily field says nothing.
+
+    Without this, every weekly timesheet without a printed total raised a
+    spurious NOT_SURE and reached Kevin as a review for no reason.
+    """
+    from finance_ops_agent.domain.checks import check_confidence
+
+    inside = [
+        week(date(2026, 7, 4), 4000),
+        week(date(2026, 7, 11), 4000),
+    ]
+    confident = reading(inside, stated=None, start=date(2026, 7, 4), end=date(2026, 7, 17))
+    assert check_confidence(confident) == []
+
+
+def test_weekly_rows_read_badly_are_still_a_review() -> None:
+    from finance_ops_agent.domain.checks import check_confidence
+
+    unsure = reading(
+        [week(date(2026, 7, 4), 4000)], stated=None, start=date(2026, 7, 4), end=date(2026, 7, 10)
+    )
+    unsure = unsure.model_copy(
+        update={"row_entries": unsure.row_entries.model_copy(update={"confidence": Confidence.LOW})}
+    )
+    assert [f.code for f in check_confidence(unsure)] == [ReviewCode.NOT_SURE]

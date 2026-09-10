@@ -1,0 +1,77 @@
+{
+  "consultant_name": {
+    "value": "Marcus Webb",
+    "quote": "Consultant: Marcus Webb",
+    "confidence": "high"
+  },
+  "client_name": {
+    "value": "Bluewater Systems",
+    "quote": "Client: Bluewater Systems",
+    "confidence": "high"
+  },
+  "end_client_name": {
+    "value": null,
+    "quote": null,
+    "confidence": "low"
+  },
+  "period_start": {
+    "value": "2026-07-04",
+    "quote": "2026-07-04",
+    "confidence": "high"
+  },
+  "period_end": {
+    "value": "2026-07-31",
+    "quote": "2026-07-31",
+    "confidence": "high"
+  },
+  "daily_entries": {
+    "value": [],
+    "quote": null,
+    "confidence": "low"
+  },
+  "row_entries": {
+    "value": [
+      {
+        "label": "07/04/2026",
+        "first_day": "2026-07-04",
+        "last_day": "2026-07-10",
+        "hours_hundredths": 4000
+      },
+      {
+        "label": "07/11/2026",
+        "first_day": "2026-07-11",
+        "last_day": "2026-07-17",
+        "hours_hundredths": 4000
+      },
+      {
+        "label": "07/18/2026",
+        "first_day": "2026-07-18",
+        "last_day": "2026-07-24",
+        "hours_hundredths": 4000
+      },
+      {
+        "label": "07/25/2026",
+        "first_day": "2026-07-25",
+        "last_day": "2026-07-31",
+        "hours_hundredths": 4000
+      }
+    ],
+    "quote": "hours per week",
+    "confidence": "high"
+  },
+  "stated_total_hours_hundredths": {
+    "value": 16000,
+    "quote": "Total: 160.00",
+    "confidence": "high"
+  },
+  "approval": {
+    "value": {
+      "kind": "approved_status",
+      "approver": "Lee Fontaine",
+      "approval_date": null
+    },
+    "quote": "State: Approved",
+    "confidence": "high"
+  },
+  "unusual_items": []
+}

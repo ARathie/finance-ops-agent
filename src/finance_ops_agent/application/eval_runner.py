@@ -235,6 +235,23 @@ def score_case(report: EvalReport, case: EvalCase, actual: TimesheetReading) -> 
         report.failures.append(f"{case.name}: review codes")
 
 
+def run_eval_by_origin(
+    cases: list[EvalCase], read: Callable[[EvalCase], TimesheetReading]
+) -> dict[str, EvalReport]:
+    """Score the made-up cases and the real-format ones separately.
+
+    Blending them hides the number that matters. The invented cases are a
+    regression net written to a shape someone believed in; only the cases taken
+    from documents Icon actually receives say whether the reader can do the job
+    (docs/roadmap.md PR 12).
+    """
+    groups: dict[str, list[EvalCase]] = {}
+    for case in cases:
+        key = "real formats" if case.meta.is_real_format() else "made-up"
+        groups.setdefault(key, []).append(case)
+    return {name: run_eval(group, read) for name, group in groups.items()}
+
+
 def run_eval(cases: list[EvalCase], read: Callable[[EvalCase], TimesheetReading]) -> EvalReport:
     report = EvalReport()
     for case in cases:

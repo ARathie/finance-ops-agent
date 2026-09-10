@@ -244,11 +244,15 @@ def check_approval(reading: TimesheetReading) -> list[Finding]:
 
 def check_confidence(reading: TimesheetReading) -> list[Finding]:
     """Low confidence on who, when, how many hours, or approval is a review."""
-    hours_confidence = (
-        reading.stated_total_hours_hundredths.confidence
-        if reading.stated_total_hours_hundredths.value is not None
-        else reading.daily_entries.confidence
-    )
+    # However sure we are of the hours is however sure we are of whichever
+    # field they were actually written in: a weekly timesheet has empty daily
+    # entries and that says nothing about how well it was read (decision 24).
+    if reading.stated_total_hours_hundredths.value is not None:
+        hours_confidence = reading.stated_total_hours_hundredths.confidence
+    elif reading.row_entries.value:
+        hours_confidence = reading.row_entries.confidence
+    else:
+        hours_confidence = reading.daily_entries.confidence
     unsure = [
         label
         for label, confidence in (

@@ -1,0 +1,92 @@
+{
+  "reading": {
+    "consultant_name": {
+      "value": "Priya Shah",
+      "quote": "Consultant: Priya Shah",
+      "confidence": "high"
+    },
+    "client_name": {
+      "value": "Acme Corp",
+      "quote": "Client: Acme Corp",
+      "confidence": "high"
+    },
+    "end_client_name": {
+      "value": null,
+      "quote": null,
+      "confidence": "low"
+    },
+    "period_start": {
+      "value": "2026-05-01",
+      "quote": "2026-05-01",
+      "confidence": "high"
+    },
+    "period_end": {
+      "value": "2026-05-31",
+      "quote": "2026-05-31",
+      "confidence": "high"
+    },
+    "daily_entries": {
+      "value": [],
+      "quote": null,
+      "confidence": "low"
+    },
+    "row_entries": {
+      "value": [
+        {
+          "label": "04/25/2026",
+          "first_day": "2026-04-25",
+          "last_day": "2026-05-01",
+          "hours_hundredths": 4000
+        },
+        {
+          "label": "05/02/2026",
+          "first_day": "2026-05-02",
+          "last_day": "2026-05-08",
+          "hours_hundredths": 4000
+        },
+        {
+          "label": "05/09/2026",
+          "first_day": "2026-05-09",
+          "last_day": "2026-05-15",
+          "hours_hundredths": 4000
+        },
+        {
+          "label": "05/16/2026",
+          "first_day": "2026-05-16",
+          "last_day": "2026-05-22",
+          "hours_hundredths": 4000
+        },
+        {
+          "label": "05/23/2026",
+          "first_day": "2026-05-23",
+          "last_day": "2026-05-29",
+          "hours_hundredths": 4000
+        },
+        {
+          "label": "05/30/2026",
+          "first_day": "2026-05-30",
+          "last_day": "2026-06-05",
+          "hours_hundredths": 4000
+        }
+      ],
+      "quote": "hours per week",
+      "confidence": "high"
+    },
+    "stated_total_hours_hundredths": {
+      "value": 20000,
+      "quote": "Total: 200.00",
+      "confidence": "high"
+    },
+    "approval": {
+      "value": {
+        "kind": "approved_status",
+        "approver": "Jane Doe",
+        "approval_date": null
+      },
+      "quote": "State: Approved",
+      "confidence": "high"
+    },
+    "unusual_items": []
+  },
+  "review_codes": []
+}
