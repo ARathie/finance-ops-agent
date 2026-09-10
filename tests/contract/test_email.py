@@ -41,6 +41,7 @@ from finance_ops_agent.application.run import (
     Settings,
     run_once,
 )
+from finance_ops_agent.cli.doctor import _describe_claude_model as _real_describe_claude_model
 from finance_ops_agent.domain.emails import OutgoingEmail
 from finance_ops_agent.domain.messages import SYNTHETIC_DOMAIN
 from finance_ops_agent.domain.reading import (
@@ -719,7 +720,34 @@ class TestDoctor:
         }.items():
             monkeypatch.setenv(name, value)
         monkeypatch.delenv("MAIL_SENT_FOLDER", raising=False)
+        # This suite proves the mailbox against a real server on this machine.
+        # The Claude check talks to a different service altogether, so it is
+        # stubbed here rather than reaching the internet from a contract test.
+        monkeypatch.setattr(
+            "finance_ops_agent.cli.doctor._describe_claude_model",
+            lambda model: f"Claude Opus 5 ({model}) answers; timesheets can be read",
+        )
         return mailbox
+
+    def test_a_missing_claude_key_fails_the_doctor(
+        self,
+        configured: MailServer,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """A perfect mailbox is not enough: with no key, no timesheet can be read."""
+        from finance_ops_agent.cli import doctor as doctor_module
+        from finance_ops_agent.cli.main import main
+
+        # Undo the fixture's stub: this test wants the real check, with no key.
+        monkeypatch.setattr(doctor_module, "_describe_claude_model", _real_describe_claude_model)
+        for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"):
+            monkeypatch.delenv(name, raising=False)
+
+        assert main(["doctor"]) == 1
+        out = capsys.readouterr().out
+        assert "FAIL claude api" in out
+        assert "ok   read the mailbox (imap)" in out
 
     def test_everything_checks_out(
         self, configured: MailServer, capsys: pytest.CaptureFixture[str]
