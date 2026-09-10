@@ -53,3 +53,40 @@ Prompts live in `adapters/claude/prompts/` as versioned files (`timesheet_v3.md`
 | `live` | The model's own answers, from `fops eval --live` | The reading, at the `model` and `prompt_version` recorded alongside, on `recorded_on`. |
 
 A live run stamps `source`, `model`, `prompt_version`, and `recorded_on` itself; it never moves the threshold numbers, because a person reads the live scores and decides what the floor should be (roadmap PR 12). From then on a prompt or model change must keep the scores at or above that floor, and a run recorded under an older prompt version fails the test set rather than passing quietly.
+
+## What a live run costs
+
+`fops eval --live` counts the tokens it spends and prints them with the scores: input tokens (and how many of those were written to or read from the prompt cache), output tokens, the same figures per timesheet, and an estimate in dollars.
+
+The arithmetic is integer throughout, in thousandths of a cent — one timesheet costs a few cents, so a figure in whole cents would round away the number worth knowing. Prices are held in `application/eval_runner.py` as whole cents per million tokens, with the date they were last checked (`PRICES_CHECKED_ON`), and that date is printed next to every estimate so nobody quotes a stale figure as fact. Cached input is counted at its own two rates: writing the prompt into the cache costs more than plain input, reading it back costs far less. When the built-in prices have moved, override them for one run rather than editing code:
+
+```
+uv run fops eval --live --price-input 500 --price-output 2500   # cents per million tokens
+```
+
+If the model has no price in the table, the run still reports its token counts and says it cannot cost them, rather than guessing.
+
+**The measured cost per timesheet.** Filled in from the first live run (roadmap PR 12), so that anyone sizing a billing cycle has a real number rather than an estimate:
+
+| | Tokens in (per timesheet) | Tokens out (per timesheet) | Cost per timesheet | Cost for the whole set |
+|---|---|---|---|---|
+| Not yet measured | — | — | — | — |
+
+Also record here, with the numbers, the decision that the live scores are good enough to go on to PR 13, and who made it.
+
+## Real timesheets, and the systems they come from
+
+The 44 made-up cases prove the reader on layouts we invented. They say nothing about what a real export from a real client time system looks like, which is what the agent will actually be given. So the set is also checked for coverage of the systems Icon bills through:
+
+- `tests/evals/time_systems.json` lists those systems under `required`. It is empty until Kevin answers which they are (`open-questions.md`). Adding a system to that list without adding a case for it fails the test set.
+- A case that came from a real timesheet carries a `meta.json` next to its input file naming the `time_system` it came from, `"origin": "anonymised_real"`, and `anonymised_by` and `anonymised_on` — who confirmed nothing identifying was left in it, and when. A case without a `meta.json` is a made-up one.
+- Refusing to record the anonymisation is refused by the loader, because that record is the only evidence the check ever happened.
+
+**Anonymising a real timesheet before committing it.** Nothing real goes in the repository (`CLAUDE.md`). Replace, don't redact: a blanked-out field changes the layout, which is the whole point of keeping the sample.
+
+1. Replace every consultant, approver, client, and end-client name with an invented one, using the same name throughout the file.
+2. Replace every rate, amount, and total with an invented number. Rates never belong in a timesheet the agent reads, so they should not survive the copy at all.
+3. Shift the dates to an invented period; keep the shape (a month, a week, weekdays only).
+4. Remove email addresses, phone numbers, employee and purchase-order numbers, account numbers, and logos or letterheads that name the real client.
+5. Open the file and read it through, including anything the format hides — spreadsheet formulas and other sheets, PDF text layers, document metadata (author, company), and image EXIF.
+6. Write the `meta.json` with your name and the date, and add the system to `time_systems.json`.

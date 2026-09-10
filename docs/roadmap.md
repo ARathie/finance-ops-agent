@@ -118,6 +118,10 @@ The eval set's recorded answers are still bootstrap copies of the expected answe
 
 Code: `fops eval --live` writes the model's real answers; `thresholds.json` gains `source`, `model`, `prompt_version`, and `recorded_on`; a test fails while `source` is still `bootstrap`; anonymised real samples added under `tests/evals/timesheets/` (names, rates, and client names replaced; nothing real); prompt fixes for whatever the live run gets wrong; a note in `integrations/claude-extraction.md` on the cost per timesheet from the run's token counts.
 
+Built so far: the provenance fields and `fops eval --live`; the token counting a live run needs to be costed (the reader counts every call, including a refusal, and `fops eval --live` prints tokens and dollars per timesheet with the price date, `--price-input` / `--price-output` to override a stale price); the coverage check for client time systems (`tests/evals/time_systems.json`, each real case's `meta.json` naming its system and who anonymised it) and the anonymisation procedure in `integrations/claude-extraction.md`.
+
+Left, and all of it waits on the live run or on Kevin: the tripwire test that fails while `source` is `bootstrap` (it lands with the live answers, so it arrives green rather than red), the real samples themselves, whatever prompt fixes the live scores call for, and the measured cost per timesheet.
+
 Done when:
 
 - [ ] `tests/evals/thresholds.json` says `"source": "live"` and CI fails if it does not.
