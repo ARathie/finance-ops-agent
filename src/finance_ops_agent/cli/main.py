@@ -24,10 +24,13 @@ from finance_ops_agent.ports.accounting import AccountingSystem
 from finance_ops_agent.ports.store import Store
 
 if TYPE_CHECKING:
+    from finance_ops_agent.adapters.claude.reader import ClaudeReader as ClaudeReaderType
     from finance_ops_agent.adapters.email.client import MailAccount
     from finance_ops_agent.adapters.email.sender import SmtpSender
+    from finance_ops_agent.application.eval_runner import UsageReport
     from finance_ops_agent.cli.doctor import Check
     from finance_ops_agent.config import Config, MailSettings
+    from finance_ops_agent.ports.reader import TokenUsage
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -125,6 +128,18 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="call the real model (costs money; needs ANTHROPIC_API_KEY)"
         " and overwrite each case's recorded.json",
+    )
+    evaluate.add_argument(
+        "--price-input",
+        type=int,
+        default=None,
+        help="cents per million input tokens, if the built-in price is stale",
+    )
+    evaluate.add_argument(
+        "--price-output",
+        type=int,
+        default=None,
+        help="cents per million output tokens, if the built-in price is stale",
     )
 
     return parser
@@ -605,6 +620,24 @@ def _stamp_live_thresholds(path: Path, model: str, prompt_version: str) -> None:
 _LIVE_PROVENANCE_FIELDS = ("source", "model", "prompt_version", "recorded_on")
 
 
+def _usage_report(
+    usage: "TokenUsage", cases: int, model: str, args: argparse.Namespace
+) -> "UsageReport":
+    """What the live run spent. Overridden prices beat the built-in table."""
+    from finance_ops_agent.application.eval_runner import MODEL_PRICES, ModelPrices, UsageReport
+
+    prices = MODEL_PRICES.get(model)
+    if args.price_input is not None and args.price_output is not None:
+        # Cache rates follow input: 1.25x to write, 0.1x to read.
+        prices = ModelPrices(
+            input_cents_per_million=args.price_input,
+            output_cents_per_million=args.price_output,
+            cache_write_cents_per_million=args.price_input * 125 // 100,
+            cache_read_cents_per_million=args.price_input // 10,
+        )
+    return UsageReport(usage=usage, cases=cases, prices=prices, model=model)
+
+
 def _command_eval(args: argparse.Namespace) -> int:
     from finance_ops_agent.application.eval_runner import (
         BOOTSTRAP_WARNING,
@@ -618,6 +651,7 @@ def _command_eval(args: argparse.Namespace) -> int:
     cases = load_cases(args.cases)
     live_model: str | None = None
     live_prompt_version: str | None = None
+    live_reader: ClaudeReaderType | None = None
     if args.live:
         import os
 
@@ -630,6 +664,7 @@ def _command_eval(args: argparse.Namespace) -> int:
             print("Set ANTHROPIC_API_KEY. CI replays recorded.json only.")
             return 2
         live_model, live_prompt_version = reader.model_name, reader.prompt_version
+        live_reader = reader
 
         def read(case: EvalCase) -> TimesheetReading:
             reading = reader.read_timesheet(case.input_path.read_bytes(), case.input_path.name, "")
@@ -647,6 +682,10 @@ def _command_eval(args: argparse.Namespace) -> int:
 
     report = run_eval(cases, read)
     print(report.format())
+
+    if live_reader is not None and live_model is not None:
+        print()
+        print(_usage_report(live_reader.usage, len(cases), live_model, args).format())
 
     if live_model is not None and live_prompt_version is not None:
         _stamp_live_thresholds(args.thresholds, live_model, live_prompt_version)
