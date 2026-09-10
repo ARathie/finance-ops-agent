@@ -12,7 +12,7 @@ from datetime import date, timedelta
 from finance_ops_agent.domain.engagements import Consultant, Engagement
 from finance_ops_agent.domain.periods import BillingPeriod, period_containing
 from finance_ops_agent.domain.reading import ApprovalKind, Confidence, TimesheetReading
-from finance_ops_agent.domain.review import ReviewCode
+from finance_ops_agent.domain.review import REVIEW_MESSAGES, ReviewCode
 
 QUARTER_HOUR_HUNDREDTHS = 25
 FULL_DAY_HUNDREDTHS = 800  # full time is 8 hours per weekday
@@ -173,8 +173,21 @@ def check_hours(reading: TimesheetReading) -> tuple[int | None, list[Finding]]:
     anything wrong with them. The printed total is what gets invoiced."""
     stated = reading.stated_total_hours_hundredths.value
     summed = reading.summed_daily_hundredths()
-    total = stated if stated is not None else summed
+    rows = reading.summed_row_hundredths()
+    straddling = reading.rows_outside_period()
+    # A weekly row running past the period's end holds hours from both periods.
+    # Summing it would overbill, and how it splits is never the model's to
+    # guess (decision 24): the printed total settles it, or Kevin does.
+    row_total = None if straddling else rows
+    total = stated if stated is not None else (summed if summed is not None else row_total)
     if total is None:
+        if straddling:
+            return None, [
+                Finding(
+                    ReviewCode.PART_WEEK_UNCLEAR,
+                    REVIEW_MESSAGES[ReviewCode.PART_WEEK_UNCLEAR],
+                )
+            ]
         return None, [
             Finding(ReviewCode.HOURS_MISSING, "I can't find the hours on this timesheet.")
         ]
@@ -184,6 +197,18 @@ def check_hours(reading: TimesheetReading) -> tuple[int | None, list[Finding]]:
             Finding(
                 ReviewCode.HOURS_DONT_ADD_UP,
                 "The daily hours don't add up to the total.",
+            )
+        )
+    if (
+        stated is not None
+        and rows is not None
+        and not straddling
+        and abs(stated - rows) > QUARTER_HOUR_HUNDREDTHS
+    ):
+        findings.append(
+            Finding(
+                ReviewCode.HOURS_DONT_ADD_UP,
+                "The weekly hours don't add up to the total.",
             )
         )
     entries = reading.daily_entries.value or []

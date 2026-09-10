@@ -12,6 +12,7 @@ def test_codes_match_the_docs() -> None:
         "PERIOD_MISMATCH",
         "HOURS_MISSING",
         "HOURS_DONT_ADD_UP",
+        "PART_WEEK_UNCLEAR",
         "HOURS_UNUSUAL",
         "NO_APPROVAL",
         "NOT_SURE",

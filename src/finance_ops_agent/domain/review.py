@@ -18,6 +18,7 @@ class ReviewCode(StrEnum):
     PERIOD_MISMATCH = "PERIOD_MISMATCH"
     HOURS_MISSING = "HOURS_MISSING"
     HOURS_DONT_ADD_UP = "HOURS_DONT_ADD_UP"
+    PART_WEEK_UNCLEAR = "PART_WEEK_UNCLEAR"
     HOURS_UNUSUAL = "HOURS_UNUSUAL"
     NO_APPROVAL = "NO_APPROVAL"
     NOT_SURE = "NOT_SURE"
@@ -48,6 +49,10 @@ REVIEW_MESSAGES: dict[ReviewCode, str] = {
     ),
     ReviewCode.HOURS_MISSING: "I can't find the hours on this timesheet.",
     ReviewCode.HOURS_DONT_ADD_UP: "The daily hours don't add up to the total.",
+    ReviewCode.PART_WEEK_UNCLEAR: (
+        "A week on this timesheet runs past the end of the period I'm billing,"
+        " and nothing on it says how many of that week's hours belong to this period."
+    ),
     ReviewCode.HOURS_UNUSUAL: "The hours look unusually high, or are zero.",
     ReviewCode.NO_APPROVAL: "I can't see that the client approved these hours.",
     ReviewCode.NOT_SURE: "I read this timesheet but I'm not confident about <field>.",
