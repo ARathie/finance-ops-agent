@@ -9,37 +9,21 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
 endobj
 4 0 obj
-<< /Length 843 >>
+<< /Length 602 >>
 stream
 BT /F1 12 Tf 72 760 Td 16 TL
 (TIME REPORT) Tj T*
 (Consultant: Dana Cruz) Tj T*
 (Client: Northwind Bank) Tj T*
 (Period: 2026-06-01 to 2026-06-30) Tj T*
-(2026-06-01  8.00) Tj T*
-(2026-06-02  8.00) Tj T*
-(2026-06-03  8.00) Tj T*
-(2026-06-04  8.00) Tj T*
-(2026-06-05  8.00) Tj T*
-(2026-06-08  8.00) Tj T*
-(2026-06-09  8.00) Tj T*
-(2026-06-10  8.00) Tj T*
-(2026-06-11  8.00) Tj T*
-(2026-06-12  8.00) Tj T*
-(2026-06-15  8.00) Tj T*
-(2026-06-16  8.00) Tj T*
-(2026-06-17  8.00) Tj T*
-(2026-06-18  8.00) Tj T*
-(2026-06-19  8.00) Tj T*
-(2026-06-22  8.00) Tj T*
-(2026-06-23  8.00) Tj T*
-(2026-06-24  8.00) Tj T*
-(2026-06-25  8.00) Tj T*
-(2026-06-26  8.00) Tj T*
-(2026-06-29  8.00) Tj T*
-(2026-06-30  8.00) Tj T*
-(Total: 176.00) Tj T*
-(Approved by Grace Okafor on 2026-06-30) Tj T*
+(Week starts on | Total Hours | State | Time Sheet Approver) Tj T*
+(05/30/2026 | 40.00 | Approved | Grace Okafor) Tj T*
+(06/06/2026 | 40.00 | Approved | Grace Okafor) Tj T*
+(06/13/2026 | 40.00 | Approved | Grace Okafor) Tj T*
+(06/20/2026 | 40.00 | Approved | Grace Okafor) Tj T*
+(06/27/2026 | 40.00 | Approved | Grace Okafor) Tj T*
+(Total: 160.00) Tj T*
+(State: Approved) Tj T*
 (A second consultant, Tom Nakamura, is listed on the same sheet) Tj T*
 ET
 endstream
@@ -54,9 +38,9 @@ xref
 0000000058 00000 n 
 0000000115 00000 n 
 0000000241 00000 n 
-0000001135 00000 n 
+0000000894 00000 n 
 trailer
 << /Size 6 /Root 1 0 R >>
 startxref
-1205
+964
 %%EOF

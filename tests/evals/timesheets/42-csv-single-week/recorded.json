@@ -15,45 +15,31 @@
     "confidence": "low"
   },
   "period_start": {
-    "value": "2026-09-01",
-    "quote": "2026-09-01",
+    "value": "2026-09-05",
+    "quote": "2026-09-05",
     "confidence": "high"
   },
   "period_end": {
-    "value": "2026-09-07",
-    "quote": "2026-09-07",
+    "value": "2026-09-11",
+    "quote": "2026-09-11",
     "confidence": "high"
   },
   "daily_entries": {
-    "value": [
-      {
-        "day": "2026-09-01",
-        "hours_hundredths": 700
-      },
-      {
-        "day": "2026-09-02",
-        "hours_hundredths": 700
-      },
-      {
-        "day": "2026-09-03",
-        "hours_hundredths": 700
-      },
-      {
-        "day": "2026-09-04",
-        "hours_hundredths": 700
-      },
-      {
-        "day": "2026-09-07",
-        "hours_hundredths": 700
-      }
-    ],
-    "quote": "hours per day",
-    "confidence": "high"
-  },
-  "row_entries": {
     "value": [],
     "quote": null,
     "confidence": "low"
+  },
+  "row_entries": {
+    "value": [
+      {
+        "label": "09/05/2026",
+        "first_day": "2026-09-05",
+        "last_day": "2026-09-11",
+        "hours_hundredths": 3500
+      }
+    ],
+    "quote": "hours per week",
+    "confidence": "high"
   },
   "stated_total_hours_hundredths": {
     "value": 3500,
@@ -66,7 +52,7 @@
       "approver": null,
       "approval_date": null
     },
-    "quote": "Status: Approved",
+    "quote": "State: Approved",
     "confidence": "high"
   },
   "unusual_items": []

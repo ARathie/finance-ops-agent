@@ -1,11 +1,6 @@
 Consultant,Dana Cruz
 Client,Northwind Bank
-Period,2026-09-01,2026-09-07
+Period,2026-09-05,2026-09-11
 Date,Hours,Status
-2026-09-01,7.00,Submitted
-2026-09-02,7.00,Submitted
-2026-09-03,7.00,Submitted
-2026-09-04,7.00,Submitted
-2026-09-07,7.00,Submitted
 Total,35.00,
-Status: Approved
+State: Approved

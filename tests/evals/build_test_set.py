@@ -330,6 +330,7 @@ def week_case(
     straddles: bool = True,
     printed_total: bool = True,
     per_week: int = 4000,
+    **overrides: object,
 ) -> Case:
     """A weekly timesheet, the shape Icon actually receives.
 
@@ -353,7 +354,7 @@ def week_case(
     if straddles and not printed_total:
         codes = ["PART_WEEK_UNCLEAR"]
     name = f"w{index:02d}-{fmt}-{consultant.split()[0].lower()}-{month:02d}"
-    return Case(
+    case = Case(
         name=name,
         fmt=fmt,
         consultant=consultant,
@@ -366,6 +367,9 @@ def week_case(
         approval_quote="State: Approved",
         codes=codes,
     )
+    for key, value in overrides.items():
+        setattr(case, key, value)
+    return case
 
 
 def build_cases() -> list[Case]:
@@ -374,7 +378,7 @@ def build_cases() -> list[Case]:
     # Weekly is what Icon actually receives (docs/open-questions.md), so the
     # set is mostly weekly: clean months across formats, with and without a
     # printed total, straddling the month end and not.
-    for index in range(24):
+    for index in range(34):
         cases.append(
             week_case(
                 index,
@@ -384,9 +388,10 @@ def build_cases() -> list[Case]:
                 printed_total=index % 2 == 0,
             )
         )
-    # A handful of daily timesheets remain: some clients may still send them,
-    # and they are the regression net for the daily path.
-    for index in range(12):
+    # A few daily timesheets remain: a client may still send one, and they are
+    # the regression net for the daily path. Icon expects weekly, so they are
+    # deliberately a small minority (docs/open-questions.md).
+    for index in range(4):
         case = month_case(index, formats[index % len(formats)], 1 + index % 8)
         if index % 4 == 0:
             case.approval = Approval(kind=ApprovalKind.APPROVED_STATUS)
@@ -400,7 +405,7 @@ def build_cases() -> list[Case]:
 
     # The awkward conditions from docs/integrations/claude-extraction.md.
     cases.append(
-        month_case(
+        week_case(
             30,
             "pdf",
             8,
@@ -411,7 +416,7 @@ def build_cases() -> list[Case]:
         )
     )
     cases.append(
-        month_case(
+        week_case(
             31,
             "csv",
             8,
@@ -422,6 +427,16 @@ def build_cases() -> list[Case]:
             codes=["NO_APPROVAL"],
         )
     )
+    weekly_mismatch = week_case(
+        44,
+        "pdf",
+        5,
+        name="44-pdf-weekly-hours-dont-add-up",
+        straddles=False,
+    )
+    weekly_mismatch.stated_total = (weekly_mismatch.stated_total or 0) + 400
+    weekly_mismatch.codes = ["HOURS_DONT_ADD_UP"]
+    cases.append(weekly_mismatch)
     mismatch = month_case(32, "xlsx", 7, name="32-xlsx-hours-dont-add-up")
     mismatch.stated_total = (mismatch.stated_total or 0) + 400  # off by four hours
     mismatch.codes = ["HOURS_DONT_ADD_UP"]
@@ -454,7 +469,7 @@ def build_cases() -> list[Case]:
     big_day.codes = ["HOURS_UNUSUAL"]
     cases.append(big_day)
     cases.append(
-        month_case(
+        week_case(
             36,
             "png",
             3,
@@ -464,10 +479,10 @@ def build_cases() -> list[Case]:
         )
     )
     cases.append(
-        month_case(37, "png", 2, name="37-png-readable-photo", confidence=Confidence.MEDIUM)
+        week_case(37, "png", 2, name="37-png-readable-photo", confidence=Confidence.MEDIUM)
     )
     cases.append(
-        month_case(
+        week_case(
             38,
             "csv",
             1,
@@ -476,7 +491,7 @@ def build_cases() -> list[Case]:
         )
     )
     cases.append(
-        month_case(
+        week_case(
             39,
             "xlsx",
             2,
@@ -498,7 +513,7 @@ def build_cases() -> list[Case]:
         )
     )
     cases.append(
-        month_case(
+        week_case(
             41,
             "docx",
             4,
@@ -507,20 +522,20 @@ def build_cases() -> list[Case]:
             approval_quote="Fwd: Looks good, approved - Sam",
         )
     )
-    week = Case(
+    one_week = Case(
         name="42-csv-single-week",
         fmt="csv",
         consultant="Dana Cruz",
         client="Northwind Bank",
-        start=date(2026, 9, 1),
-        end=date(2026, 9, 7),
+        start=date(2026, 9, 5),
+        end=date(2026, 9, 11),
         stated_total=3_500,
-        dailies=weekday_dailies(date(2026, 9, 1), date(2026, 9, 7), 700),
+        weeks=[(date(2026, 9, 5), 3_500)],
         approval=Approval(kind=ApprovalKind.APPROVED_STATUS),
-        approval_quote="Status: Approved",
+        approval_quote="State: Approved",
     )
-    cases.append(week)
-    two_people = month_case(43, "pdf", 6, name="43-pdf-two-consultants")
+    cases.append(one_week)
+    two_people = week_case(43, "pdf", 6, name="43-pdf-two-consultants")
     two_people.confidence = Confidence.LOW
     two_people.unusual = ["A second consultant, Tom Nakamura, is listed on the same sheet"]
     two_people.codes = ["NOT_SURE"]
@@ -549,6 +564,8 @@ def stale_invented_cases(kept: set[str]) -> list[Path]:
 def main() -> None:
     CASES_DIR.mkdir(parents=True, exist_ok=True)
     cases = build_cases()
+    thresholds = json.loads((Path(__file__).parent / "thresholds.json").read_text())
+    bootstrap = thresholds.get("source", "bootstrap") == "bootstrap"
     for case_dir in stale_invented_cases({case.name for case in cases}):
         shutil.rmtree(case_dir)
         print(f"removed stale case {case_dir.name}")
@@ -567,9 +584,10 @@ def main() -> None:
             )
         )
         recorded = case_dir / "recorded.json"
-        if not recorded.exists():
-            # Bootstrap: replaced by the model's real answers on the first
-            # `fops eval --live` run.
+        if bootstrap or not recorded.exists():
+            # Bootstrap: a copy of the expected answer, rewritten whenever the
+            # case changes, until `fops eval --live` writes the model's real
+            # ones. Once it has, they are never overwritten from here.
             recorded.write_text(json.dumps(reading.model_dump(mode="json"), indent=2))
     print(f"{len(cases)} cases in {CASES_DIR}")
 

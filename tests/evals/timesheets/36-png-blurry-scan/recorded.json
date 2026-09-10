@@ -25,116 +25,58 @@
     "confidence": "low"
   },
   "daily_entries": {
-    "value": [
-      {
-        "day": "2026-03-02",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-03-03",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-03-04",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-03-05",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-03-06",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-03-09",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-03-10",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-03-11",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-03-12",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-03-13",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-03-16",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-03-17",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-03-18",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-03-19",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-03-20",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-03-23",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-03-24",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-03-25",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-03-26",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-03-27",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-03-30",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-03-31",
-        "hours_hundredths": 800
-      }
-    ],
-    "quote": "hours per day",
-    "confidence": "low"
-  },
-  "row_entries": {
     "value": [],
     "quote": null,
     "confidence": "low"
   },
+  "row_entries": {
+    "value": [
+      {
+        "label": "02/28/2026",
+        "first_day": "2026-02-28",
+        "last_day": "2026-03-06",
+        "hours_hundredths": 4000
+      },
+      {
+        "label": "03/07/2026",
+        "first_day": "2026-03-07",
+        "last_day": "2026-03-13",
+        "hours_hundredths": 4000
+      },
+      {
+        "label": "03/14/2026",
+        "first_day": "2026-03-14",
+        "last_day": "2026-03-20",
+        "hours_hundredths": 4000
+      },
+      {
+        "label": "03/21/2026",
+        "first_day": "2026-03-21",
+        "last_day": "2026-03-27",
+        "hours_hundredths": 4000
+      },
+      {
+        "label": "03/28/2026",
+        "first_day": "2026-03-28",
+        "last_day": "2026-04-03",
+        "hours_hundredths": 4000
+      }
+    ],
+    "quote": "hours per week",
+    "confidence": "low"
+  },
   "stated_total_hours_hundredths": {
-    "value": 17600,
-    "quote": "Total: 176.00",
+    "value": 16000,
+    "quote": "Total: 160.00",
     "confidence": "low"
   },
   "approval": {
     "value": {
-      "kind": "approver_name_date",
+      "kind": "approved_status",
       "approver": "Jane Doe",
-      "approval_date": "2026-03-31"
+      "approval_date": null
     },
-    "quote": "Approved by Jane Doe on 2026-03-31",
+    "quote": "State: Approved",
     "confidence": "low"
   },
   "unusual_items": []

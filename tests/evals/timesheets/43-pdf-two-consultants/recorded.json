@@ -25,116 +25,58 @@
     "confidence": "low"
   },
   "daily_entries": {
-    "value": [
-      {
-        "day": "2026-06-01",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-06-02",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-06-03",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-06-04",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-06-05",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-06-08",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-06-09",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-06-10",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-06-11",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-06-12",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-06-15",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-06-16",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-06-17",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-06-18",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-06-19",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-06-22",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-06-23",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-06-24",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-06-25",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-06-26",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-06-29",
-        "hours_hundredths": 800
-      },
-      {
-        "day": "2026-06-30",
-        "hours_hundredths": 800
-      }
-    ],
-    "quote": "hours per day",
-    "confidence": "low"
-  },
-  "row_entries": {
     "value": [],
     "quote": null,
     "confidence": "low"
   },
+  "row_entries": {
+    "value": [
+      {
+        "label": "05/30/2026",
+        "first_day": "2026-05-30",
+        "last_day": "2026-06-05",
+        "hours_hundredths": 4000
+      },
+      {
+        "label": "06/06/2026",
+        "first_day": "2026-06-06",
+        "last_day": "2026-06-12",
+        "hours_hundredths": 4000
+      },
+      {
+        "label": "06/13/2026",
+        "first_day": "2026-06-13",
+        "last_day": "2026-06-19",
+        "hours_hundredths": 4000
+      },
+      {
+        "label": "06/20/2026",
+        "first_day": "2026-06-20",
+        "last_day": "2026-06-26",
+        "hours_hundredths": 4000
+      },
+      {
+        "label": "06/27/2026",
+        "first_day": "2026-06-27",
+        "last_day": "2026-07-03",
+        "hours_hundredths": 4000
+      }
+    ],
+    "quote": "hours per week",
+    "confidence": "low"
+  },
   "stated_total_hours_hundredths": {
-    "value": 17600,
-    "quote": "Total: 176.00",
+    "value": 16000,
+    "quote": "Total: 160.00",
     "confidence": "low"
   },
   "approval": {
     "value": {
-      "kind": "approver_name_date",
+      "kind": "approved_status",
       "approver": "Grace Okafor",
-      "approval_date": "2026-06-30"
+      "approval_date": null
     },
-    "quote": "Approved by Grace Okafor on 2026-06-30",
+    "quote": "State: Approved",
     "confidence": "low"
   },
   "unusual_items": [

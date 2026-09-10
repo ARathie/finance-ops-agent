@@ -14,8 +14,20 @@ from finance_ops_agent.ports.reader import CantReadAttachmentError
 FIXTURES = Path(__file__).parent.parent / "evals" / "timesheets"
 
 
+def a_case_with(suffix: str) -> bytes:
+    """Any generated case of this format.
+
+    Named cases used to be hard-coded here, which quietly tied these tests to
+    whichever cases `build_test_set.py` happened to produce: rebalancing the
+    set broke them. What matters is the format, not which case supplies it.
+    """
+    found = sorted(FIXTURES.glob(f"*/input{suffix}"))
+    assert found, f"the test set has no {suffix} case"
+    return found[0].read_bytes()
+
+
 def test_pdf_becomes_a_document_block() -> None:
-    content = (FIXTURES / "30-pdf-unapproved" / "input.pdf").read_bytes()
+    content = a_case_with(".pdf")
     [block] = to_content_blocks(content, "timesheet.pdf")
     assert block["type"] == "document"
     source = block["source"]
@@ -26,7 +38,7 @@ def test_pdf_becomes_a_document_block() -> None:
 
 def test_oversized_pdf_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("finance_ops_agent.adapters.claude.attachments.MAX_PDF_BYTES", 100)
-    content = (FIXTURES / "30-pdf-unapproved" / "input.pdf").read_bytes()
+    content = a_case_with(".pdf")
     with pytest.raises(CantReadAttachmentError):
         to_content_blocks(content, "huge.pdf")
 
@@ -67,16 +79,28 @@ def test_csv_rows_are_capped(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "row2" in text and "row9" not in text and "limit reached" in text
 
 
+CONSULTANTS_IN_THE_SET = [
+    "Priya Shah",
+    "Dana Cruz",
+    "Marcus Webb",
+    "Elena Petrov",
+    "Tom Nakamura",
+    "Aisha Bell",
+]
+
+
 def test_xlsx_becomes_text() -> None:
-    content = (FIXTURES / "01-xlsx-dana-02" / "input.xlsx").read_bytes()
+    content = a_case_with(".xlsx")
     [block] = to_content_blocks(content, "timesheet.xlsx")
-    assert "Dana Cruz" in str(block["text"])
+    text = str(block["text"])
+    assert any(name in text for name in CONSULTANTS_IN_THE_SET), text[:200]
 
 
 def test_docx_becomes_text() -> None:
-    content = (FIXTURES / "04-docx-tom-05" / "input.docx").read_bytes()
+    content = a_case_with(".docx")
     [block] = to_content_blocks(content, "timesheet.docx")
-    assert "Tom Nakamura" in str(block["text"])
+    text = str(block["text"])
+    assert any(name in text for name in CONSULTANTS_IN_THE_SET), text[:200]
 
 
 @pytest.mark.parametrize("filename", ["archive.zip", "notes.txt", "no-extension"])

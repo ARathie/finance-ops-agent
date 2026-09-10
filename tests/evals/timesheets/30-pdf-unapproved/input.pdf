@@ -9,35 +9,20 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
 endobj
 4 0 obj
-<< /Length 696 >>
+<< /Length 493 >>
 stream
 BT /F1 12 Tf 72 760 Td 16 TL
 (TIME REPORT) Tj T*
 (Consultant: Priya Shah) Tj T*
 (Client: Acme Corp) Tj T*
 (Period: 2026-08-01 to 2026-08-31) Tj T*
-(2026-08-03  8.00) Tj T*
-(2026-08-04  8.00) Tj T*
-(2026-08-05  8.00) Tj T*
-(2026-08-06  8.00) Tj T*
-(2026-08-07  8.00) Tj T*
-(2026-08-10  8.00) Tj T*
-(2026-08-11  8.00) Tj T*
-(2026-08-12  8.00) Tj T*
-(2026-08-13  8.00) Tj T*
-(2026-08-14  8.00) Tj T*
-(2026-08-17  8.00) Tj T*
-(2026-08-18  8.00) Tj T*
-(2026-08-19  8.00) Tj T*
-(2026-08-20  8.00) Tj T*
-(2026-08-21  8.00) Tj T*
-(2026-08-24  8.00) Tj T*
-(2026-08-25  8.00) Tj T*
-(2026-08-26  8.00) Tj T*
-(2026-08-27  8.00) Tj T*
-(2026-08-28  8.00) Tj T*
-(2026-08-31  8.00) Tj T*
-(Total: 168.00) Tj T*
+(Week starts on | Total Hours | State | Time Sheet Approver) Tj T*
+(08/01/2026 | 40.00 | Approved | the client) Tj T*
+(08/08/2026 | 40.00 | Approved | the client) Tj T*
+(08/15/2026 | 40.00 | Approved | the client) Tj T*
+(08/22/2026 | 40.00 | Approved | the client) Tj T*
+(08/29/2026 | 40.00 | Approved | the client) Tj T*
+(Total: 200.00) Tj T*
 ET
 endstream
 endobj
@@ -51,9 +36,9 @@ xref
 0000000058 00000 n 
 0000000115 00000 n 
 0000000241 00000 n 
-0000000988 00000 n 
+0000000785 00000 n 
 trailer
 << /Size 6 /Root 1 0 R >>
 startxref
-1058
+855
 %%EOF
