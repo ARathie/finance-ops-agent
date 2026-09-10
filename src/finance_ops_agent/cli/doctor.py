@@ -177,3 +177,43 @@ def check_quickbooks_customers(accounting: object, wanted: Callable[[], list[str
         return f"all {len(names)} client name(s) exist in QuickBooks"
 
     return _run(name, run)
+
+
+# The agent's credentials arrive as ordinary environment variables, from `.env`
+# via launchd, `env_file`, or systemd (docs/running-it.md). The Anthropic SDK
+# reads either of these names itself.
+CLAUDE_CREDENTIAL_NAMES = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
+
+
+def _describe_claude_model(model: str) -> str:
+    """Ask the API to describe the configured model.
+
+    This proves the credentials work and that `FOPS_MODEL` names a model the
+    account may use. It reads no timesheet and spends no tokens.
+    """
+    import os
+
+    import anthropic
+
+    if not any(os.environ.get(name, "").strip() for name in CLAUDE_CREDENTIAL_NAMES):
+        raise RuntimeError(
+            "ANTHROPIC_API_KEY is not set; put it in .env next to the MAIL_ settings"
+        )
+    try:
+        found = anthropic.Anthropic().models.retrieve(model)
+    except anthropic.AuthenticationError as error:
+        raise RuntimeError(
+            "the key was refused; check ANTHROPIC_API_KEY in .env, or make a new"
+            " key at console.anthropic.com"
+        ) from error
+    except anthropic.NotFoundError as error:
+        raise RuntimeError(
+            f"this account cannot use {model!r}; check FOPS_MODEL in .env"
+        ) from error
+    return f"{found.display_name} ({model}) answers; timesheets can be read"
+
+
+def check_claude_api(model: str, describe: Callable[[str], str] | None = None) -> Check:
+    """The credentials that read timesheets (docs/integrations/claude-extraction.md)."""
+    ask = describe or _describe_claude_model
+    return _run("claude api", lambda: ask(model))

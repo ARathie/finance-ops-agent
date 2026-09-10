@@ -13,6 +13,9 @@ REQUIRED = (
     "MAIL_PASSWORD",
     "FOPS_MODE",
     "FOPS_DATA_DIR",
+    # Cleared so the claude check stops before it would reach the network.
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
 )
 
 
@@ -46,6 +49,9 @@ def test_doctor_names_the_mailbox_settings_it_still_needs(
     # It got far enough to check the settings and the engagement list.
     assert "mode dry_run" in out
     assert "engagement list" in out
+    # And it says the timesheet reader has no key, rather than staying quiet.
+    assert "claude api" in out
+    assert "ANTHROPIC_API_KEY is not set" in out
     # And it never claims to have sent anything.
     assert "Nothing was sent to a client." in out
 

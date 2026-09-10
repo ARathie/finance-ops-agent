@@ -367,6 +367,7 @@ def _command_doctor(args: argparse.Namespace) -> int:
         return f"{len(store.list_items())} item(s) in {config.data_dir / 'agent.db'}"
 
     results.append(checks.check_database(describe_database))
+    results.append(checks.check_claude_api(config.model))
 
     try:
         mail = MailSettings.from_env()
@@ -622,10 +623,12 @@ def _command_eval(args: argparse.Namespace) -> int:
 
         from finance_ops_agent.adapters.claude.reader import ClaudeReader
 
-        if not os.environ.get("ANTHROPIC_API_KEY"):
-            print("The live run needs ANTHROPIC_API_KEY. CI replays recorded.json only.")
+        try:
+            reader = ClaudeReader(model=os.environ.get("FOPS_MODEL", "claude-opus-5"))
+        except Exception as error:
+            print(f"The live run needs Claude credentials: {error}")
+            print("Set ANTHROPIC_API_KEY. CI replays recorded.json only.")
             return 2
-        reader = ClaudeReader(model=os.environ.get("FOPS_MODEL", "claude-opus-5"))
         live_model, live_prompt_version = reader.model_name, reader.prompt_version
 
         def read(case: EvalCase) -> TimesheetReading:

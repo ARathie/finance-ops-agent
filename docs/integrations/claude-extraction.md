@@ -37,6 +37,12 @@ Input: Kevin's reply text and the review reasons that were asked. Output (struct
 
 Prompts live in `adapters/claude/prompts/` as versioned files (`timesheet_v3.md`). The version string is stored with every reading. Changing a prompt or the model requires running the test set and keeping the scores at or above the recorded thresholds.
 
+## The key
+
+The agent authenticates with an ordinary Anthropic API key in `ANTHROPIC_API_KEY`, set in `.env` beside the `MAIL_*` settings. Nothing in the code reads the key: it is an environment variable, and the SDK picks it up when the reader builds its client. `.env` reaches the process the same way every other setting does (`running-it.md`): `EnvironmentVariables` under launchd on the Mac, `env_file` in `docker-compose.yml`, `EnvironmentFile` under systemd. It is never committed, never in the image, and never in a log.
+
+`uv run fops doctor` proves it. The `claude api` check asks the API to describe the model named in `FOPS_MODEL`, which reads no timesheet and spends no tokens, and fails with the thing to fix: no key set, a key that was refused, or a model this account cannot use. With no key set it says so without making a call, so the check is safe to run anywhere.
+
 ## Test set
 
 `tests/evals/timesheets/<case>/` holds a made-up timesheet (`input.pdf|xlsx|csv|png|docx`), `expected.json` (the correct reading and the review codes the document-only checks — hours, approval, confidence — should raise), and `recorded.json` (the reader's saved answer). The set has 44 cases across layouts (day-by-day exports, spreadsheets, rendered scans, summary-only sheets, forwarded approvals) and conditions (unapproved, hours that don't add up, zero and implausible hours, missing hours, low-confidence scans, overtime and expense lines, two consultants in one file); `tests/evals/build_test_set.py` regenerates it deterministically.
