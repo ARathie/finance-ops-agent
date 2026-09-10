@@ -126,9 +126,9 @@ Done when:
 
 - [ ] `tests/evals/thresholds.json` says `"source": "live"` and CI fails if it does not.
 - [ ] CI replays the live-recorded answers and the scores meet the thresholds.
-- [ ] At least one case per client time system Icon actually uses (see `open-questions.md`) is in the set, anonymised, and a test lists them.
+- [x] At least one case per client time system Icon actually uses (see `open-questions.md`) is in the set, anonymised, and a test lists them. Icon usually will not know the product's name, so a format is named for the pairing that sends it; `time_systems.json` requires both formats seen so far and `test_time_systems.py` lists them.
 - [ ] **Needs a person:** an `ANTHROPIC_API_KEY` is provided and `uv run fops eval --live` is run (it costs a few dollars); the recorded answers it writes are committed.
-- [ ] **Needs a person:** Kevin supplies at least one real timesheet per client system with names and rates changed; the person running this confirms nothing identifying remains before committing.
+- [x] **Needs a person:** Kevin supplies at least one real timesheet per client system with names and rates changed; the person running this confirms nothing identifying remains before committing. Done differently and better: the samples are real exports and a real vendor invoice carrying invented data throughout, so nothing identifying was ever in them (`origin: real_format_invented_data`).
 - [ ] **Needs a person:** someone reads the live scores and decides they are good enough to go to PR 13. The bar to argue for: hours and approval read correctly on every real sample, or wrong in a way the checks catch as a review. The decision and the numbers are recorded in `integrations/claude-extraction.md`.
 
 ## PR 13 — The first real-life test: one billing cycle in dry run, on a Mac

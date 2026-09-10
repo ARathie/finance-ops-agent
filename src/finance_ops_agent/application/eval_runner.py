@@ -47,15 +47,28 @@ class CaseMeta(BaseModel):
 
     `time_system` is the client time system the timesheet was produced by, so
     the set can be checked for a case per system Icon actually bills through
-    (docs/roadmap.md PR 12). A case taken from a real timesheet must say who
-    anonymised it and when: that record is the only evidence anyone confirmed
-    nothing identifying was left in it before it was committed.
+    (docs/roadmap.md PR 12). Icon often will not know the product's name --
+    every client and consultant may use a different one -- so the label names
+    the pairing whose format repeats month after month, not a product.
+
+    Three origins, because the samples differ in what they prove and in what
+    care they need:
+
+    - `invented`: made up entirely, layout included. Proves the reader on a
+      shape nobody has ever received.
+    - `real_format_invented_data`: a genuine export or document from a real
+      system, carrying invented names, rates and hours. Proves the reader on a
+      layout Icon actually receives, and needs no anonymising because nothing
+      in it was ever real.
+    - `anonymised_real`: a real document with the identifying details replaced.
+      Must record who checked it and when: that record is the only evidence
+      anyone confirmed nothing identifying was left before it was committed.
     """
 
     model_config = ConfigDict(frozen=True)
 
     time_system: str = INVENTED
-    origin: Literal["invented", "anonymised_real"] = "invented"
+    origin: Literal["invented", "real_format_invented_data", "anonymised_real"] = "invented"
     anonymised_by: str | None = None
     anonymised_on: date | None = None
     notes: str | None = None
@@ -74,7 +87,12 @@ class CaseMeta(BaseModel):
         return self
 
     def is_real(self) -> bool:
+        """Was this taken from a document someone really received?"""
         return self.origin == "anonymised_real"
+
+    def is_real_format(self) -> bool:
+        """Does this prove the reader on a layout Icon actually receives?"""
+        return self.origin in ("anonymised_real", "real_format_invented_data")
 
 
 @dataclass(frozen=True)

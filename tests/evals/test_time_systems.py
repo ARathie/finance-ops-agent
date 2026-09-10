@@ -79,3 +79,29 @@ def test_a_made_up_case_needs_no_paperwork() -> None:
     meta = CaseMeta()
     assert meta.time_system == INVENTED
     assert not meta.is_real()
+
+
+def test_the_real_format_samples_are_in_the_set() -> None:
+    """The formats Icon actually receives, and what each one alone can prove."""
+    by_name = {case.name: case for case in load_cases(CASES_DIR)}
+    real = {name: case for name, case in by_name.items() if case.meta.is_real_format()}
+    assert len(real) == 4, sorted(real)
+
+    # A timesheet alone: approved, but a week runs past the month end.
+    timesheet = by_name["45-pdf-mastec-timesheet-jul"]
+    assert "PART_WEEK_UNCLEAR" in timesheet.expected.review_codes
+    assert "NO_APPROVAL" not in timesheet.expected.review_codes
+
+    # The vendor's invoice alone: a printed total, but nothing shows approval.
+    invoice = by_name["47-pdf-startech-invoice-jul"]
+    assert "NO_APPROVAL" in invoice.expected.review_codes
+    assert "PART_WEEK_UNCLEAR" not in invoice.expected.review_codes
+    assert invoice.expected.reading.stated_total_hours_hundredths.value == 17600
+
+
+def test_a_real_format_sample_needs_no_anonymising_paperwork() -> None:
+    """Nothing in it was ever real, so there was nothing to check it for."""
+    for case in load_cases(CASES_DIR):
+        if case.meta.origin == "real_format_invented_data":
+            assert case.meta.anonymised_by is None, case.name
+            assert case.meta.time_system != INVENTED, case.name

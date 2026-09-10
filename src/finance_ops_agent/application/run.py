@@ -355,24 +355,37 @@ def _process_timesheet(
         _enqueue_review_email(deps, message.message_id, None, [finding], None, None)
         return NEEDS_REVIEW_FOLDER
     attachment = message.attachments[0]
-    if deps.store.timesheet_seen(attachment.sha256):
+    if all(deps.store.timesheet_seen(part.sha256) for part in message.attachments):
         report.duplicates_filed += 1
         report.note(f"duplicate filed quietly: {attachment.filename} from {message.from_address}")
         return IGNORED_FOLDER
-    content = deps.store.load_file(attachment.sha256)
-    try:
-        hints = ReadingHints(
-            email_subject=message.subject,
-            consultant_names=[consultant.name for consultant in workbook.consultants],
-            client_names=[client.name for client in workbook.clients],
-        )
-        reading = deps.reader.read_timesheet(
-            content, attachment.filename, attachment.mime_type, hints
-        )
-    except CantReadAttachmentError:
+    hints = ReadingHints(
+        email_subject=message.subject,
+        consultant_names=[consultant.name for consultant in workbook.consultants],
+        client_names=[client.name for client in workbook.clients],
+    )
+    # Every attachment is read, not just the first: a consultant working
+    # through their own firm sends the approved timesheet and the firm's
+    # invoice for the same hours in one email (decision 24).
+    readings: list[TimesheetReading] = []
+    read_attachments: list[StoredAttachment] = []
+    unreadable: list[str] = []
+    for part in message.attachments:
+        try:
+            readings.append(
+                deps.reader.read_timesheet(
+                    deps.store.load_file(part.sha256), part.filename, part.mime_type, hints
+                )
+            )
+        except CantReadAttachmentError:
+            unreadable.append(part.filename)
+            continue
+        read_attachments.append(part)
+    if not readings:
+        names = ", ".join(unreadable) or attachment.filename
         finding = Finding(
             ReviewCode.CANT_READ_ATTACHMENT,
-            f'I couldn\'t read the attachment {attachment.filename} ("{message.subject}").',
+            f'I couldn\'t read the attachment {names} ("{message.subject}").',
         )
         _open_review(deps, report, None, finding)
         _enqueue_review_email(
@@ -384,9 +397,12 @@ def _process_timesheet(
             EmailAttachment(attachment.filename, attachment.sha256),
         )
         return NEEDS_REVIEW_FOLDER
+    # The attachment the item is filed under is the one the reading came from.
+    attachment = read_attachments[0]
+    reading, combine_findings = checks.combine_readings(readings)
     report.timesheets_processed += 1
 
-    findings: list[Finding] = []
+    findings: list[Finding] = list(combine_findings)
     consultant, consultant_findings = checks.match_consultant(
         message.from_address, reading, workbook.consultants
     )

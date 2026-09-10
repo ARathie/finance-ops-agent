@@ -1,4 +1,7 @@
 {
-  "_comment": "The client time systems Icon actually bills through, and so the systems the test set must cover (docs/roadmap.md PR 12). Kevin has not answered which they are yet - the question is open in docs/open-questions.md - so the list is empty and every case in the set is made-up. Add a system here as soon as it is known: the test set then has to carry at least one anonymised real timesheet from it, or CI fails. A case says which system it came from in its own meta.json.",
-  "required": []
+  "_comment": "The document formats Icon actually bills through, and so the formats the test set must cover (docs/roadmap.md PR 12). Icon usually will not know the product's name - every client and consultant may use a different system - so a format is named for the pairing that sends it, which is what repeats month after month (docs/open-questions.md). Adding one here without adding a case fails the coverage test rather than being noticed after the first live cycle.",
+  "required": [
+    "MasTec weekly timesheet list (client system, name unknown)",
+    "Star Tech Services vendor invoice (weekly lines)"
+  ]
 }
