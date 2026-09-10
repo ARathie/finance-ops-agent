@@ -2,18 +2,75 @@
 
 The names and defaults are the ones in docs/technical-design.md. Nothing here
 reads a rate or a contact: those come only from the engagement list.
+
+In production the settings arrive as real environment variables: launchd's
+`EnvironmentVariables`, `env_file` in docker-compose, systemd's
+`EnvironmentFile` (docs/running-it.md). Run by hand, nothing would have put
+them there, so `load_env_file` reads `.env` from the folder the command runs
+in. A variable already in the environment always wins, so `FOPS_MODE=dry_run
+fops run` still overrides the file, and a container's own settings are never
+replaced by a stray `.env`.
 """
 
 import os
+from collections.abc import MutableMapping
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
 from finance_ops_agent.application.context import Mode
 
+ENV_FILE = ".env"
+
 
 class MissingSettingError(Exception):
     """A setting the agent cannot run without is not set."""
+
+
+def parse_env_file(text: str) -> dict[str, str]:
+    """The `.env` format described in `.env.example`.
+
+    Blank lines and `#` comments are skipped, an `export ` prefix is allowed,
+    and a value wrapped in a matching pair of quotes keeps everything inside
+    them (including a `#`). In an unquoted value a `#` that follows whitespace
+    starts a comment; one inside the text, as in a password, does not.
+    """
+    settings: dict[str, str] = {}
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        name, _, value = stripped.partition("=")
+        name = name.removeprefix("export ").strip()
+        if not name:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+        else:
+            for marker in (" #", "\t#"):
+                cut = value.find(marker)
+                if cut != -1:
+                    value = value[:cut].rstrip()
+        settings[name] = value
+    return settings
+
+
+def load_env_file(path: Path, environ: MutableMapping[str, str] | None = None) -> list[str]:
+    """Put a `.env` file's settings into the environment, and say which.
+
+    A name already set in the environment is left alone: the file fills gaps,
+    it never overrides what the machine or the command line already said.
+    """
+    target = os.environ if environ is None else environ
+    if not path.is_file():
+        return []
+    loaded = []
+    for name, value in parse_env_file(path.read_text()).items():
+        if name not in target:
+            target[name] = value
+            loaded.append(name)
+    return loaded
 
 
 def _required(name: str) -> str:

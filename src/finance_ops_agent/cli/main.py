@@ -350,15 +350,29 @@ def _command_doctor(args: argparse.Namespace) -> int:
     from finance_ops_agent.adapters.excel.engagement_list import ExcelEngagementList
     from finance_ops_agent.cli import doctor as checks
     from finance_ops_agent.cli.doctor import Check, CheckResult
-    from finance_ops_agent.config import Config, MailSettings, MissingSettingError
+    from finance_ops_agent.config import ENV_FILE, Config, MailSettings, MissingSettingError
     from finance_ops_agent.domain.engagements import parse_workbook
     from finance_ops_agent.ports.inbox import IGNORED_FOLDER, NEEDS_REVIEW_FOLDER, PROCESSED_FOLDER
 
     results: list[Check] = []
+    env_path = Path(ENV_FILE)
+    if env_path.is_file():
+        results.append(Check("settings file", CheckResult.PASS, f"read {env_path.resolve()}"))
+    else:
+        results.append(
+            Check(
+                "settings file",
+                CheckResult.SKIP,
+                f"no {ENV_FILE} in {Path.cwd()};"
+                " settings have to come from the environment instead",
+            )
+        )
     try:
         config = Config.from_env()
     except MissingSettingError as error:
-        print(Check("settings", CheckResult.FAIL, str(error)).line())
+        results.append(Check("settings", CheckResult.FAIL, str(error)))
+        for check in results:
+            print(check.line())
         return 1
     results.append(
         Check(
@@ -702,8 +716,13 @@ def _command_eval(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from finance_ops_agent.config import ENV_FILE, load_env_file
+
     parser = build_parser()
     args = parser.parse_args(argv)
+    # Run by hand there is nothing to put the settings in the environment, so
+    # read .env from the folder we are in first (docs/running-it.md).
+    load_env_file(Path(ENV_FILE))
     if args.command == "dry-run":
         return _command_dry_run(args)
     if args.command == "status":

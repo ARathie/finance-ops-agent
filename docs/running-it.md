@@ -23,6 +23,8 @@ Both stages need the same two things on the machine that will run the agent: the
 
 The code comes from GitHub and is the same everywhere. **`.env` never does.** It is made by hand on each machine, it holds the mailbox password and the Anthropic key, and it is never committed: the repository is public, and `.gitignore` refuses to upload it. What is committed is `.env.example`, the blank template with every setting listed and every secret left empty, so copying it is always the first move.
 
+Every `fops` command reads `.env` from the folder it runs in, so copying the template and filling it in is all that is needed to run one by hand. Anything already set in the environment wins over the file, which is what lets launchd, `env_file`, and systemd supply the settings in the two stages below, and what keeps `FOPS_MODE=dry_run fops run` working as an override.
+
 So the key lives in as many places as there are machines running the agent, and nowhere else. Today that is the Mac; from stage 2 it is the server; while both run, each has its own copy. Rotating the key means changing it in each `.env` and restarting.
 
 On a Mac, starting from nothing:
