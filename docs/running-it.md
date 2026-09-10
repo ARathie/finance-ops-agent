@@ -17,6 +17,37 @@ The schedule is **every 15 minutes**. Two runs can never overlap: each run takes
 
 The mode comes from `FOPS_MODE` in `.env`. **`dry_run` is the stop button.** While it is set to `dry_run`, nothing can be sent to a client and nothing can be created in QuickBooks, not even with a command-line flag asking for it. To stop the agent acting, set `FOPS_MODE=dry_run` and the next run is harmless; you do not have to uninstall anything.
 
+## Getting it onto a machine
+
+Both stages need the same two things on the machine that will run the agent: the code, and a `.env` file holding the settings and the passwords.
+
+The code comes from GitHub and is the same everywhere. **`.env` never does.** It is made by hand on each machine, it holds the mailbox password and the Anthropic key, and it is never committed: the repository is public, and `.gitignore` refuses to upload it. What is committed is `.env.example`, the blank template with every setting listed and every secret left empty, so copying it is always the first move.
+
+So the key lives in as many places as there are machines running the agent, and nowhere else. Today that is the Mac; from stage 2 it is the server; while both run, each has its own copy. Rotating the key means changing it in each `.env` and restarting.
+
+On a Mac, starting from nothing:
+
+```
+# 1. The tools: Homebrew, then git and uv.
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+brew install git uv
+
+# 2. The code.
+git clone https://github.com/ARathie/finance-ops-agent
+cd finance-ops-agent
+uv sync
+
+# 3. The settings, including the key.
+cp .env.example .env
+chmod 600 .env    # only this user can read it
+open -e .env      # fill in ANTHROPIC_API_KEY and the rest, save, close
+
+# 4. Prove it.
+uv run fops doctor
+```
+
+`fops doctor` prints one line per check, names anything still missing, and sends nothing to anybody. `ok claude api: ... answers` means the key works. On the server it is the same idea with Docker instead of `uv`; stage 2 below has the commands.
+
 ## Stage 1 — the real-life test on a Mac (temporary)
 
 ### The first cycle, step by step
