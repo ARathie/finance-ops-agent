@@ -582,8 +582,31 @@ def _command_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _stamp_live_thresholds(path: Path, model: str, prompt_version: str) -> None:
+    """Record which model and prompt wrote the answers now in `recorded.json`.
+
+    The threshold numbers themselves are not touched: a person reads the live
+    scores and decides what the floor should be (docs/roadmap.md PR 12).
+    """
+    from finance_ops_agent.application.eval_runner import Thresholds, stamp_live_provenance
+
+    raw = json.loads(path.read_text())
+    stamped = stamp_live_provenance(
+        Thresholds.model_validate(raw),
+        model=model,
+        prompt_version=prompt_version,
+        recorded_on=date.today(),
+    )
+    raw.update(json.loads(stamped.model_dump_json(include=set(_LIVE_PROVENANCE_FIELDS))))
+    path.write_text(json.dumps(raw, indent=2) + "\n")
+
+
+_LIVE_PROVENANCE_FIELDS = ("source", "model", "prompt_version", "recorded_on")
+
+
 def _command_eval(args: argparse.Namespace) -> int:
     from finance_ops_agent.application.eval_runner import (
+        BOOTSTRAP_WARNING,
         EvalCase,
         Thresholds,
         below_thresholds,
@@ -592,6 +615,8 @@ def _command_eval(args: argparse.Namespace) -> int:
     )
 
     cases = load_cases(args.cases)
+    live_model: str | None = None
+    live_prompt_version: str | None = None
     if args.live:
         import os
 
@@ -601,6 +626,7 @@ def _command_eval(args: argparse.Namespace) -> int:
             print("The live run needs ANTHROPIC_API_KEY. CI replays recorded.json only.")
             return 2
         reader = ClaudeReader(model=os.environ.get("FOPS_MODEL", "claude-opus-5"))
+        live_model, live_prompt_version = reader.model_name, reader.prompt_version
 
         def read(case: EvalCase) -> TimesheetReading:
             reading = reader.read_timesheet(case.input_path.read_bytes(), case.input_path.name, "")
@@ -618,7 +644,15 @@ def _command_eval(args: argparse.Namespace) -> int:
 
     report = run_eval(cases, read)
     print(report.format())
+
+    if live_model is not None and live_prompt_version is not None:
+        _stamp_live_thresholds(args.thresholds, live_model, live_prompt_version)
+        print(f"\nRecorded answers are now the model's own ({live_model}, {live_prompt_version}).")
+        print("Read the scores above and decide whether they are good enough (roadmap PR 12).")
+
     thresholds = Thresholds.model_validate(json.loads(args.thresholds.read_text()))
+    if thresholds.proves_the_harness_only():
+        print(f"\nWARNING: {BOOTSTRAP_WARNING}")
     problems = below_thresholds(report, thresholds)
     for problem in problems:
         print(f"BELOW THRESHOLD: {problem}")

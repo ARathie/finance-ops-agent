@@ -11,9 +11,11 @@ review codes. All arithmetic is integer; the report only formats.
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from finance_ops_agent.domain import checks
 from finance_ops_agent.domain.reading import ApprovalKind, TimesheetReading
@@ -160,13 +162,68 @@ def run_eval(cases: list[EvalCase], read: Callable[[EvalCase], TimesheetReading]
 
 
 class Thresholds(BaseModel):
-    """The recorded floor the reader must stay at or above (docs/roadmap.md PR 6)."""
+    """The recorded floor the reader must stay at or above (docs/roadmap.md PR 6).
 
-    model_config = ConfigDict(frozen=True)
+    `source` says where the recorded answers the floor was set from came from.
+    `bootstrap` means every `recorded.json` is a copy of its `expected.json`, so
+    the scores are perfect by construction and prove the harness, not the
+    reading. `live` means a real `fops eval --live` wrote them, and then the
+    model, the prompt version, and the date of that run are recorded with it.
+    """
+
+    # `model` is a field name here, so pydantic's `model_` namespace is released.
+    model_config = ConfigDict(frozen=True, protected_namespaces=())
 
     field_accuracy_percent: dict[str, int]
     mean_hours_error_hundredths_max: int
     codes_accuracy_percent: int
+    source: Literal["bootstrap", "live"] = "bootstrap"
+    model: str | None = None
+    prompt_version: str | None = None
+    recorded_on: date | None = None
+
+    @model_validator(mode="after")
+    def _live_answers_say_where_they_came_from(self) -> "Thresholds":
+        if self.source != "live":
+            return self
+        missing = [
+            name
+            for name in ("model", "prompt_version", "recorded_on")
+            if getattr(self, name) is None
+        ]
+        if missing:
+            raise ValueError(
+                'thresholds with "source": "live" must also record '
+                + ", ".join(missing)
+                + " (written by `fops eval --live`)"
+            )
+        return self
+
+    def proves_the_harness_only(self) -> bool:
+        """True while the recorded answers are still copies of the expected ones."""
+        return self.source == "bootstrap"
+
+
+BOOTSTRAP_WARNING = (
+    "These scores come from bootstrap recorded answers: every recorded.json is a"
+    " copy of its expected.json, so the numbers prove the harness, not the"
+    " reading. Run `fops eval --live` with a real ANTHROPIC_API_KEY to replace"
+    " them (docs/roadmap.md PR 12)."
+)
+
+
+def stamp_live_provenance(
+    thresholds: Thresholds, model: str, prompt_version: str, recorded_on: date
+) -> Thresholds:
+    """The same floor, marked as measured against a real run of the model."""
+    return thresholds.model_copy(
+        update={
+            "source": "live",
+            "model": model,
+            "prompt_version": prompt_version,
+            "recorded_on": recorded_on,
+        }
+    )
 
 
 def below_thresholds(report: EvalReport, thresholds: Thresholds) -> list[str]:

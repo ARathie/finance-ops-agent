@@ -43,4 +43,13 @@ Prompts live in `adapters/claude/prompts/` as versioned files (`timesheet_v3.md`
 
 `fops eval` runs the set and reports per-field accuracy, mean hours error, and review codes raised versus expected, then compares against the floor recorded in `tests/evals/thresholds.json` (exit code 1 below it). CI replays `recorded.json` only — no network, no key.
 
-**The live run** is manual: `ANTHROPIC_API_KEY=... uv run fops eval --live` calls the real model for every case (this costs money) and overwrites each case's `recorded.json` with the model's actual answers. Until the first live run, `recorded.json` is a bootstrap copy of the expected reading, so the recorded scores are perfect by construction; after the first live run, re-record `thresholds.json` from the real scores, and from then on a prompt or model change must keep the scores at or above them. The Batches API can halve the live run's cost if the set grows large.
+**The live run** is manual: `ANTHROPIC_API_KEY=... uv run fops eval --live` calls the real model for every case (this costs money) and overwrites each case's `recorded.json` with the model's actual answers. The Batches API can halve the live run's cost if the set grows large.
+
+**Where the recorded answers came from.** `thresholds.json` records this in `source`, and `fops eval` prints a warning whenever it still says `bootstrap`:
+
+| `source` | What `recorded.json` holds | What the scores prove |
+|---|---|---|
+| `bootstrap` | A copy of `expected.json`, written when the set was built | The harness only. The scores are perfect by construction and mean nothing about the reading. |
+| `live` | The model's own answers, from `fops eval --live` | The reading, at the `model` and `prompt_version` recorded alongside, on `recorded_on`. |
+
+A live run stamps `source`, `model`, `prompt_version`, and `recorded_on` itself; it never moves the threshold numbers, because a person reads the live scores and decides what the floor should be (roadmap PR 12). From then on a prompt or model change must keep the scores at or above that floor, and a run recorded under an older prompt version fails the test set rather than passing quietly.
