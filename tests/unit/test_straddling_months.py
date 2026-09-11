@@ -24,7 +24,6 @@ from finance_ops_agent.domain.reading import (
     DailyEntry,
     ReadField,
     RowEntry,
-    StatedMonth,
     TimesheetReading,
 )
 from finance_ops_agent.domain.review import ReviewCode
@@ -63,7 +62,7 @@ AUGUST_ROWS = [
 def reading(
     rows: list[RowEntry],
     stated: int | None = None,
-    month: StatedMonth | None = None,
+    month: date | None = None,
     noted: int | None = None,
 ) -> TimesheetReading:
     return TimesheetReading(
@@ -72,7 +71,7 @@ def reading(
         end_client_name=ReadField[str](),
         period_start=ReadField[date](value=rows[0].first_day, confidence=HIGH),
         period_end=ReadField[date](value=rows[-1].last_day, confidence=HIGH),
-        stated_month=ReadField[StatedMonth](value=month, confidence=HIGH),
+        stated_month_start=ReadField[date](value=month, confidence=HIGH),
         noted_in_month_hundredths=ReadField[int](value=noted, confidence=HIGH),
         daily_entries=ReadField[list[DailyEntry]](value=[]),
         row_entries=ReadField[list[RowEntry]](value=rows, confidence=HIGH),
@@ -105,9 +104,7 @@ def engagement() -> Engagement:
 
 class TestWhichMonth:
     def test_a_month_named_on_the_invoice_settles_it(self) -> None:
-        got, findings = fit_billing_period(
-            engagement(), reading(JULY_ROWS, month=StatedMonth(year=2026, month=7))
-        )
+        got, findings = fit_billing_period(engagement(), reading(JULY_ROWS, month=date(2026, 7, 1)))
         assert got == BillingPeriod(date(2026, 7, 1), date(2026, 7, 31))
         assert findings == []
 
@@ -120,7 +117,7 @@ class TestWhichMonth:
     def test_the_weeks_may_overhang_the_month_at_both_ends(self) -> None:
         """The old rule required the span to sit inside one period, which a
         weekly timesheet never does; that is what decision 26 removed."""
-        sheet = reading(JULY_ROWS, month=StatedMonth(year=2026, month=7))
+        sheet = reading(JULY_ROWS, month=date(2026, 7, 1))
         assert sheet.period_start.value == date(2026, 6, 20)
         assert sheet.period_end.value == date(2026, 7, 31)
         got, findings = fit_billing_period(engagement(), sheet)
@@ -135,9 +132,7 @@ class TestWhichMonth:
         assert [f.code for f in findings] == [ReviewCode.PERIOD_UNCLEAR]
 
     def test_a_month_outside_the_engagement_is_a_mismatch(self) -> None:
-        got, findings = fit_billing_period(
-            engagement(), reading(JULY_ROWS, month=StatedMonth(year=2025, month=7))
-        )
+        got, findings = fit_billing_period(engagement(), reading(JULY_ROWS, month=date(2025, 7, 1)))
         assert got is None
         assert [f.code for f in findings] == [ReviewCode.PERIOD_MISMATCH]
 
@@ -148,7 +143,7 @@ class TestHoursForTheMonth:
 
     def test_july_comes_to_the_invoiced_176(self) -> None:
         total, findings = check_hours(
-            reading(JULY_ROWS, stated=17_600, month=StatedMonth(year=2026, month=7), noted=1_600),
+            reading(JULY_ROWS, stated=17_600, month=date(2026, 7, 1), noted=1_600),
             self.JULY,
         )
         assert total == 17_600
@@ -156,7 +151,7 @@ class TestHoursForTheMonth:
 
     def test_august_comes_to_the_invoiced_168(self) -> None:
         total, findings = check_hours(
-            reading(AUGUST_ROWS, stated=16_800, month=StatedMonth(year=2026, month=8), noted=800),
+            reading(AUGUST_ROWS, stated=16_800, month=date(2026, 8, 1), noted=800),
             self.AUGUST,
         )
         assert total == 16_800
@@ -165,14 +160,12 @@ class TestHoursForTheMonth:
     def test_another_months_week_printed_for_context_is_never_billed(self) -> None:
         """June's 06/20 week is on July's sheet. Summing it would bill 40 hours
         that belong to June's invoice."""
-        total, _ = check_hours(
-            reading(JULY_ROWS, month=StatedMonth(year=2026, month=7), noted=1_600), self.JULY
-        )
+        total, _ = check_hours(reading(JULY_ROWS, month=date(2026, 7, 1), noted=1_600), self.JULY)
         assert total == 17_600  # 4 whole July weeks + the note's 16, not 216
 
     def test_a_note_disagreeing_with_the_invoice_asks_kevin(self) -> None:
         total, findings = check_hours(
-            reading(JULY_ROWS, stated=17_600, month=StatedMonth(year=2026, month=7), noted=2_400),
+            reading(JULY_ROWS, stated=17_600, month=date(2026, 7, 1), noted=2_400),
             self.JULY,
         )
         assert [f.code for f in findings] == [ReviewCode.PART_WEEK_DISAGREES]
@@ -185,7 +178,7 @@ class TestHoursForTheMonth:
 
     def test_the_money_the_july_invoice_comes_to(self) -> None:
         total, _ = check_hours(
-            reading(JULY_ROWS, stated=17_600, month=StatedMonth(year=2026, month=7), noted=1_600),
+            reading(JULY_ROWS, stated=17_600, month=date(2026, 7, 1), noted=1_600),
             self.JULY,
         )
         assert total is not None

@@ -155,9 +155,9 @@ def _anchor_day(reading: TimesheetReading) -> date | None:
     spills a few days into a neighbouring month, and those few never outvote
     the month it is for.
     """
-    stated = reading.stated_month.value
+    stated = reading.stated_month_start.value
     if stated is not None:
-        return date(stated.year, stated.month, 15)
+        return stated
     start, end = reading.period_start.value, reading.period_end.value
     if start is None or end is None or end < start:
         return None

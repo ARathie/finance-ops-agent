@@ -382,8 +382,11 @@ def _process_timesheet(
                     deps.store.load_file(part.sha256), part.filename, part.mime_type, hints
                 )
             )
-        except CantReadAttachmentError:
+        except CantReadAttachmentError as error:
             unreadable.append(part.filename)
+            # Why it could not be read is the whole diagnosis, and it is the
+            # reader's own words: never discard it.
+            report.note(f"could not read {part.filename}: {error}")
             continue
         read_attachments.append(part)
     if not readings:
