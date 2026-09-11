@@ -37,6 +37,29 @@ class TestDryRun:
         assert env.the_item().status is ItemStatus.READY
         assert env.store.invoices_for_item(env.the_item().id) == []
 
+    def test_no_address_but_kevins_is_ever_written_to(self, env: ScenarioEnv) -> None:
+        """The guarantee the first cycle rests on: while the mode is dry run,
+        the only person the agent can write to is Kevin. On every path, and on
+        CC as well as To -- the client's address is on the engagement list the
+        whole time and still hears nothing.
+        """
+        clean_timesheet(env)
+        env.add_email("newsletter@conference.example", subject="Speaker invitation")
+        env.run()
+        env.add_email(
+            PRIYA,
+            subject="Corrected timesheet",
+            attachment=("timesheet-v2.pdf", b"PDFDATA2"),
+            scripted_reading=reading(AUG_START, AUG_END, total_hundredths=15_000),
+        )
+        env.run()
+
+        written_to = {
+            address for email in env.sender.sent_emails() for address in (*email.to, *email.cc)
+        }
+        assert written_to == {"kevin@icon-technologies.com"}
+        assert env.sender.sent_emails(), "the run sent nothing, so this proves nothing"
+
     def test_kevin_sees_what_would_be_sent_and_what_is_owed(self, env: ScenarioEnv) -> None:
         clean_timesheet(env)
         env.run()
