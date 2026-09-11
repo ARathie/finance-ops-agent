@@ -144,7 +144,7 @@ The boxes below come in pairs marked **(test)** and **(live)**. The test half ru
 Done when:
 
 - [x] The starter workbook loads through the engagement list reader with zero problems, and a test proves it. `templates/engagements-template.xlsx`, rebuilt by `templates/build_template.py`; `tests/unit/test_engagements_template.py` loads the committed file through the real reader and fails if a column ever drifts from it.
-- [ ] **Needs a person:** Kevin fills the engagement list (every active client, consultant, vendor, engagement, and rate) and answers the timezone question; `fops doctor` shows zero engagement-list problems.
+- [ ] **Needs a person:** Kevin fills the engagement list (every active client, consultant, vendor, engagement, and rate) and answers the timezone question; `fops doctor` shows zero engagement-list problems. For the test cycle a tester's own address may stand in for each client's **Billing email** and **CC email**; `dry_run` already stops anything reaching a client, and this is the second lock. PR 15's first box is where they are put back.
 - [ ] **Needs a person (test):** `FOPS_TIMESHEET_FORWARDERS` is set to the one address that will forward old timesheets in, and `fops doctor` shows it (decision 25). Nobody outside Icon is told anything yet.
 - [ ] **Needs a person (live):** Kevin tells consultants to send timesheets to the agent's address (as well as, or instead of, his own), and `FOPS_TIMESHEET_FORWARDERS` is emptied.
 - [ ] **Needs a person:** the Mac is set up per `running-it.md` stage 1 with `FOPS_MODE=dry_run`, and `fops doctor` passes.
@@ -179,6 +179,7 @@ Code: only fixes for whatever the cycle turns up.
 
 Done when:
 
+- [ ] **Needs a person:** every stand-in address is out of the engagement list. During the test cycles a tester's own address stands in for the client's so that nothing can reach a real client; before this PR each client's **Billing email** and **CC email** must be the real one. Those two columns are the only ones in the workbook that mail ever goes to: every other email the agent writes goes to Kevin. Check this **first**, because `ask_first` is the first mode in which an invoice can leave the building.
 - [ ] **Needs a person:** `FOPS_MODE=ask_first` is set on the server and `fops doctor` reports the mode.
 - [ ] **Needs a person:** the first "approve this invoice?" email is answered, the client receives the billing email with Kevin on CC and both attachments, and Kevin receives the payment instruction.
 - [ ] **Needs a person:** the cycle-2 table in `first-cycle.md` is filled in. Exit rule: zero incorrect invoices sent to a client.
