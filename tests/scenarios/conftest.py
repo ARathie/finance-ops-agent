@@ -159,6 +159,7 @@ class ScenarioEnv:
     today: date = TODAY
     now: datetime | None = None  # None = noon UTC on `today`
     mode: Mode = Mode.DRY_RUN
+    forwarders: tuple[str, ...] = ()
     replies: dict[str, ReplyReading] = field(default_factory=dict)
     _deps: RunDeps | None = field(default=None, repr=False)
 
@@ -197,7 +198,7 @@ class ScenarioEnv:
             reader=FakeReader(self.readings, self.replies),
             store=self.store,
             clock=FakeClock(self.today, self.now),
-            settings=Settings(mode=self.mode),
+            settings=Settings(mode=self.mode, timesheet_forwarders=self.forwarders),
             sender=self.sender,
             accounting=self.accounting,
             renderer=TextPdfRenderer(),

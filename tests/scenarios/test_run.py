@@ -73,6 +73,77 @@ class TestDuplicates:
         assert report.messages_stored == 1
 
 
+class TestForwardedTimesheets:
+    """Decision 25: for the first cycle, old timesheets are forwarded by hand.
+
+    The forwarder's address says nothing about whose timesheet it is, so the
+    consultant has to come off the document. That is the same fallback a real
+    consultant's mail would use if they wrote from a new address.
+    """
+
+    FORWARDER = "meghan.rathie@gmail.com"
+
+    def test_a_forward_from_an_unnamed_address_is_still_set_aside(self, env: ScenarioEnv) -> None:
+        env.add_email(
+            self.FORWARDER,
+            subject="FW: Priya's August timesheet",
+            scripted_reading=reading(AUG_START, AUG_END),
+        )
+        env.run()
+
+        assert open_codes(env) == {"UNKNOWN_SENDER"}
+        item = env.the_item()
+        assert item.status is ItemStatus.WAITING_FOR_TIMESHEET
+
+    def test_a_named_forwarder_gets_the_timesheet_read(self, env: ScenarioEnv) -> None:
+        env.forwarders = (self.FORWARDER,)
+        env.add_email(
+            self.FORWARDER,
+            subject="FW: Priya's August timesheet",
+            scripted_reading=reading(AUG_START, AUG_END),
+        )
+        env.run()
+
+        item = env.store.find_item("Priya Shah", "Acme Corp", BillingPeriod(AUG_START, AUG_END))
+        assert item is not None
+        assert item.status is ItemStatus.READY
+        # The money is the worked example, reached from a forwarded email.
+        assert item.invoice_amount == Money(2_184_000)
+        assert item.amount_owed == Money(1_560_000)
+        assert open_codes(env) == set()
+
+    def test_the_consultant_comes_off_the_document_not_the_forwarder(
+        self, env: ScenarioEnv
+    ) -> None:
+        env.forwarders = (self.FORWARDER,)
+        env.add_email(
+            self.FORWARDER,
+            subject="FW: timesheet",
+            scripted_reading=reading(AUG_START, AUG_END, consultant="Dana Cruz"),
+        )
+        env.run()
+
+        # Priya's own expected item is untouched: this was not her timesheet.
+        priya = env.store.find_item("Priya Shah", "Acme Corp", BillingPeriod(AUG_START, AUG_END))
+        assert priya is not None and priya.status is ItemStatus.WAITING_FOR_TIMESHEET
+        # Read as Dana's, whose engagement does not cover August, so it asks
+        # rather than filing it under the only other consultant it knows.
+        assert open_codes(env) == {"ENGAGEMENT_UNCLEAR"}
+
+    def test_a_forward_naming_nobody_asks_kevin_rather_than_guessing(
+        self, env: ScenarioEnv
+    ) -> None:
+        env.forwarders = (self.FORWARDER,)
+        env.add_email(
+            self.FORWARDER,
+            subject="FW: timesheet",
+            scripted_reading=reading(AUG_START, AUG_END, consultant="Someone Not On The List"),
+        )
+        env.run()
+
+        assert "CONSULTANT_UNKNOWN" in open_codes(env)
+
+
 class TestCorrections:
     def test_corrected_before_sent(self, env: ScenarioEnv) -> None:
         env.add_email(PRIYA, scripted_reading=reading(AUG_START, AUG_END))

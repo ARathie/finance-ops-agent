@@ -110,3 +110,17 @@ When none of those holds and a row straddles the period, the item becomes a `PAR
 
 An email may carry the approved timesheet **and** the consultant's vendor company's invoice for the same hours, or the timesheet alone when there is no vendor. The timesheet is the proof of the hours and the approval. The rate printed on a vendor invoice is never used for anything (decision 4); Kevin compares it with the payment instruction himself.
 
+
+## 25. For the first cycle, timesheets are forwarded by hand from one named address
+
+The first real-life test (PR 13) cannot start by telling every consultant to email the agent. The timesheets that exist are the ones already sitting in Kevin's mailbox, and they are tested by forwarding them. A forward arrives from the person forwarding it, not from the consultant, so the sender no longer says whose timesheet it is.
+
+Decision: a setting, `FOPS_TIMESHEET_FORWARDERS`, lists addresses allowed to send in a timesheet that is not their own. Mail from such an address is read as a timesheet; the consultant is then taken from the document, which is the fallback `match_consultant` already had for a consultant writing from a new address. Nothing about rates, approval, or the checks changes: a forwarded timesheet is checked exactly like a direct one, and an unrecognised name on it is still `CONSULTANT_UNKNOWN` rather than a guess.
+
+Three limits keep this from leaking into real running:
+
+- **Kevin's address can never be a forwarder.** Everything from `FOPS_ADMIN_EMAIL` is read as a reply, and approvals travel that path (rule 4). `Config.from_env` refuses the setting rather than letting a test put the approval rule at risk.
+- **It is a setting, not a column in the engagement list.** Kevin's file describes Icon's business and outlives the test; this is scaffolding for one machine and one cycle, and going live is deleting a line from `.env`.
+- **`fops doctor` always says who may forward**, and fails the check outright if the mode is anything but `dry_run`.
+
+This is why the roadmap splits its last mailbox box and PR 13's cycle boxes in two: a forwarded-timesheet box that can be ticked during the test, and a separate box for a timesheet arriving straight from a consultant, which is what "used in real life" actually requires.

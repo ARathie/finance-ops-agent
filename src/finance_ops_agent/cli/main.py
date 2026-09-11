@@ -288,6 +288,7 @@ def _real_deps(mode_override: "Mode | None" = None) -> RunDeps:
             admin_email=config.admin_email,
             mode=effective_mode(config.mode, mode_override),
             agent_mailbox=config.agent_mailbox,
+            timesheet_forwarders=config.timesheet_forwarders,
         ),
         sender=SmtpSender(account, config.agent_mailbox, clock.now),
         accounting=_accounting(config, store, renderer, clock.today()),
@@ -380,6 +381,10 @@ def _command_doctor(args: argparse.Namespace) -> int:
             CheckResult.PASS,
             f"mode {config.mode}, timezone {config.timezone}, accounting {config.accounting}",
         )
+    )
+
+    results.append(
+        checks.check_timesheet_forwarders(config.timesheet_forwarders, config.mode.value)
     )
 
     def load_list() -> tuple[int, list[str]]:

@@ -148,6 +148,27 @@ class MailSettings:
         )
 
 
+def _forwarders() -> tuple[str, ...]:
+    """`FOPS_TIMESHEET_FORWARDERS`: addresses that may send in a timesheet that
+    is not their own (decision 25).
+
+    Kevin's own address is refused. Everything he sends is read as a reply to
+    something the agent asked him, and approvals travel that path; letting it
+    mean "a timesheet" as well would put the approval rule at risk to save a
+    test some typing.
+    """
+    admin_email = os.environ.get("FOPS_ADMIN_EMAIL", "").strip()
+    text = os.environ.get("FOPS_TIMESHEET_FORWARDERS", "")
+    addresses = tuple(part.strip() for part in text.replace(";", ",").split(",") if part.strip())
+    for address in addresses:
+        if admin_email and address.casefold() == admin_email.casefold():
+            raise MissingSettingError(
+                f"FOPS_TIMESHEET_FORWARDERS must not contain {admin_email}: the agent reads"
+                " everything from that address as a reply, and approvals come that way"
+            )
+    return addresses
+
+
 @dataclass(frozen=True)
 class QuickBooksSettings:
     client_id: str
@@ -180,6 +201,8 @@ class Config:
     agent_mailbox: str
     model: str
     accounting: str  # manual | quickbooks
+    # Addresses that may forward someone else's timesheet in (decision 25).
+    timesheet_forwarders: tuple[str, ...]
 
     @property
     def qbo_token_path(self) -> Path:
@@ -211,4 +234,5 @@ class Config:
             agent_mailbox=_required("FOPS_AGENT_MAILBOX"),
             model=os.environ.get("FOPS_MODEL", "claude-opus-5"),
             accounting=accounting,
+            timesheet_forwarders=_forwarders(),
         )

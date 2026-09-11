@@ -110,6 +110,34 @@ def check_smtp_login(account: MailAccount) -> Check:
     return _run("send mail (smtp)", run)
 
 
+def check_timesheet_forwarders(forwarders: tuple[str, ...], mode: str) -> Check:
+    """Say, loudly, when an address may send in someone else's timesheet.
+
+    This exists for the first-cycle test, where old timesheets are forwarded by
+    hand instead of arriving from the consultants themselves (decision 25). It
+    is the one setting that widens who the agent will take a timesheet from, so
+    it is never silent, and outside dry run it is a warning rather than a note.
+    """
+    name = "timesheet forwarders"
+    if not forwarders:
+        return Check(
+            name,
+            CheckResult.SKIP,
+            "none; timesheets count only from the addresses on the engagement list",
+        )
+    listed = ", ".join(forwarders)
+    if mode == "dry_run":
+        return Check(
+            name, CheckResult.PASS, f"{listed} may forward someone else's timesheet (testing)"
+        )
+    return Check(
+        name,
+        CheckResult.FAIL,
+        f"{listed} may forward someone else's timesheet, and the mode is {mode}, not dry_run;"
+        " clear FOPS_TIMESHEET_FORWARDERS before the agent sends anything for real",
+    )
+
+
 def check_engagement_list(load: Callable[[], tuple[int, list[str]]]) -> Check:
     def run() -> str:
         rows, problems = load()

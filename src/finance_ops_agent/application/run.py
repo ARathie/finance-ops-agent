@@ -232,6 +232,11 @@ def _decide_kind(deps: RunDeps, workbook: EngagementWorkbook, email: InboundEmai
     for vendor in workbook.vendors:
         if sender in (address.casefold() for address in vendor.contact_emails):
             return MessageKind.TIMESHEET
+    # Someone forwarding a timesheet on a consultant's behalf (decision 25).
+    # The sender says nothing about whose timesheet it is, so match_consultant
+    # falls through to the name on the document, which is the point.
+    if sender in (address.casefold() for address in deps.settings.timesheet_forwarders):
+        return MessageKind.TIMESHEET
     domain = sender.rsplit("@", 1)[-1]
     for client in workbook.clients:
         addresses = [address.casefold() for address in client.billing_emails + client.cc_emails]
