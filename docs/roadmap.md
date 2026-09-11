@@ -108,7 +108,7 @@ Done when:
 - [x] `MAIL_START_DATE` respected; `fops doctor` output tested with and without settings; the scenario suite is green on the fakes (the never-twice tests now describe the SMTP behaviour: wait, then ask Kevin).
 - [x] `grep -ri "microsoft\|graph\|msal\|entra" src tests` finds nothing; in `docs` only this roadmap, decisions 13 and 21, and the sentences in the email doc, glossary, and README that say the mailbox is not Microsoft 365.
 - [x] `.env.example` is committed and lists every setting in `technical-design.md`.
-- [ ] **Needs a person:** the agent mailbox exists at Rackspace Email; its address and password are in `.env` on the machine that will run the test; the name of whoever holds Icon's Rackspace admin login is written in `open-questions.md`.
+- [x] **Needs a person:** the agent mailbox exists at Rackspace Email; its address and password are in `.env` on the machine that will run the test; the name of whoever holds Icon's Rackspace admin login is written in `open-questions.md`. Done Sep 2026: `jay@icon-technologies.com`, proven by `fops doctor` logging in over both IMAP and SMTP from the Mac; the admin is Kevin, recorded in `open-questions.md`.
 - [ ] **Needs a person:** `uv run fops doctor --send-test-email` passes every line, Kevin receives the test email, and the copy appears in the agent mailbox's Sent folder.
 - [ ] **Needs a person:** one real email with a timesheet attached, sent from a consultant address that is on the engagement list, is picked up by `uv run fops dry-run` (real mailbox, dry run) and produces the "timesheet received" email to Kevin.
 
