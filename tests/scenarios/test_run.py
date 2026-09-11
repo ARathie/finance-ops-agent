@@ -144,6 +144,53 @@ class TestForwardedTimesheets:
         assert "CONSULTANT_UNKNOWN" in open_codes(env)
 
 
+class TestTheWholeWayThroughToMoney:
+    """The path that actually bills: run -> complete_if_covered -> amounts.
+
+    The checks were right and this path called them without the billing
+    period, so a document holding days from two months billed all of them.
+    A real May timesheet went out at 192 hours where 168 were worked.
+    """
+
+    def test_only_the_months_own_days_reach_the_invoice(self, env: ScenarioEnv) -> None:
+        spilling = [
+            (date(2026, 7, 30), 800),  # July: another invoice's day
+            (date(2026, 7, 31), 800),  # July
+            *[(date(2026, 8, day), 800) for day in (3, 4, 5, 6, 7)],
+        ]
+        env.add_email(
+            PRIYA,
+            scripted_reading=reading(
+                date(2026, 7, 30), AUG_END, total_hundredths=None, dailies=spilling
+            ),
+        )
+        env.run()
+
+        item = env.store.find_item("Priya Shah", "Acme Corp", BillingPeriod(AUG_START, AUG_END))
+        assert item is not None
+        assert item.status is ItemStatus.READY
+        assert item.approved_hours == Hours(4_000), "the two July days were billed"
+        assert item.invoice_amount == Money(560_000)  # 40 h x 140.00
+
+    def test_a_timesheet_naming_its_month_does_not_wait_for_the_last_days(
+        self, env: ScenarioEnv
+    ) -> None:
+        """A weekly timesheet's last row is dated the week's first day, so its
+        span stops short of the month end. Waiting for those days waits for
+        ever; the stated month is what settles coverage (decision 26)."""
+        env.add_email(
+            PRIYA,
+            scripted_reading=reading(
+                date(2026, 7, 26), date(2026, 8, 22), month=AUG_START, total_hundredths=16_800
+            ),
+        )
+        env.run()
+
+        item = env.the_item()
+        assert item.status is ItemStatus.READY, "it waited for days it will never be sent"
+        assert item.approved_hours == Hours(16_800)
+
+
 class TestCorrections:
     def test_corrected_before_sent(self, env: ScenarioEnv) -> None:
         env.add_email(PRIYA, scripted_reading=reading(AUG_START, AUG_END))

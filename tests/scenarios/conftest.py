@@ -115,6 +115,7 @@ def reading(
     consultant: str = "Priya Shah",
     client: str = "Acme Corp",
     dailies: list[tuple[date, int]] | None = None,
+    month: date | None = None,
     approved: bool = True,
     confidence: Confidence = Confidence.HIGH,
 ) -> TimesheetReading:
@@ -129,6 +130,7 @@ def reading(
         end_client_name=ReadField[str](confidence=Confidence.LOW),
         period_start=ReadField[date](value=start, quote=str(start), confidence=confidence),
         period_end=ReadField[date](value=end, quote=str(end), confidence=confidence),
+        stated_month_start=ReadField[date](value=month, confidence=confidence),
         daily_entries=ReadField[list[DailyEntry]](
             value=[DailyEntry(day=day, hours_hundredths=hours) for day, hours in dailies or []],
             confidence=confidence,
