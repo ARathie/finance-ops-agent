@@ -194,3 +194,64 @@ def test_without_a_period_the_old_behaviour_is_unchanged(period: BillingPeriod |
     # And it shows why the period matters: with none, June's context week is
     # counted among the rows and the total looks wrong.
     assert [f.code for f in findings] == [ReviewCode.HOURS_DONT_ADD_UP]
+
+
+class TestDailyTimesheetsSpanningMonths:
+    """A daily timesheet's weeks run Sunday to Saturday, so a month's pages
+    carry days from the months either side (decision 27). The real May 2025
+    export runs from Sunday 27 April: 192 hours across the document, of which
+    168 are May. Summing the lot billed 24 hours that belong to April, and
+    nothing flagged it -- 192 is only 9% over full time for May, well inside
+    the "unusual" threshold.
+    """
+
+    MAY = BillingPeriod(date(2025, 5, 1), date(2025, 5, 31))
+
+    def days(self) -> list[DailyEntry]:
+        worked = [
+            date(2025, 4, 28),
+            date(2025, 4, 29),
+            date(2025, 4, 30),
+            date(2025, 5, 1),
+            date(2025, 5, 2),
+        ]
+        for start in (date(2025, 5, 5), date(2025, 5, 12), date(2025, 5, 19)):
+            worked += [start + timedelta(days=i) for i in range(5)]
+        worked += [date(2025, 5, 26), date(2025, 5, 27), date(2025, 5, 28), date(2025, 5, 29)]
+        return [DailyEntry(day=day, hours_hundredths=800) for day in worked]
+
+    def sheet(self, stated: int | None = None) -> TimesheetReading:
+        return TimesheetReading(
+            consultant_name=ReadField[str](value="Subramanian Arumugam", confidence=HIGH),
+            client_name=ReadField[str](value="iStream", confidence=HIGH),
+            end_client_name=ReadField[str](),
+            period_start=ReadField[date](value=date(2025, 4, 27), confidence=HIGH),
+            period_end=ReadField[date](value=date(2025, 5, 31), confidence=HIGH),
+            daily_entries=ReadField[list[DailyEntry]](value=self.days(), confidence=HIGH),
+            stated_total_hours_hundredths=ReadField[int](value=stated, confidence=HIGH),
+            approval=ReadField[Approval](
+                value=Approval(kind=ApprovalKind.APPROVED_STATUS, approver="Ramana Akula"),
+                confidence=HIGH,
+            ),
+        )
+
+    def test_only_the_days_in_the_month_are_billed(self) -> None:
+        total, findings = check_hours(self.sheet(), self.MAY)
+        assert total == 16_800  # not the 19_200 on the document
+        assert findings == []
+
+    def test_the_document_really_does_hold_192_hours(self) -> None:
+        """The bug it replaces: every day summed, April included."""
+        assert sum(day.hours_hundredths for day in self.days()) == 19_200
+
+    def test_a_total_covering_the_whole_document_does_not_win(self) -> None:
+        """192 is printed across five weekly pages; only 168 are May, and the
+        dated days settle it rather than the total."""
+        total, findings = check_hours(self.sheet(stated=19_200), self.MAY)
+        assert total == 16_800
+        assert [f.code for f in findings] == [ReviewCode.HOURS_DONT_ADD_UP]
+
+    def test_a_total_that_agrees_is_left_alone(self) -> None:
+        total, findings = check_hours(self.sheet(stated=16_800), self.MAY)
+        assert total == 16_800
+        assert findings == []

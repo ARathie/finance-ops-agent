@@ -268,6 +268,29 @@ def check_hours(
     findings: list[Finding] = []
     noted = reading.noted_in_month_hundredths.value
     if period is not None:
+        days = reading.daily_entries.value or []
+        outside = [day for day in days if not (period.start <= day.day <= period.end)]
+        if days:
+            # Code sums only the days inside the month being billed. A printed
+            # week runs Sunday to Saturday, so a document covering a month
+            # carries days from the month either side, and counting them
+            # overbills (decision 27).
+            summed = sum(
+                day.hours_hundredths for day in days if period.start <= day.day <= period.end
+            )
+        if outside and stated is not None and summed is not None:
+            # Dated days let code apportion exactly; a total printed across the
+            # whole document does not. Prefer the days, and say so if they
+            # disagree rather than billing a total that spans other months.
+            if abs(stated - summed) > QUARTER_HOUR_HUNDREDTHS:
+                findings.append(
+                    Finding(
+                        ReviewCode.HOURS_DONT_ADD_UP,
+                        "The daily hours in this period don't add up to the printed total,"
+                        " which looks like it covers days outside it.",
+                    )
+                )
+            stated = summed
         inside, straddling_rows = _sort_rows(reading, period)
         rows = sum(row.hours_hundredths for row in inside) if inside else None
         if straddling_rows and noted is not None:
@@ -310,7 +333,13 @@ def check_hours(
         return None, [
             Finding(ReviewCode.HOURS_MISSING, "I can't find the hours on this timesheet.")
         ]
-    if stated is not None and summed is not None and abs(stated - summed) > QUARTER_HOUR_HUNDREDTHS:
+    already_said = any(f.code is ReviewCode.HOURS_DONT_ADD_UP for f in findings)
+    if (
+        not already_said
+        and stated is not None
+        and summed is not None
+        and abs(stated - summed) > QUARTER_HOUR_HUNDREDTHS
+    ):
         findings.append(
             Finding(
                 ReviewCode.HOURS_DONT_ADD_UP,

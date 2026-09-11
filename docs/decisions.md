@@ -140,3 +140,15 @@ Decision: **the month comes from what a document states.** `stated_month` is rea
 The hours ladder of decision 24 is unchanged: the printed total leads, because the vendor has already apportioned the straddling week. What is added is a check, not a new source of truth. Where a note states a straddling week's in-month hours, code adds it to the weeks wholly inside the period and compares the result with the printed total; a disagreement is `PART_WEEK_DISAGREES` and goes to Kevin rather than being resolved by preferring one document. Where no total is printed, that same sum becomes the total — the one case where the note supplies a number rather than checking one.
 
 Two things stay guarded. A week printed for a neighbouring month is excluded from the sum, because it belongs to another invoice; summing August's visible rows gives 200 or 240 hours against a correct 168. And an overhang is only expected when weekly rows explain it: a timesheet with no rows whose dates run more than a week past the period is still `PERIOD_MISMATCH`, which is what keeps a whole-month timesheet from being billed against a twice-a-month engagement.
+
+## 27. Code counts only the days inside the month it is billing
+
+Decision 26 made the billing period come from what a document states, and made weekly rows outside that period unbillable. It missed the other half: **daily** entries were still summed whole.
+
+The case that found it is a real May 2025 export from a client's time system — five printed pages, one per week, each running Sunday to Saturday. The first page covers Sunday 27 April to Saturday 3 May and holds 40 hours, of which only 16 fall in May. Summed whole, the document reads 192 hours; the right answer is 168. The agent billed 192, and **nothing flagged it**: with 22 weekdays in May, full time is 176 hours, so 192 is 9 per cent over and never reaches the "unusual" threshold. A wrong invoice went out silently, which is the failure this system exists to prevent.
+
+Decision: when a billing period is known, code sums **only the daily entries falling inside it**, exactly as it already does for weekly rows. A week straddling the month end needs no note when the timesheet is daily: the days are dated, so code apportions them exactly.
+
+That also settles a conflict with decision 24, which puts the printed total first. That ordering assumed the total was for the period, which is true of a vendor invoice that bills one month and has already apportioned the straddling week. It is not true of a document that prints a total across days from several months. So: where daily entries extend outside the period, **the dated days win over a printed total**, and a disagreement between them is `HOURS_DONT_ADD_UP` naming the reason. Where the days sit inside the period, decision 24 is unchanged and the printed total still leads.
+
+The principle underneath is the project's first one: Claude reads, code decides. The model reports the days it sees, with their dates. Which of them belong to the month being billed is arithmetic, and arithmetic is never the model's to do.
