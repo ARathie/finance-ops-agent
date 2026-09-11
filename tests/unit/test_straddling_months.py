@@ -217,7 +217,8 @@ class TestDailyTimesheetsSpanningMonths:
         ]
         for start in (date(2025, 5, 5), date(2025, 5, 12), date(2025, 5, 19)):
             worked += [start + timedelta(days=i) for i in range(5)]
-        worked += [date(2025, 5, 26), date(2025, 5, 27), date(2025, 5, 28), date(2025, 5, 29)]
+        # Memorial Day fell on Monday 26 May, so that week is Tuesday to Friday.
+        worked += [date(2025, 5, 27), date(2025, 5, 28), date(2025, 5, 29), date(2025, 5, 30)]
         return [DailyEntry(day=day, hours_hundredths=800) for day in worked]
 
     def sheet(self, stated: int | None = None) -> TimesheetReading:
@@ -255,3 +256,29 @@ class TestDailyTimesheetsSpanningMonths:
         total, findings = check_hours(self.sheet(stated=16_800), self.MAY)
         assert total == 16_800
         assert findings == []
+
+
+def test_none_of_the_three_real_months_looks_unusual_at_five_per_cent() -> None:
+    """July is 96% of its weekdays at eight hours, August 100%, May 95%. The
+    tighter threshold catches overtime without questioning a normal month."""
+    for start, end, worked in (
+        (date(2026, 7, 1), date(2026, 7, 31), 17_600),
+        (date(2026, 8, 1), date(2026, 8, 31), 16_800),
+        (date(2025, 5, 1), date(2025, 5, 31), 16_800),
+    ):
+        period = BillingPeriod(start, end)
+        sheet = TimesheetReading(
+            consultant_name=ReadField[str](value="Someone", confidence=HIGH),
+            client_name=ReadField[str](value="A Client", confidence=HIGH),
+            end_client_name=ReadField[str](),
+            period_start=ReadField[date](value=start, confidence=HIGH),
+            period_end=ReadField[date](value=end, confidence=HIGH),
+            daily_entries=ReadField[list[DailyEntry]](value=[]),
+            stated_total_hours_hundredths=ReadField[int](value=worked, confidence=HIGH),
+            approval=ReadField[Approval](
+                value=Approval(kind=ApprovalKind.APPROVED_STATUS, approver="A Manager"),
+                confidence=HIGH,
+            ),
+        )
+        _, findings = check_hours(sheet, period)
+        assert findings == [], f"{start} was questioned"

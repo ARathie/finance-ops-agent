@@ -30,7 +30,8 @@ T = TypeVar("T")
 
 QUARTER_HOUR_HUNDREDTHS = 25
 FULL_DAY_HUNDREDTHS = 800  # full time is 8 hours per weekday
-UNUSUAL_OVER_FULL_TIME = 125  # per cent: more than 25% over full time looks unusual
+UNUSUAL_OVER_FULL_TIME = 105  # per cent: a full-time day is exactly 8 hours, so more
+# than 5% over what the working days come to is worth Kevin's eye (decision 28)
 MAX_DAY_HUNDREDTHS = 2400
 
 
@@ -219,15 +220,6 @@ def fit_billing_period(
     return period, []
 
 
-def _weekdays(start: date, end: date) -> int:
-    count, day = 0, start
-    while day <= end:
-        if day.weekday() < 5:
-            count += 1
-        day += timedelta(days=1)
-    return count
-
-
 def _sort_rows(
     reading: TimesheetReading, period: BillingPeriod
 ) -> tuple[list[RowEntry], list[RowEntry]]:
@@ -374,6 +366,21 @@ def check_hours(
             Finding(ReviewCode.HOURS_UNUSUAL, "The hours look unusually high, or are zero.")
         )
     return total, findings
+
+
+def _weekdays(start: date, end: date) -> int:
+    """Weekdays between two dates, both included.
+
+    Deliberately not holiday-aware. Deducting public holidays would lower what
+    is expected of a full-time month, and a consultant who works Columbus Day
+    has worked a normal eight-hour day, not overtime (decision 28).
+    """
+    count, day = 0, start
+    while day <= end:
+        if day.weekday() < 5:
+            count += 1
+        day += timedelta(days=1)
+    return count
 
 
 def check_approval(reading: TimesheetReading) -> list[Finding]:
