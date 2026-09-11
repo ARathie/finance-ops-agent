@@ -30,6 +30,23 @@ from finance_ops_agent.ports.sender import NotSent, RecipientRefused
 MAX_MESSAGE_BYTES = 20 * 1024 * 1024
 
 
+def describe_refusals(recipients: dict[str, tuple[int, bytes]]) -> str:
+    """Name each refused address together with the reason the server gave.
+
+    smtplib hands back `{address: (code, reason)}`. The address alone does not
+    say what to do next: "no such mailbox" means the address is wrong, while
+    "relaying denied" or a sending limit means the address is right and the
+    mailbox is not allowed to send there. Whoever reads `fops doctor` or the
+    SEND_FAILED review needs the difference.
+    """
+    described = []
+    for address in sorted(recipients):
+        code, reason = recipients[address]
+        text = reason.decode("utf-8", "replace").strip()
+        described.append(f"{address} ({code} {text})" if text else f"{address} ({code})")
+    return "; ".join(described)
+
+
 class SmtpSender:
     def __init__(
         self,
@@ -88,7 +105,7 @@ class SmtpSender:
             with server:
                 server.send_message(message)
         except smtplib.SMTPRecipientsRefused as error:
-            refused = ", ".join(sorted(error.recipients))
+            refused = describe_refusals(error.recipients)
             raise RecipientRefused(f"the mail server refused the address(es): {refused}") from error
         except (
             smtplib.SMTPSenderRefused,
