@@ -87,6 +87,22 @@ class Approval(BaseModel):
     approval_date: date | None = None
 
 
+class StatedMonth(BaseModel):
+    """A billing month a document names outright (decision 26).
+
+    A weekly timesheet's rows span two months, so its own dates never say which
+    month is being billed. A vendor invoice does -- by its date, its period, or
+    a note beside a straddling week ("16 Hours in Jul-26"). That is the only
+    trustworthy statement of the month, so it is read as its own answer rather
+    than inferred from the rows.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    year: Annotated[int, Field(ge=2000, le=2100)]
+    month: Annotated[int, Field(ge=1, le=12)]
+
+
 class TimesheetReading(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -95,6 +111,10 @@ class TimesheetReading(BaseModel):
     end_client_name: ReadField[str]
     period_start: ReadField[date]
     period_end: ReadField[date]
+    # The month this document says it bills, when it says one at all.
+    stated_month: ReadField[StatedMonth] = ReadField[StatedMonth]()
+    # Hours a note assigns to the billed month for a week that straddles it.
+    noted_in_month_hundredths: ReadField[int] = ReadField[int]()
     daily_entries: ReadField[list[DailyEntry]]
     row_entries: ReadField[list[RowEntry]] = ReadField[list[RowEntry]](value=[])
     stated_total_hours_hundredths: ReadField[int]

@@ -447,7 +447,7 @@ def _process_timesheet(
                 )
             )
 
-    hours_total, hours_findings = checks.check_hours(reading)
+    hours_total, hours_findings = checks.check_hours(reading, period)
     findings.extend(hours_findings)
     findings.extend(checks.check_approval(reading))
     findings.extend(checks.check_confidence(reading))

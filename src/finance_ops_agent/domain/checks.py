@@ -17,9 +17,14 @@ from finance_ops_agent.domain.reading import (
     ApprovalKind,
     Confidence,
     ReadField,
+    RowEntry,
     TimesheetReading,
 )
 from finance_ops_agent.domain.review import REVIEW_MESSAGES, ReviewCode
+
+# How far a weekly timesheet may reach past the month it bills: one whole
+# context week at each end, as Icon's exports print (decision 26).
+OVERHANG_DAYS = 8
 
 T = TypeVar("T")
 
@@ -142,29 +147,75 @@ def rate_row_in_force(
     return row, []
 
 
+def _anchor_day(reading: TimesheetReading) -> date | None:
+    """A day inside the month being billed, from the surest source available.
+
+    Decision 26. A document that names its month settles it. Otherwise the
+    month holding most of the timesheet's days wins: a weekly timesheet always
+    spills a few days into a neighbouring month, and those few never outvote
+    the month it is for.
+    """
+    stated = reading.stated_month.value
+    if stated is not None:
+        return date(stated.year, stated.month, 15)
+    start, end = reading.period_start.value, reading.period_end.value
+    if start is None or end is None or end < start:
+        return None
+    days_per_month: dict[tuple[int, int], int] = {}
+    day = start
+    while day <= end:
+        key = (day.year, day.month)
+        days_per_month[key] = days_per_month.get(key, 0) + 1
+        day += timedelta(days=1)
+    year, month = max(days_per_month, key=lambda key: (days_per_month[key], key))
+    return date(year, month, 15)
+
+
 def fit_billing_period(
     row: Engagement, reading: TimesheetReading
 ) -> tuple[BillingPeriod | None, list[Finding]]:
-    """The timesheet's dates must fit inside one period on the schedule."""
-    start, end = reading.period_start.value, reading.period_end.value
-    if start is None or end is None or end < start:
+    """The billing period this timesheet is for (decision 26).
+
+    Icon's timesheets are weekly, so their own dates run past both ends of the
+    month being billed and can never sit inside one period. The period comes
+    from the month the documents name, or failing that from where most of the
+    timesheet's days fall; the rows are then allowed to overhang it, and how
+    many of a straddling week's hours belong here is settled by `check_hours`,
+    never by trimming dates.
+    """
+    anchor = _anchor_day(reading)
+    if anchor is None:
         return None, [Finding(ReviewCode.PERIOD_UNCLEAR, "I can't tell which dates this covers.")]
-    mismatch = Finding(
-        ReviewCode.PERIOD_MISMATCH,
-        "The dates don't line up with the billing schedule for this engagement.",
-    )
     try:
         period = period_containing(
-            start,
+            anchor,
             row.billing_schedule,
             row.start_date,
             row.end_date,
             row.first_period_start,
         )
     except ValueError:
-        return None, [mismatch]
-    if not period.covers(end):
-        return None, [mismatch]
+        return None, [
+            Finding(
+                ReviewCode.PERIOD_MISMATCH,
+                "The dates don't line up with the billing schedule for this engagement.",
+            )
+        ]
+    start, end = reading.period_start.value, reading.period_end.value
+    reaches_past = (
+        start is not None
+        and end is not None
+        and ((period.start - start).days > OVERHANG_DAYS or (end - period.end).days > OVERHANG_DAYS)
+    )
+    if reaches_past and not (reading.row_entries.value or []):
+        # Weekly rows are what make an overhang normal (decision 26). Without
+        # them, dates running well past the period mean the wrong period.
+        return None, [
+            Finding(
+                ReviewCode.PERIOD_MISMATCH,
+                "The dates don't line up with the billing schedule for this engagement.",
+            )
+        ]
     return period, []
 
 
@@ -177,13 +228,72 @@ def _weekdays(start: date, end: date) -> int:
     return count
 
 
-def check_hours(reading: TimesheetReading) -> tuple[int | None, list[Finding]]:
-    """The hours to invoice for this timesheet's own dates (hundredths), plus
-    anything wrong with them. The printed total is what gets invoiced."""
+def _sort_rows(
+    reading: TimesheetReading, period: BillingPeriod
+) -> tuple[list[RowEntry], list[RowEntry]]:
+    """The weekly rows wholly inside the billing period, and those straddling it.
+
+    A row wholly outside is neither: a monthly timesheet printed from a time
+    system shows the weeks either side too (June's last week on July's sheet),
+    and those hours belong to another invoice. Counting them would overbill.
+    """
+    inside: list[RowEntry] = []
+    straddling: list[RowEntry] = []
+    for row in reading.row_entries.value or []:
+        if row.first_day is None or row.last_day is None:
+            continue
+        if row.last_day < period.start or row.first_day > period.end:
+            continue  # another month's week, printed for context
+        if row.first_day >= period.start and row.last_day <= period.end:
+            inside.append(row)
+        else:
+            straddling.append(row)
+    return inside, straddling
+
+
+def check_hours(
+    reading: TimesheetReading, period: BillingPeriod | None = None
+) -> tuple[int | None, list[Finding]]:
+    """The hours to invoice (hundredths), plus anything wrong with them.
+
+    The printed total is what gets invoiced (decision 24). With a billing
+    period given, the weekly rows are judged against it rather than against the
+    timesheet's own span, and a note assigning a straddling week's hours to the
+    month is checked against the printed total rather than trusted over it
+    (decision 26).
+    """
     stated = reading.stated_total_hours_hundredths.value
     summed = reading.summed_daily_hundredths()
     rows = reading.summed_row_hundredths()
-    straddling = reading.rows_outside_period()
+    findings: list[Finding] = []
+    noted = reading.noted_in_month_hundredths.value
+    if period is not None:
+        inside, straddling_rows = _sort_rows(reading, period)
+        rows = sum(row.hours_hundredths for row in inside) if inside else None
+        if straddling_rows and noted is not None:
+            # Rows wholly inside, plus what the note assigns to this month:
+            # code adds it up, and only to check the printed total (decision 26).
+            from_note = (rows or 0) + noted
+            if stated is not None and abs(stated - from_note) > QUARTER_HOUR_HUNDREDTHS:
+                findings.append(
+                    Finding(
+                        ReviewCode.PART_WEEK_DISAGREES,
+                        REVIEW_MESSAGES[ReviewCode.PART_WEEK_DISAGREES],
+                    )
+                )
+                # That finding names the discrepancy exactly; leave the rows
+                # agreeing with the total so it is not also reported vaguely.
+                rows = stated
+            else:
+                if stated is None:
+                    stated = from_note
+                # The note has settled the straddling week, so the rows now
+                # stand for the whole month and match the printed total.
+                rows = from_note
+            straddling_rows = []
+        straddling = straddling_rows
+    else:
+        straddling = reading.rows_outside_period()
     # A weekly row running past the period's end holds hours from both periods.
     # Summing it would overbill, and how it splits is never the model's to
     # guess (decision 24): the printed total settles it, or Kevin does.
@@ -200,7 +310,6 @@ def check_hours(reading: TimesheetReading) -> tuple[int | None, list[Finding]]:
         return None, [
             Finding(ReviewCode.HOURS_MISSING, "I can't find the hours on this timesheet.")
         ]
-    findings: list[Finding] = []
     if stated is not None and summed is not None and abs(stated - summed) > QUARTER_HOUR_HUNDREDTHS:
         findings.append(
             Finding(
@@ -222,7 +331,12 @@ def check_hours(reading: TimesheetReading) -> tuple[int | None, list[Finding]]:
         )
     entries = reading.daily_entries.value or []
     unusual = total == 0 or any(entry.hours_hundredths > MAX_DAY_HUNDREDTHS for entry in entries)
-    start, end = reading.period_start.value, reading.period_end.value
+    start: date | None
+    end: date | None
+    if period is not None:
+        start, end = period.start, period.end
+    else:
+        start, end = reading.period_start.value, reading.period_end.value
     if not unusual and start is not None and end is not None and end >= start:
         full_time = _weekdays(start, end) * FULL_DAY_HUNDREDTHS
         unusual = total * 100 > full_time * UNUSUAL_OVER_FULL_TIME

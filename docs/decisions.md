@@ -124,3 +124,19 @@ Three limits keep this from leaking into real running:
 - **`fops doctor` always says who may forward**, and fails the check outright if the mode is anything but `dry_run`.
 
 This is why the roadmap splits its last mailbox box and PR 13's cycle boxes in two: a forwarded-timesheet box that can be ticked during the test, and a separate box for a timesheet arriving straight from a consultant, which is what "used in real life" actually requires.
+
+## 26. The billed month is stated, not inferred from the timesheet's dates
+
+Decision 24 established that Icon's timesheets are weekly and that a week at either end of a month covers days on both sides of it. What it did not settle is which month such a timesheet is *for*, and the code kept a rule that contradicted it: `fit_billing_period` required the timesheet's whole span to sit inside one billing period. A weekly timesheet never does. A July sheet runs from the week starting 20 June to 31 July; software anchored it to June, found June did not cover 25 July, and raised `PERIOD_MISMATCH`. Every real timesheet failed this way, and none ever reached the hours check.
+
+Two real months from one consultant showed what the documents actually carry:
+
+- The timesheet is an export from the client's time system, one row per week, headed **"Week starts on"**, with a `State` column and the approver's name. It prints the neighbouring month's weeks as well, and says nothing about which month is being billed.
+- The vendor's invoice names the month by its date (31/07, 31/08), and its rows carry **only the hours belonging to that month**: the week starting 29 August appears as 8 hours, being the single August weekday in it. Its column is headed "WEEK ENDING" while printing week-starting dates — the timesheet's own heading is the honest one.
+- A note added beside the straddling week states its in-month hours: "16 Hours in Jul-26", "8 hours in Aug". Both agree with the invoice.
+
+Decision: **the month comes from what a document states.** `stated_month` is read as its own answer — an invoice's date or period, a heading, a note naming the month. Failing that, the month holding most of the timesheet's days wins; a week's overhang never outvotes the month the sheet is for. The rows are then allowed to overhang the period at both ends, and the period is never trimmed to fit them.
+
+The hours ladder of decision 24 is unchanged: the printed total leads, because the vendor has already apportioned the straddling week. What is added is a check, not a new source of truth. Where a note states a straddling week's in-month hours, code adds it to the weeks wholly inside the period and compares the result with the printed total; a disagreement is `PART_WEEK_DISAGREES` and goes to Kevin rather than being resolved by preferring one document. Where no total is printed, that same sum becomes the total — the one case where the note supplies a number rather than checking one.
+
+Two things stay guarded. A week printed for a neighbouring month is excluded from the sum, because it belongs to another invoice; summing August's visible rows gives 200 or 240 hours against a correct 168. And an overhang is only expected when weekly rows explain it: a timesheet with no rows whose dates run more than a week past the period is still `PERIOD_MISMATCH`, which is what keeps a whole-month timesheet from being billed against a twice-a-month engagement.
