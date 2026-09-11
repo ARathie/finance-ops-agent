@@ -24,12 +24,18 @@
     "quote": "2026-01-31",
     "confidence": "high"
   },
+  "stated_month_start": {
+    "value": null,
+    "quote": null,
+    "confidence": "low"
+  },
+  "noted_in_month_hundredths": {
+    "value": null,
+    "quote": null,
+    "confidence": "low"
+  },
   "daily_entries": {
     "value": [
-      {
-        "day": "2026-01-01",
-        "hours_hundredths": 800
-      },
       {
         "day": "2026-01-02",
         "hours_hundredths": 800
@@ -75,10 +81,6 @@
         "hours_hundredths": 800
       },
       {
-        "day": "2026-01-19",
-        "hours_hundredths": 800
-      },
-      {
         "day": "2026-01-20",
         "hours_hundredths": 800
       },
@@ -118,9 +120,14 @@
     "quote": "hours per day",
     "confidence": "high"
   },
+  "row_entries": {
+    "value": [],
+    "quote": null,
+    "confidence": "low"
+  },
   "stated_total_hours_hundredths": {
-    "value": 17600,
-    "quote": "Total: 176.00",
+    "value": 16000,
+    "quote": "Total: 160.00",
     "confidence": "high"
   },
   "approval": {

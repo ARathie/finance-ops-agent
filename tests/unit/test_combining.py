@@ -33,6 +33,7 @@ def make(
     rows: list[RowEntry] | None = None,
     stated: int | None = None,
     approval: ApprovalKind = ApprovalKind.NONE,
+    month: date | None = None,
 ) -> TimesheetReading:
     start, end = period if period else (None, None)
     return TimesheetReading(
@@ -41,6 +42,7 @@ def make(
         end_client_name=ReadField[str](),
         period_start=ReadField[date](value=start, confidence=HIGH),
         period_end=ReadField[date](value=end, confidence=HIGH),
+        stated_month_start=ReadField[date](value=month, confidence=HIGH),
         daily_entries=ReadField[list[DailyEntry]](value=[]),
         row_entries=ReadField[list[RowEntry]](value=rows or [], confidence=HIGH),
         stated_total_hours_hundredths=ReadField[int](value=stated, confidence=HIGH),
@@ -116,11 +118,26 @@ def test_attachments_that_disagree_about_the_consultant_go_to_kevin() -> None:
     assert "consultant" in findings[0].message
 
 
-def test_attachments_that_disagree_about_the_dates_go_to_kevin() -> None:
-    timesheet = make(approval=ApprovalKind.APPROVED_STATUS)
-    invoice = make(period=(date(2026, 8, 1), date(2026, 8, 31)), stated=16800)
+def test_attachments_are_expected_to_span_different_dates() -> None:
+    """A weekly timesheet runs in whole weeks and a vendor invoice bills a
+    calendar month, so their first and last dates rarely match. That is the
+    normal shape of Icon's mail, not something to ask Kevin about: the span
+    never decides the period (decision 26)."""
+    timesheet = make(
+        period=(date(2026, 6, 20), date(2026, 7, 31)), approval=ApprovalKind.APPROVED_STATUS
+    )
+    invoice = make(period=(date(2026, 7, 1), date(2026, 7, 31)), stated=17600)
     _, findings = combine_readings([timesheet, invoice])
-    assert ReviewCode.PERIOD_UNCLEAR in [f.code for f in findings]
+    assert findings == []
+
+
+def test_attachments_for_different_months_go_to_kevin() -> None:
+    """Disagreeing about the month being billed is a real disagreement."""
+    timesheet = make(month=date(2026, 7, 1), approval=ApprovalKind.APPROVED_STATUS)
+    invoice = make(month=date(2026, 8, 1), stated=16800)
+    _, findings = combine_readings([timesheet, invoice])
+    assert [f.code for f in findings] == [ReviewCode.PERIOD_UNCLEAR]
+    assert "July 2026" in findings[0].message and "August 2026" in findings[0].message
 
 
 def test_a_blank_second_attachment_changes_nothing() -> None:

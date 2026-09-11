@@ -12,6 +12,7 @@ from datetime import date, timedelta
 from typing import TypeVar
 
 from finance_ops_agent.domain.engagements import Consultant, Engagement
+from finance_ops_agent.domain.holidays import working_days
 from finance_ops_agent.domain.periods import BillingPeriod, period_containing
 from finance_ops_agent.domain.reading import (
     ApprovalKind,
@@ -359,28 +360,13 @@ def check_hours(
     else:
         start, end = reading.period_start.value, reading.period_end.value
     if not unusual and start is not None and end is not None and end >= start:
-        full_time = _weekdays(start, end) * FULL_DAY_HUNDREDTHS
+        full_time = working_days(start, end) * FULL_DAY_HUNDREDTHS
         unusual = total * 100 > full_time * UNUSUAL_OVER_FULL_TIME
     if unusual:
         findings.append(
             Finding(ReviewCode.HOURS_UNUSUAL, "The hours look unusually high, or are zero.")
         )
     return total, findings
-
-
-def _weekdays(start: date, end: date) -> int:
-    """Weekdays between two dates, both included.
-
-    Deliberately not holiday-aware. Deducting public holidays would lower what
-    is expected of a full-time month, and a consultant who works Columbus Day
-    has worked a normal eight-hour day, not overtime (decision 28).
-    """
-    count, day = 0, start
-    while day <= end:
-        if day.weekday() < 5:
-            count += 1
-        day += timedelta(days=1)
-    return count
 
 
 def check_approval(reading: TimesheetReading) -> list[Finding]:
@@ -494,17 +480,24 @@ def combine_readings(
                         f' "{mine}" and "{theirs}".',
                     )
                 )
-        for field_name in ("period_start", "period_end"):
-            mine = getattr(merged, field_name).value
-            theirs = getattr(other, field_name).value
-            if mine is not None and theirs is not None and mine != theirs:
-                findings.append(
-                    Finding(
-                        ReviewCode.PERIOD_UNCLEAR,
-                        "The attachments on this email disagree about the"
-                        f" {_plain(field_name)}: {mine} and {theirs}.",
-                    )
+        # The attachments are *expected* to disagree about the span: a weekly
+        # timesheet runs in whole weeks and a vendor invoice bills a month, so
+        # their first and last dates rarely match. What must agree is the month
+        # being billed (decision 26); the span never decides the period.
+        mine_month = merged.stated_month_start.value
+        their_month = other.stated_month_start.value
+        if (
+            mine_month is not None
+            and their_month is not None
+            and (mine_month.year, mine_month.month) != (their_month.year, their_month.month)
+        ):
+            findings.append(
+                Finding(
+                    ReviewCode.PERIOD_UNCLEAR,
+                    "The attachments on this email are for different months:"
+                    f" {mine_month:%B %Y} and {their_month:%B %Y}.",
                 )
+            )
         merged = merged.model_copy(
             update={
                 name: _better(getattr(merged, name), getattr(other, name))
@@ -514,6 +507,8 @@ def combine_readings(
                     "end_client_name",
                     "period_start",
                     "period_end",
+                    "stated_month_start",
+                    "noted_in_month_hundredths",
                     "stated_total_hours_hundredths",
                     "approval",
                 )
