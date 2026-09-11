@@ -4,6 +4,8 @@ The engagement list is the spreadsheet Kevin keeps with every client, consultant
 
 File: `engagements.xlsx` (location set in the agent's settings; a CSV export of each sheet works too). Kevin edits it in Excel like any other spreadsheet. The agent never writes to it.
 
+**Starting from scratch:** copy `templates/engagements-template.xlsx`. It has the four sheets with these columns in this order, one made-up example row on each to replace, a "Read me" sheet in plain words, and dropdowns on every column that only takes certain words (`Delivery`, `Type`, `Paid by`, `Billing schedule`, the yes/no columns) so the commonest mistake cannot be made. Rebuild it with `uv run python templates/build_template.py` if a column here ever changes.
+
 ## Sheet: Clients
 
 One row per company Icon sends invoices to. If Icon invoices a staffing company rather than the place the consultant works, the staffing company is the client here.

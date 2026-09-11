@@ -143,7 +143,7 @@ The boxes below come in pairs marked **(test)** and **(live)**. The test half ru
 
 Done when:
 
-- [ ] The starter workbook loads through the engagement list reader with zero problems, and a test proves it.
+- [x] The starter workbook loads through the engagement list reader with zero problems, and a test proves it. `templates/engagements-template.xlsx`, rebuilt by `templates/build_template.py`; `tests/unit/test_engagements_template.py` loads the committed file through the real reader and fails if a column ever drifts from it.
 - [ ] **Needs a person:** Kevin fills the engagement list (every active client, consultant, vendor, engagement, and rate) and answers the timezone question; `fops doctor` shows zero engagement-list problems.
 - [ ] **Needs a person (test):** `FOPS_TIMESHEET_FORWARDERS` is set to the one address that will forward old timesheets in, and `fops doctor` shows it (decision 25). Nobody outside Icon is told anything yet.
 - [ ] **Needs a person (live):** Kevin tells consultants to send timesheets to the agent's address (as well as, or instead of, his own), and `FOPS_TIMESHEET_FORWARDERS` is emptied.
