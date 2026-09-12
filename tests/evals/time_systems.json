@@ -1,7 +1,8 @@
 {
-  "_comment": "The document formats Icon actually bills through, and so the formats the test set must cover (docs/roadmap.md PR 12). Icon usually will not know the product's name - every client and consultant may use a different system - so a format is named for the pairing that sends it, which is what repeats month after month (docs/open-questions.md). Adding one here without adding a case fails the coverage test rather than being noticed after the first live cycle.",
+  "_comment": "The document formats Icon actually bills through, and so the formats the test set must cover (docs/roadmap.md PR 12). Icon usually will not know the product's name - every client and consultant may use a different system - so a format is named for its shape. Adding one here without adding a case fails the coverage test rather than being noticed after the first live cycle. The cases themselves carry invented names throughout (tests/evals/build_real_format_cases.py).",
   "required": [
-    "MasTec weekly timesheet list (client system, name unknown)",
-    "Star Tech Services vendor invoice (weekly lines)"
+    "client weekly timesheet list (system name unknown)",
+    "vendor invoice with weekly lines",
+    "client daily timesheet, one page per week"
   ]
 }

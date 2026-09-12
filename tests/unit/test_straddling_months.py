@@ -2,7 +2,7 @@
 
 Decision 26. Icon's timesheets are exports listing one row per week, so their
 rows run past both ends of the month being billed and can never sit inside one
-billing period. The numbers here are the two real Sridhar months: a July
+billing period. The numbers here are the two real consultant months: a July
 invoice totalling 176 hours whose 06/27 week contributes 16 of its 32, and an
 August one totalling 168 whose 08/29 week contributes 8 of its 40. Both
 timesheets also print a neighbouring month's week for context, which must not
@@ -66,8 +66,8 @@ def reading(
     noted: int | None = None,
 ) -> TimesheetReading:
     return TimesheetReading(
-        consultant_name=ReadField[str](value="Sridhar Doraiswamy", confidence=HIGH),
-        client_name=ReadField[str](value="MasTec", confidence=HIGH),
+        consultant_name=ReadField[str](value="Ravi Balakrishnan", confidence=HIGH),
+        client_name=ReadField[str](value="Northwind Utilities", confidence=HIGH),
         end_client_name=ReadField[str](),
         period_start=ReadField[date](value=rows[0].first_day, confidence=HIGH),
         period_end=ReadField[date](value=rows[-1].last_day, confidence=HIGH),
@@ -77,7 +77,7 @@ def reading(
         row_entries=ReadField[list[RowEntry]](value=rows, confidence=HIGH),
         stated_total_hours_hundredths=ReadField[int](value=stated, confidence=HIGH),
         approval=ReadField[Approval](
-            value=Approval(kind=ApprovalKind.APPROVED_STATUS, approver="Ajaya Rautray"),
+            value=Approval(kind=ApprovalKind.APPROVED_STATUS, approver="Lena Ortiz"),
             confidence=HIGH,
         ),
     )
@@ -85,8 +85,8 @@ def reading(
 
 def engagement() -> Engagement:
     return Engagement(
-        consultant="Sridhar Doraiswamy",
-        client="MasTec",
+        consultant="Ravi Balakrishnan",
+        client="Northwind Utilities",
         end_client="",
         role="Consultant",
         start_date=date(2026, 7, 1),
@@ -223,15 +223,15 @@ class TestDailyTimesheetsSpanningMonths:
 
     def sheet(self, stated: int | None = None) -> TimesheetReading:
         return TimesheetReading(
-            consultant_name=ReadField[str](value="Subramanian Arumugam", confidence=HIGH),
-            client_name=ReadField[str](value="iStream", confidence=HIGH),
+            consultant_name=ReadField[str](value="Priya Venkatesan", confidence=HIGH),
+            client_name=ReadField[str](value="Cascade Staffing", confidence=HIGH),
             end_client_name=ReadField[str](),
             period_start=ReadField[date](value=date(2025, 4, 27), confidence=HIGH),
             period_end=ReadField[date](value=date(2025, 5, 31), confidence=HIGH),
             daily_entries=ReadField[list[DailyEntry]](value=self.days(), confidence=HIGH),
             stated_total_hours_hundredths=ReadField[int](value=stated, confidence=HIGH),
             approval=ReadField[Approval](
-                value=Approval(kind=ApprovalKind.APPROVED_STATUS, approver="Ramana Akula"),
+                value=Approval(kind=ApprovalKind.APPROVED_STATUS, approver="Lena Ortiz"),
                 confidence=HIGH,
             ),
         )

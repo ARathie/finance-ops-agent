@@ -30,8 +30,8 @@ def reading(
 ) -> TimesheetReading:
     high = Confidence.HIGH
     return TimesheetReading(
-        consultant_name=ReadField[str](value="Sridhar Doraiswamy", confidence=high),
-        client_name=ReadField[str](value="MasTec", confidence=high),
+        consultant_name=ReadField[str](value="Ravi Balakrishnan", confidence=high),
+        client_name=ReadField[str](value="Northwind Utilities", confidence=high),
         end_client_name=ReadField[str](),
         period_start=ReadField[date](value=start, confidence=high),
         period_end=ReadField[date](value=end, confidence=high),
@@ -39,7 +39,7 @@ def reading(
         row_entries=ReadField[list[RowEntry]](value=rows, confidence=high),
         stated_total_hours_hundredths=ReadField[int](value=stated, confidence=high),
         approval=ReadField[Approval](
-            value=Approval(kind=ApprovalKind.APPROVED_STATUS, approver="Ajaya Rautray"),
+            value=Approval(kind=ApprovalKind.APPROVED_STATUS, approver="Lena Ortiz"),
             confidence=high,
         ),
     )

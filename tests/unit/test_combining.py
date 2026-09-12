@@ -27,8 +27,8 @@ JULY = (date(2026, 7, 1), date(2026, 7, 31))
 
 def make(
     *,
-    consultant: str | None = "Sridhar Doraiswamy",
-    client: str | None = "MasTec",
+    consultant: str | None = "Ravi Balakrishnan",
+    client: str | None = "Northwind Utilities",
     period: tuple[date, date] | None = JULY,
     rows: list[RowEntry] | None = None,
     stated: int | None = None,
@@ -146,5 +146,5 @@ def test_a_blank_second_attachment_changes_nothing() -> None:
     nothing = make(consultant=None, client=None, period=None)
     combined, findings = combine_readings([timesheet, nothing])
     assert findings == []
-    assert combined.consultant_name.value == "Sridhar Doraiswamy"
+    assert combined.consultant_name.value == "Ravi Balakrishnan"
     assert check_hours(combined)[0] == 17600
