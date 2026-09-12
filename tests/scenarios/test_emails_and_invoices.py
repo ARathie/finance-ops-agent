@@ -86,6 +86,51 @@ class TestDryRun:
             assert email.to == ("kevin@icon-technologies.com",)
 
 
+class TestWhichFileIsAttached:
+    """A consultant working through a firm sends the approved timesheet and the
+    firm's invoice in one email, in whichever order they please. The file the
+    agent attaches to its own emails must be the timesheet.
+
+    The firm's invoice shows what Icon pays -- the pay rate -- so sending it to
+    a client breaks rule 4. It reached one because the attachment was chosen by
+    position: whichever file the email listed first.
+    """
+
+    def invoice_first(self, env: ScenarioEnv) -> None:
+        env.add_email(
+            PRIYA,
+            attachments=[
+                # The firm's invoice: a total, no approval, and a pay rate on it.
+                ("vendor-invoice.pdf", b"INVOICE", reading(AUG_START, AUG_END, approved=False)),
+                # The timesheet: what the client approved.
+                ("timesheet.pdf", b"TIMESHEET", reading(AUG_START, AUG_END)),
+            ],
+        )
+
+    def test_kevin_is_shown_the_timesheet_not_the_invoice(self, env: ScenarioEnv) -> None:
+        self.invoice_first(env)
+        env.run()
+
+        details = [e for e in env.sender.sent_emails() if "Timesheet received" in e.subject]
+        assert details, "no timesheet-received email"
+        names = [a.filename for a in details[0].attachments]
+        assert names == ["timesheet.pdf"], names
+
+    def test_the_client_is_never_sent_the_firms_invoice(self, env: ScenarioEnv) -> None:
+        env.mode = Mode.AUTO
+        from tests.scenarios.conftest import engagement_row
+
+        env.workbook.engagements[0] = engagement_row(2, **{"Send automatically": "yes"})
+        self.invoice_first(env)
+        env.run()
+
+        billing = [e for e in env.sender.sent_emails() if e.to == ("ap@acme.example",)]
+        assert billing, "the client was sent nothing to check"
+        names = [a.filename for a in billing[0].attachments]
+        assert "vendor-invoice.pdf" not in names, f"the pay rate went to the client: {names}"
+        assert "timesheet.pdf" in names, names
+
+
 class TestAskFirst:
     def test_kevin_is_asked_and_approving_sends_the_invoice(self, env: ScenarioEnv) -> None:
         env.mode = Mode.ASK_FIRST

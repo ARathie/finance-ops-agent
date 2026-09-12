@@ -173,7 +173,12 @@ class ScenarioEnv:
         message_id: str | None = None,
         scripted_reading: TimesheetReading | None = None,
         body: str = "Please see attached.",
+        attachments: list[tuple[str, bytes, TimesheetReading | None]] | None = None,
     ) -> str:
+        """`attachments` carries several files in the order the email lists
+        them, which is what decides nothing and must be shown to decide
+        nothing: a consultant working through a firm sends the approved
+        timesheet and the firm's invoice together, in either order."""
         self.email_count += 1
         name = f"{self.email_count:02d}-email"
         message = EmailMessage()
@@ -183,13 +188,17 @@ class ScenarioEnv:
         message["Message-ID"] = message_id or f"<{name}@example>"
         message["Date"] = "Tue, 08 Sep 2026 09:00:00 +0000"
         message.set_content(body)
-        if attachment is not None:
-            filename, content = attachment
+        files = (
+            attachments
+            if attachments is not None
+            else ([(*attachment, scripted_reading)] if attachment is not None else [])
+        )
+        for filename, content, reading in files:
             message.add_attachment(
                 content, maintype="application", subtype="pdf", filename=filename
             )
-            if scripted_reading is not None:
-                self.readings[filename] = scripted_reading
+            if reading is not None:
+                self.readings[filename] = reading
         (self.mailbox_dir / f"{name}.eml").write_bytes(bytes(message))
         return name
 

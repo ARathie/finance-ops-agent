@@ -12,7 +12,7 @@ Sent every time a timesheet is read, before any checking is finished (Objective 
 
 - **Subject:** `Timesheet received: Priya Shah — Acme Corp — Aug 1–31, 2026 — 156.00 hours`
 - **Body:** consultant, client (and end client), period, total hours, daily hours if shown, approval (what and by whom), what the agent will do next (invoice, or which review reasons it found), and the engagement row it matched.
-- **Attachments:** the original timesheet file.
+- **Attachments:** the original timesheet file -- the one showing approval, when the email carried more than one document.
 
 ### 2. Needs your review
 
@@ -20,7 +20,7 @@ Sent when one or more checks fail (see `timesheet-checks.md`). One email per tim
 
 - **Subject:** `Needs your review: Priya Shah — Acme Corp — Aug 2026 — no approval found`
 - **Body:** what the agent found (same summary as above), each problem in plain words, and what Kevin can do: fix the engagement list, or reply with the answer, or reply "ignore". Examples of replies that work are included.
-- **Attachments:** the original timesheet file.
+- **Attachments:** the original timesheet file -- the one showing approval, when the email carried more than one document.
 
 Kevin's reply is read by the agent. Only replies from `kevin@icon-technologies.com` in the same thread count. The agent re-runs the checks with the answer; if it still cannot proceed, it replies again saying what is still missing.
 
@@ -30,7 +30,7 @@ Ask first mode only. Sent when a timesheet passes every check.
 
 - **Subject:** `Approve? Invoice for Acme Corp — Priya Shah — Aug 2026 — $21,840.00`
 - **Body:** client, the billing contact it will go to, consultant, period, hours, bill rate, total, due date, and the billing email exactly as it will be sent.
-- **Attachments:** the invoice PDF and the timesheet.
+- **Attachments:** the invoice PDF and the timesheet. **The timesheet, not another file on the same email.** A consultant working through their own firm sends the approved timesheet and the firm's invoice to Icon together, and that invoice shows the firm's own rate -- what Icon pays. The file the agent attaches is the one showing the client's approval, whichever order the email listed them in.
 - **Kevin replies** `approve` to send, or `cancel` (with a reason if he likes) to stop. Anything else gets a short reply asking for one of the two words. Only replies from Kevin's address in the same thread count.
 
 In automatic mode this email is not sent for engagements marked "send automatically"; Kevin sees the billing email itself instead, because he is always on CC.

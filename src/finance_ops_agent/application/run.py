@@ -405,8 +405,11 @@ def _process_timesheet(
             EmailAttachment(attachment.filename, attachment.sha256),
         )
         return NEEDS_REVIEW_FOLDER
-    # The attachment the item is filed under is the one the reading came from.
-    attachment = read_attachments[0]
+    # The attachment filed against the item, shown to Kevin and sent to the
+    # client, is the timesheet -- the document that shows approval -- and not
+    # whichever file the email happened to list first. `readings` and
+    # `read_attachments` are built together, so the index picks out both.
+    attachment = read_attachments[checks.leading_index(readings)]
     reading, combine_findings = checks.combine_readings(readings)
     report.timesheets_processed += 1
 

@@ -444,6 +444,23 @@ def _better(left: ReadField[T], right: ReadField[T]) -> ReadField[T]:
     return right if order[right.confidence] > order[left.confidence] else left
 
 
+def leading_index(readings: Sequence[TimesheetReading]) -> int:
+    """Which of an email's attachments is the timesheet: the one that shows
+    approval, else the first that could be read.
+
+    The answer decides two things that must agree. It is the document the rest
+    are merged into, and it is the file attached to the emails -- the one Kevin
+    sees as "the timesheet received", and the one the client is sent with the
+    invoice. Picking by position instead put a vendor's invoice in front of a
+    client, and that invoice shows what Icon pays: the pay rate, which never
+    goes to a client (rule 4 in CLAUDE.md).
+    """
+    for index, reading in enumerate(readings):
+        if _kind_of(reading) is not ApprovalKind.NONE:
+            return index
+    return 0
+
+
 def combine_readings(
     readings: Sequence[TimesheetReading],
 ) -> tuple[TimesheetReading, list[Finding]]:
@@ -461,9 +478,7 @@ def combine_readings(
     if len(readings) == 1:
         return readings[0], []
 
-    # The document that shows approval is the timesheet; it leads.
-    with_approval = [r for r in readings if _kind_of(r) is not ApprovalKind.NONE]
-    base = with_approval[0] if with_approval else readings[0]
+    base = readings[leading_index(readings)]
     others = [r for r in readings if r is not base]
 
     findings: list[Finding] = []
