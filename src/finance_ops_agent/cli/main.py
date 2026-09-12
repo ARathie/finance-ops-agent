@@ -394,7 +394,7 @@ def _command_doctor(args: argparse.Namespace) -> int:
             for problem in parsed.problems
         ]
 
-    results.append(checks.check_engagement_list(load_list))
+    results.append(checks.check_engagement_list(load_list, config.engagement_list))
 
     def describe_database() -> str:
         store = _open_store(config.data_dir)
