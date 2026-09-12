@@ -288,6 +288,7 @@ def _real_deps(mode_override: "Mode | None" = None) -> RunDeps:
             admin_email=config.admin_email,
             mode=effective_mode(config.mode, mode_override),
             agent_mailbox=config.agent_mailbox,
+            timesheet_forwarders=config.timesheet_forwarders,
         ),
         sender=SmtpSender(account, config.agent_mailbox, clock.now),
         accounting=_accounting(config, store, renderer, clock.today()),
@@ -382,6 +383,10 @@ def _command_doctor(args: argparse.Namespace) -> int:
         )
     )
 
+    results.append(
+        checks.check_timesheet_forwarders(config.timesheet_forwarders, config.mode.value)
+    )
+
     def load_list() -> tuple[int, list[str]]:
         parsed = parse_workbook(ExcelEngagementList(config.engagement_list).load())
         return len(parsed.engagements), [
@@ -389,7 +394,7 @@ def _command_doctor(args: argparse.Namespace) -> int:
             for problem in parsed.problems
         ]
 
-    results.append(checks.check_engagement_list(load_list))
+    results.append(checks.check_engagement_list(load_list, config.engagement_list))
 
     def describe_database() -> str:
         store = _open_store(config.data_dir)

@@ -1,8 +1,8 @@
 {
   "reading": {
     "consultant_name": {
-      "value": "Sridhar Doraiswamy",
-      "quote": "User: Sridhar Doraiswamy",
+      "value": "Ravi Balakrishnan",
+      "quote": "Ravi Balakrishnan",
       "confidence": "high"
     },
     "client_name": {
@@ -16,12 +16,22 @@
       "confidence": "low"
     },
     "period_start": {
-      "value": "2026-08-01",
+      "value": "2026-06-27",
       "quote": null,
       "confidence": "high"
     },
     "period_end": {
-      "value": "2026-08-31",
+      "value": "2026-07-31",
+      "quote": null,
+      "confidence": "high"
+    },
+    "stated_month_start": {
+      "value": "2026-07-01",
+      "quote": "Jul-26",
+      "confidence": "high"
+    },
+    "noted_in_month_hundredths": {
+      "value": 1600,
       "quote": null,
       "confidence": "high"
     },
@@ -33,33 +43,27 @@
     "row_entries": {
       "value": [
         {
-          "label": "08/29/2026",
-          "first_day": "2026-08-29",
-          "last_day": "2026-09-04",
+          "label": "06/27/2026",
+          "first_day": "2026-06-27",
+          "last_day": "2026-07-03",
+          "hours_hundredths": 3200
+        },
+        {
+          "label": "07/04/2026",
+          "first_day": "2026-07-04",
+          "last_day": "2026-07-10",
           "hours_hundredths": 4000
         },
         {
-          "label": "08/22/2026",
-          "first_day": "2026-08-22",
-          "last_day": "2026-08-28",
+          "label": "07/11/2026",
+          "first_day": "2026-07-11",
+          "last_day": "2026-07-17",
           "hours_hundredths": 4000
         },
         {
-          "label": "08/15/2026",
-          "first_day": "2026-08-15",
-          "last_day": "2026-08-21",
-          "hours_hundredths": 4000
-        },
-        {
-          "label": "08/08/2026",
-          "first_day": "2026-08-08",
-          "last_day": "2026-08-14",
-          "hours_hundredths": 4000
-        },
-        {
-          "label": "08/01/2026",
-          "first_day": "2026-08-01",
-          "last_day": "2026-08-07",
+          "label": "07/18/2026",
+          "first_day": "2026-07-18",
+          "last_day": "2026-07-24",
           "hours_hundredths": 4000
         },
         {
@@ -80,19 +84,13 @@
     "approval": {
       "value": {
         "kind": "approved_status",
-        "approver": "Ajaya Rautray",
+        "approver": "Lena Ortiz",
         "approval_date": null
       },
       "quote": "Approved",
       "confidence": "high"
     },
-    "unusual_items": [
-      "A row for the week of 9/05/2026 is Pending, not Approved.",
-      "A note drawn on the page reads '8 hours in Aug' beside the week of 8/29/2026."
-    ]
+    "unusual_items": []
   },
-  "review_codes": [
-    "NOT_SURE",
-    "PART_WEEK_UNCLEAR"
-  ]
+  "review_codes": []
 }

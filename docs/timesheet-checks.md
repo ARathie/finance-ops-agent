@@ -14,6 +14,8 @@ Timesheets arrive in many layouts: a PDF from the client's time system, a spread
 | Period start, period end | First and last date covered |
 | Daily hours | Date and hours for each day, when the timesheet shows them |
 | Total hours | The total printed on the timesheet |
+| Billed month | The month a document names outright: an invoice's date or period, a heading, or a note like "16 Hours in Jul-26". A weekly timesheet's own dates span two months and never say which is being billed (decision 26). |
+| Hours a note assigns to the month | Where a note beside a straddling week says how many of its hours belong to the billed month. Checked against the printed total, not trusted over it. |
 | Approval | What shows the client approved it: an `Approved` status, an approver's name and date, a signature, or a forwarded approval email from the client. Or nothing. |
 | Anything odd | Overtime lines, expenses, more than one rate, more than one person, notes |
 
@@ -63,6 +65,7 @@ The code is what the software uses; the message is what Kevin sees. Every review
 | `HOURS_DONT_ADD_UP` | The daily hours don't add up to the total. | Reply with the hours to use. |
 | `HOURS_UNUSUAL` | The hours look unusually high, or are zero. | Reply "hours are right" or with the correct hours. |
 | `PART_WEEK_UNCLEAR` | A week on this timesheet runs past the end of the period I'm billing, and nothing on it says how many of that week's hours belong to this period. | Reply with the hours from that week that belong to this period. |
+| `PART_WEEK_DISAGREES` | A note on the timesheet and the total on the invoice disagree about how many of a straddling week's hours belong to this month. | Reply with the hours to use for that week. |
 | `NO_APPROVAL` | I can't see that the client approved these hours. | Forward the client's approval, or reply "approved by <name> on <date>". |
 | `NOT_SURE` | I read this timesheet but I'm not confident about <field>. | Confirm or correct the field. |
 | `RATE_MISSING` | The engagement list has no rate for these dates. | Add a row with the rate and its start date. |

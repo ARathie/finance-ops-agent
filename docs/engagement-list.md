@@ -4,6 +4,8 @@ The engagement list is the spreadsheet Kevin keeps with every client, consultant
 
 File: `engagements.xlsx` (location set in the agent's settings; a CSV export of each sheet works too). Kevin edits it in Excel like any other spreadsheet. The agent never writes to it.
 
+**Starting from scratch:** copy `templates/engagements-template.xlsx`. It has the four sheets with these columns in this order, one made-up example row on each to replace, a "Read me" sheet in plain words, and dropdowns on every column that only takes certain words (`Delivery`, `Type`, `Paid by`, `Billing schedule`, the yes/no columns) so the commonest mistake cannot be made. Rebuild it with `uv run python templates/build_template.py` if a column here ever changes.
+
 ## Sheet: Clients
 
 One row per company Icon sends invoices to. If Icon invoices a staffing company rather than the place the consultant works, the staffing company is the client here.
@@ -70,6 +72,17 @@ One row per consultant working for one client. When a rate changes, add a new ro
 | Rates from | The date these rates apply from; use the start date for the first row | 2026-02-01 |
 | Send automatically | `yes` lets the agent send clean invoices without asking when it is in automatic mode; `no` always asks | no |
 | Active | `yes` or `no` | yes |
+
+## Standing in for a real address while testing
+
+Only two cells in this whole workbook ever cause an email to leave for someone outside Icon: a client's **Billing email** and **CC email**. Every other email the agent writes -- the timesheet received note, the invoice preview, the approval question, the payment instruction, the Monday summary, every review -- goes to Kevin, and the client's billing email always carries him on CC.
+
+So while the agent is being tested, putting a tester's own address in those two cells means nothing can reach a real client even by accident. `dry_run` already guarantees that; this is the second lock, and the roadmap's PR 15 has the box for taking it off again.
+
+Two places **not** to put a stand-in address:
+
+- **Consultants -> Email.** Nothing is ever sent there; it is how the agent recognises an arriving timesheet. An address here claims every timesheet sent from it for that one consultant, ahead of the name on the document, so a tester's address here would file everybody's forwarded timesheets under whichever consultant appears first. Leave the consultant's real address, or leave it blank and forward instead (decision 25).
+- **Clients -> Email domains.** This says "mail from this domain is this client". A public domain such as `gmail.com` here would make every message from that domain look like a reply from that client.
 
 ## Rules the agent follows
 

@@ -85,18 +85,29 @@ def test_the_real_format_samples_are_in_the_set() -> None:
     """The formats Icon actually receives, and what each one alone can prove."""
     by_name = {case.name: case for case in load_cases(CASES_DIR)}
     real = {name: case for name, case in by_name.items() if case.meta.is_real_format()}
-    assert len(real) == 4, sorted(real)
+    assert len(real) == 5, sorted(real)
 
-    # A timesheet alone: approved, but a week runs past the month end.
-    timesheet = by_name["45-pdf-mastec-timesheet-jul"]
-    assert "PART_WEEK_UNCLEAR" in timesheet.expected.review_codes
-    assert "NO_APPROVAL" not in timesheet.expected.review_codes
+    # A timesheet alone: approved, and the note beside the straddling week says
+    # how many of its hours are this month's, so it no longer has to ask
+    # (decision 26). Its own dates run past the month at both ends.
+    timesheet = by_name["45-pdf-weekly-list-jul"]
+    assert timesheet.expected.review_codes == []
+    assert timesheet.expected.reading.noted_in_month_hundredths.value == 1_600
+    assert timesheet.expected.reading.stated_total_hours_hundredths.value is None
 
-    # The vendor's invoice alone: a printed total, but nothing shows approval.
-    invoice = by_name["47-pdf-startech-invoice-jul"]
+    # The vendor's invoice alone: a printed total and the month, but nothing
+    # on it shows the client approved anything.
+    invoice = by_name["47-pdf-vendor-invoice-jul"]
     assert "NO_APPROVAL" in invoice.expected.review_codes
-    assert "PART_WEEK_UNCLEAR" not in invoice.expected.review_codes
     assert invoice.expected.reading.stated_total_hours_hundredths.value == 17600
+    assert invoice.expected.reading.stated_month_start.value is not None
+
+    # A daily timesheet: the pages run Sunday to Saturday, so the document
+    # holds April days that are not May's to bill (decision 27).
+    daily = by_name["48-pdf-daily-pages-may"]
+    days = daily.expected.reading.daily_entries.value or []
+    assert sum(day.hours_hundredths for day in days) == 19_200
+    assert sum(day.hours_hundredths for day in days if day.day.month == 5) == 16_800
 
 
 def test_a_real_format_sample_needs_no_anonymising_paperwork() -> None:

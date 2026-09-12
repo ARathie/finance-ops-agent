@@ -112,10 +112,10 @@ class TestHours:
         )
         assert ReviewCode.HOURS_UNUSUAL in [finding.code for finding in findings]
 
-    def test_far_over_full_time_is_unusual(self) -> None:
-        # August 2026 has 21 weekdays; full time 168 h; 25% over is 210 h.
-        _, ok = checks.check_hours(reading(AUG.start, AUG.end, 20_900))
-        _, over = checks.check_hours(reading(AUG.start, AUG.end, 21_100))
+    def test_over_full_time_is_unusual(self) -> None:
+        # August 2026 has 21 weekdays; full time 168 h; 5% over is 176.4 h.
+        _, ok = checks.check_hours(reading(AUG.start, AUG.end, 17_600))
+        _, over = checks.check_hours(reading(AUG.start, AUG.end, 17_700))
         assert ok == []
         assert [finding.code for finding in over] == [ReviewCode.HOURS_UNUSUAL]
 

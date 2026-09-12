@@ -48,7 +48,15 @@ def complete_if_covered(deps: RunDeps, item: Item, report: RunReport) -> None:
         if record.is_duplicate or record.is_correction:
             continue
         reading = stored_reading(record)
-        span = reading_span(reading)
+        stated = reading.stated_month_start.value
+        if stated is not None and item.period.covers(stated):
+            # A document that says which month it bills covers that month, so
+            # its own span is beside the point: a weekly timesheet's last row
+            # is dated the week's first day and stops short of the month end
+            # (decision 26). Waiting on those few days would wait for ever.
+            span: tuple[date, date] | None = (item.period.start, item.period.end)
+        else:
+            span = reading_span(reading)
         if span is not None:
             latest_by_span[span] = reading
     if not checks.period_fully_covered(item.period, list(latest_by_span)):
@@ -61,7 +69,10 @@ def complete_if_covered(deps: RunDeps, item: Item, report: RunReport) -> None:
     if total is None:
         total = Hours(0)
         for reading in latest_by_span.values():
-            hours, _ = checks.check_hours(reading)
+            # With the period: only the days and weeks inside the month being
+            # billed are counted (decisions 26 and 27). Without it this summed
+            # every day on the document and billed 192 hours for a 168-hour May.
+            hours, _ = checks.check_hours(reading, item.period)
             total = total + Hours(hours or 0)
     billed = invoice_amount(total, Money(item.snapshot.bill_rate_cents))
     owed = pay_amount(total, Money(item.snapshot.pay_rate_cents))

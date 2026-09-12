@@ -90,6 +90,12 @@ def open_smtp(account: MailAccount) -> smtplib.SMTP:
                 timeout=account.timeout,
                 context=tls_context(),
             )
+            # SMTP_SSL's constructor reads the greeting but never says EHLO, and
+            # until it does the server's extension list is empty, so has_extn
+            # below answers False for a server that does offer a login. Without
+            # this line the agent skips the login and sends unauthenticated,
+            # which a real server refuses at the recipient ("relaying denied").
+            server.ehlo()
         else:
             server = smtplib.SMTP(
                 account.smtp_host,
@@ -103,6 +109,13 @@ def open_smtp(account: MailAccount) -> smtplib.SMTP:
                 server.ehlo()
         if server.has_extn("auth"):
             server.login(account.username, account.password)
+        elif account.smtp_security != "none":
+            # Only a test server on this machine may be spoken to in the clear;
+            # anywhere else, no login means the mail would go unauthenticated.
+            raise MailboxProblem(
+                f"{account.smtp_host}:{account.smtp_port} offers no login, so the agent"
+                " would have to send unauthenticated; it will not"
+            )
     except smtplib.SMTPAuthenticationError as error:
         raise MailboxProblem(
             f"the mail server refused the login for {account.username}: {error}"

@@ -232,6 +232,11 @@ def _decide_kind(deps: RunDeps, workbook: EngagementWorkbook, email: InboundEmai
     for vendor in workbook.vendors:
         if sender in (address.casefold() for address in vendor.contact_emails):
             return MessageKind.TIMESHEET
+    # Someone forwarding a timesheet on a consultant's behalf (decision 25).
+    # The sender says nothing about whose timesheet it is, so match_consultant
+    # falls through to the name on the document, which is the point.
+    if sender in (address.casefold() for address in deps.settings.timesheet_forwarders):
+        return MessageKind.TIMESHEET
     domain = sender.rsplit("@", 1)[-1]
     for client in workbook.clients:
         addresses = [address.casefold() for address in client.billing_emails + client.cc_emails]
@@ -377,8 +382,11 @@ def _process_timesheet(
                     deps.store.load_file(part.sha256), part.filename, part.mime_type, hints
                 )
             )
-        except CantReadAttachmentError:
+        except CantReadAttachmentError as error:
             unreadable.append(part.filename)
+            # Why it could not be read is the whole diagnosis, and it is the
+            # reader's own words: never discard it.
+            report.note(f"could not read {part.filename}: {error}")
             continue
         read_attachments.append(part)
     if not readings:
@@ -397,8 +405,11 @@ def _process_timesheet(
             EmailAttachment(attachment.filename, attachment.sha256),
         )
         return NEEDS_REVIEW_FOLDER
-    # The attachment the item is filed under is the one the reading came from.
-    attachment = read_attachments[0]
+    # The attachment filed against the item, shown to Kevin and sent to the
+    # client, is the timesheet -- the document that shows approval -- and not
+    # whichever file the email happened to list first. `readings` and
+    # `read_attachments` are built together, so the index picks out both.
+    attachment = read_attachments[checks.leading_index(readings)]
     reading, combine_findings = checks.combine_readings(readings)
     report.timesheets_processed += 1
 
@@ -442,7 +453,7 @@ def _process_timesheet(
                 )
             )
 
-    hours_total, hours_findings = checks.check_hours(reading)
+    hours_total, hours_findings = checks.check_hours(reading, period)
     findings.extend(hours_findings)
     findings.extend(checks.check_approval(reading))
     findings.extend(checks.check_confidence(reading))

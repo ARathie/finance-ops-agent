@@ -9,7 +9,7 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
 endobj
 4 0 obj
-<< /Length 720 >>
+<< /Length 695 >>
 stream
 BT /F1 12 Tf 72 760 Td 16 TL
 (TIME REPORT) Tj T*
@@ -26,7 +26,6 @@ BT /F1 12 Tf 72 760 Td 16 TL
 (2026-02-11  8.00) Tj T*
 (2026-02-12  8.00) Tj T*
 (2026-02-13  8.00) Tj T*
-(2026-02-16  8.00) Tj T*
 (2026-02-17  8.00) Tj T*
 (2026-02-18  8.00) Tj T*
 (2026-02-19  8.00) Tj T*
@@ -36,7 +35,7 @@ BT /F1 12 Tf 72 760 Td 16 TL
 (2026-02-25  8.00) Tj T*
 (2026-02-26  8.00) Tj T*
 (2026-02-27  8.00) Tj T*
-(Total: 160.00) Tj T*
+(Total: 152.00) Tj T*
 (Approved by Sam Ortiz on 2026-02-28) Tj T*
 ET
 endstream
@@ -51,9 +50,9 @@ xref
 0000000058 00000 n 
 0000000115 00000 n 
 0000000241 00000 n 
-0000001012 00000 n 
+0000000987 00000 n 
 trailer
 << /Size 6 /Root 1 0 R >>
 startxref
-1082
+1057
 %%EOF

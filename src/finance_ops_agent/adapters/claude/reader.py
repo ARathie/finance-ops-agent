@@ -24,7 +24,7 @@ from finance_ops_agent.domain.reading import (
 from finance_ops_agent.ports.reader import CantReadAttachmentError, TokenUsage
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
-TIMESHEET_PROMPT_VERSION = "timesheet_v2"
+TIMESHEET_PROMPT_VERSION = "timesheet_v3"
 CLASSIFY_PROMPT_VERSION = "classify_v1"
 REPLY_PROMPT_VERSION = "reply_v1"
 MAX_TOKENS = 16000

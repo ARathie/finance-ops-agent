@@ -6,14 +6,14 @@
       "confidence": "low"
     },
     "client_name": {
-      "value": "Mastec",
-      "quote": "MasTec Consulting Service for Mastec",
+      "value": "Northwind Utilities",
+      "quote": "Northwind Utilities",
       "confidence": "high"
     },
     "end_client_name": {
-      "value": "Mastec",
-      "quote": "Consulting Service for Mastec",
-      "confidence": "high"
+      "value": null,
+      "quote": null,
+      "confidence": "low"
     },
     "period_start": {
       "value": "2026-08-01",
@@ -21,9 +21,19 @@
       "confidence": "high"
     },
     "period_end": {
-      "value": "2026-08-31",
+      "value": "2026-09-04",
       "quote": null,
       "confidence": "high"
+    },
+    "stated_month_start": {
+      "value": "2026-08-01",
+      "quote": "08/31/2026",
+      "confidence": "high"
+    },
+    "noted_in_month_hundredths": {
+      "value": null,
+      "quote": null,
+      "confidence": "low"
     },
     "daily_entries": {
       "value": [],
@@ -68,22 +78,21 @@
     },
     "stated_total_hours_hundredths": {
       "value": 16800,
-      "quote": "168 hours * $110 = $18.480",
+      "quote": "168 hours",
       "confidence": "high"
     },
     "approval": {
-      "value": null,
+      "value": {
+        "kind": "none",
+        "approver": null,
+        "approval_date": null
+      },
       "quote": null,
       "confidence": "low"
     },
-    "unusual_items": [
-      "The column is headed 'WEEK ENDING' but the dates are each week's first day.",
-      "A rate of 110.00 an hour is printed on every line.",
-      "This is the consultant's vendor company's invoice to Icon, not a timesheet."
-    ]
+    "unusual_items": []
   },
   "review_codes": [
-    "NOT_SURE",
     "NO_APPROVAL"
   ]
 }

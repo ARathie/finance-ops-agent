@@ -1,0 +1,5 @@
+{
+  "time_system": "vendor invoice with weekly lines",
+  "origin": "real_format_invented_data",
+  "notes": "The column is headed 'WEEK ENDING' while every date below it is the week's FIRST day. The straddling week is already apportioned by the vendor, and the invoice date names the month being billed."
+}

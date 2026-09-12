@@ -73,6 +73,124 @@ class TestDuplicates:
         assert report.messages_stored == 1
 
 
+class TestForwardedTimesheets:
+    """Decision 25: for the first cycle, old timesheets are forwarded by hand.
+
+    The forwarder's address says nothing about whose timesheet it is, so the
+    consultant has to come off the document. That is the same fallback a real
+    consultant's mail would use if they wrote from a new address.
+    """
+
+    FORWARDER = "meghan.rathie@gmail.com"
+
+    def test_a_forward_from_an_unnamed_address_is_still_set_aside(self, env: ScenarioEnv) -> None:
+        env.add_email(
+            self.FORWARDER,
+            subject="FW: Priya's August timesheet",
+            scripted_reading=reading(AUG_START, AUG_END),
+        )
+        env.run()
+
+        assert open_codes(env) == {"UNKNOWN_SENDER"}
+        item = env.the_item()
+        assert item.status is ItemStatus.WAITING_FOR_TIMESHEET
+
+    def test_a_named_forwarder_gets_the_timesheet_read(self, env: ScenarioEnv) -> None:
+        env.forwarders = (self.FORWARDER,)
+        env.add_email(
+            self.FORWARDER,
+            subject="FW: Priya's August timesheet",
+            scripted_reading=reading(AUG_START, AUG_END),
+        )
+        env.run()
+
+        item = env.store.find_item("Priya Shah", "Acme Corp", BillingPeriod(AUG_START, AUG_END))
+        assert item is not None
+        assert item.status is ItemStatus.READY
+        # The money is the worked example, reached from a forwarded email.
+        assert item.invoice_amount == Money(2_184_000)
+        assert item.amount_owed == Money(1_560_000)
+        assert open_codes(env) == set()
+
+    def test_the_consultant_comes_off_the_document_not_the_forwarder(
+        self, env: ScenarioEnv
+    ) -> None:
+        env.forwarders = (self.FORWARDER,)
+        env.add_email(
+            self.FORWARDER,
+            subject="FW: timesheet",
+            scripted_reading=reading(AUG_START, AUG_END, consultant="Dana Cruz"),
+        )
+        env.run()
+
+        # Priya's own expected item is untouched: this was not her timesheet.
+        priya = env.store.find_item("Priya Shah", "Acme Corp", BillingPeriod(AUG_START, AUG_END))
+        assert priya is not None and priya.status is ItemStatus.WAITING_FOR_TIMESHEET
+        # Read as Dana's, whose engagement does not cover August, so it asks
+        # rather than filing it under the only other consultant it knows.
+        assert open_codes(env) == {"ENGAGEMENT_UNCLEAR"}
+
+    def test_a_forward_naming_nobody_asks_kevin_rather_than_guessing(
+        self, env: ScenarioEnv
+    ) -> None:
+        env.forwarders = (self.FORWARDER,)
+        env.add_email(
+            self.FORWARDER,
+            subject="FW: timesheet",
+            scripted_reading=reading(AUG_START, AUG_END, consultant="Someone Not On The List"),
+        )
+        env.run()
+
+        assert "CONSULTANT_UNKNOWN" in open_codes(env)
+
+
+class TestTheWholeWayThroughToMoney:
+    """The path that actually bills: run -> complete_if_covered -> amounts.
+
+    The checks were right and this path called them without the billing
+    period, so a document holding days from two months billed all of them.
+    A real May timesheet went out at 192 hours where 168 were worked.
+    """
+
+    def test_only_the_months_own_days_reach_the_invoice(self, env: ScenarioEnv) -> None:
+        spilling = [
+            (date(2026, 7, 30), 800),  # July: another invoice's day
+            (date(2026, 7, 31), 800),  # July
+            *[(date(2026, 8, day), 800) for day in (3, 4, 5, 6, 7)],
+        ]
+        env.add_email(
+            PRIYA,
+            scripted_reading=reading(
+                date(2026, 7, 30), AUG_END, total_hundredths=None, dailies=spilling
+            ),
+        )
+        env.run()
+
+        item = env.store.find_item("Priya Shah", "Acme Corp", BillingPeriod(AUG_START, AUG_END))
+        assert item is not None
+        assert item.status is ItemStatus.READY
+        assert item.approved_hours == Hours(4_000), "the two July days were billed"
+        assert item.invoice_amount == Money(560_000)  # 40 h x 140.00
+
+    def test_a_timesheet_naming_its_month_does_not_wait_for_the_last_days(
+        self, env: ScenarioEnv
+    ) -> None:
+        """A weekly timesheet's last row is dated the week's first day, so its
+        span stops short of the month end. Waiting for those days waits for
+        ever; the stated month is what settles coverage (decision 26)."""
+        env.add_email(
+            PRIYA,
+            scripted_reading=reading(
+                date(2026, 7, 26), date(2026, 8, 22), month=AUG_START, total_hundredths=16_800
+            ),
+        )
+        env.run()
+
+        item = env.the_item()
+        assert item.status is ItemStatus.READY, "it waited for days it will never be sent"
+        assert item.approved_hours == Hours(16_800)
+
+
 class TestCorrections:
     def test_corrected_before_sent(self, env: ScenarioEnv) -> None:
         env.add_email(PRIYA, scripted_reading=reading(AUG_START, AUG_END))
