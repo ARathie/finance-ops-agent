@@ -32,6 +32,8 @@ class EngagementSnapshot(BaseModel):
     role: str = ""  # printed on the invoice line
     client_legal_name: str = ""  # printed on the invoice
     quickbooks_customer: str = ""  # the Customers name in QuickBooks, if different
+    client_invoice_code: str = ""  # the two letters in the invoice number (MT, IS)
+    consultant_code: str = ""  # the consultant's part of it (PS, or PSHAH when shared)
     client_delivery: str = "email"  # email, or portal (Kevin uploads it himself)
     send_automatically: bool = False  # the engagement row's "Send automatically" column
 

@@ -48,7 +48,7 @@
         "json": {
           "Invoice": {
             "Id": "146",
-            "DocNumber": "1043",
+            "DocNumber": "083126AC-PS",
             "TotalAmt": 23678.4,
             "SyncToken": "0",
             "PrivateNote": "fops item 1"
@@ -63,7 +63,7 @@
         "json": {
           "Invoice": {
             "Id": "146",
-            "DocNumber": "1043",
+            "DocNumber": "083126AC-PS",
             "TotalAmt": 23678.4,
             "SyncToken": "0",
             "PrivateNote": "fops item 1"

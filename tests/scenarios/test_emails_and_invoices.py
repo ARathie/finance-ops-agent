@@ -9,7 +9,7 @@ from finance_ops_agent.adapters.fakes.sender import FakeSender, SimulatedCrash
 from finance_ops_agent.application.context import Mode
 from finance_ops_agent.application.run import run_once
 from finance_ops_agent.domain.emails import OutgoingEmail
-from finance_ops_agent.domain.items import OutgoingRecord
+from finance_ops_agent.domain.items import InvoiceRecord, OutgoingRecord
 from finance_ops_agent.domain.money import Money
 from finance_ops_agent.domain.reading import ReplyAnswer, ReplyAnswerKind, ReplyReading
 from finance_ops_agent.domain.statuses import ItemStatus
@@ -326,7 +326,7 @@ class TestNeverTwice:
         env.now = env.deps().clock.now() + timedelta(minutes=11)
         env.run()
         assert "SEND_UNCERTAIN" in {review.code for review in env.store.open_reviews()}
-        question = _question_about(env, "invoice FAKE-1")
+        question = _question_about(env, "invoice 083126AC-PS")
         assert _billing_emails_sent(env.sender) == []
 
         # Kevin never got it and says so: the same email goes out under the same Message-ID.
@@ -357,7 +357,7 @@ class TestNeverTwice:
         assert _billing_record(env).status == "in_flight"
         env.now = env.deps().clock.now() + timedelta(minutes=11)
         env.run()
-        question = _question_about(env, "invoice FAKE-1")
+        question = _question_about(env, "invoice 083126AC-PS")
         assert "SEND_UNCERTAIN" in {review.code for review in env.store.open_reviews()}
 
         # Kevin was on CC and got it.
@@ -365,7 +365,7 @@ class TestNeverTwice:
         env.run()
         assert _billing_record(env).status == "done"
         assert len(_billing_emails_sent(recovered)) == 1, "the billing email went out exactly once"
-        assert not any("invoice FAKE-1" in r.message for r in env.store.open_reviews())
+        assert not any("invoice 083126AC-PS" in r.message for r in env.store.open_reviews())
         assert not any("Needs your review" in s for s in env.sent_subjects()[-1:])
 
     def test_a_copy_in_sent_settles_it_without_asking(self, env: ScenarioEnv) -> None:
@@ -390,7 +390,7 @@ class TestNeverTwice:
         _crash_on_the_billing_email(env, crash_before_send=True)
         env.now = env.deps().clock.now() + timedelta(minutes=11)
         env.run()
-        question = _question_about(env, "invoice FAKE-1")
+        question = _question_about(env, "invoice 083126AC-PS")
 
         env.reply_from_kevin(question, "not sure, let me check")
         env.run()
@@ -530,6 +530,88 @@ class TestReviewReplies:
         assert item.status is ItemStatus.READY
         assert item.approved_hours is not None
         assert str(item.approved_hours) == "150.00"  # the corrected hours
+
+
+class TestInvoiceNumbering:
+    """Kevin's number, end to end: docs/engagement-list.md and decision 27."""
+
+    def test_the_invoice_carries_kevins_number(self, env: ScenarioEnv) -> None:
+        from tests.scenarios.conftest import engagement_row
+
+        env.mode = Mode.AUTO
+        env.workbook.engagements[0] = engagement_row(2, **{"Send automatically": "yes"})
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        invoices = env.store.invoices_for_item(item.id)
+        assert [record.number for record in invoices] == ["083126AC-PS"]
+        # What the client sees on the email is the same number.
+        billing = next(e for e in env.sender.sent_emails() if e.to == ("ap@acme.example",))
+        assert "083126AC-PS" in billing.subject
+        assert any(a.filename == "invoice-083126AC-PS.pdf" for a in billing.attachments)
+
+    def test_a_replacement_takes_the_next_number_along(self, env: ScenarioEnv) -> None:
+        """A correction covers the same period, so the plain number is spent."""
+        from finance_ops_agent.application import outgoing
+
+        clean_timesheet(env)
+        env.run()
+        item = env.the_item()
+        env.store.record_invoice(
+            InvoiceRecord(
+                id=0,
+                item_id=item.id,
+                number="083126AC-PS",
+                external_id="ext-1",
+                amount_cents=2_184_000,
+                issue_date=env.today,
+                due_date=env.today,
+                pdf_sha256=None,
+                status="cancelled",
+                replaces_number=None,
+            )
+        )
+
+        assert outgoing.next_invoice_number(env.deps(), item) == "083126AC-PS-2"
+
+    def test_a_client_with_no_code_is_asked_about_rather_than_guessed_at(
+        self, env: ScenarioEnv
+    ) -> None:
+        """The failure path: an item whose engagement row never gave a code
+        (one stored before Kevin filled the column in) is never invoiced under
+        a made-up number."""
+        from dataclasses import replace as dc_replace
+
+        from finance_ops_agent.application import outgoing
+
+        clean_timesheet(env)
+        env.run()
+        item = env.the_item()
+        without_code = dc_replace(
+            item, snapshot=item.snapshot.model_copy(update={"client_invoice_code": ""})
+        )
+
+        assert outgoing.next_invoice_number(env.deps(), without_code) is None
+        review = env.store.open_reviews()[-1]
+        assert review.code == "LIST_ROW_PROBLEM"
+        assert "Invoice code" in review.message
+        assert "Nothing was created or sent." in review.message
+
+    def test_a_consultant_whose_initials_are_unknown_is_asked_about(self, env: ScenarioEnv) -> None:
+        from dataclasses import replace as dc_replace
+
+        from finance_ops_agent.application import outgoing
+
+        clean_timesheet(env)
+        env.run()
+        item = env.the_item()
+        without_initials = dc_replace(
+            item, snapshot=item.snapshot.model_copy(update={"consultant_code": ""})
+        )
+
+        assert outgoing.next_invoice_number(env.deps(), without_initials) is None
+        assert "initials" in env.store.open_reviews()[-1].message
 
 
 class TestMondaySummary:

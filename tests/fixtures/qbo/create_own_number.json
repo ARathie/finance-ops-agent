@@ -48,7 +48,7 @@
         "json": {
           "Invoice": {
             "Id": "145",
-            "DocNumber": "083126AC-PS",
+            "DocNumber": "1042",
             "TotalAmt": 21840.0,
             "SyncToken": "0",
             "PrivateNote": "fops item 1"
@@ -57,10 +57,18 @@
       }
     },
     {
-      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/invoice/145/pdf",
+      "key": "POST https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/invoice?operation=void",
       "response": {
         "status": 200,
-        "content": "%PDF-1.4 quickbooks invoice"
+        "json": {
+          "Invoice": {
+            "Id": "145",
+            "DocNumber": "1042",
+            "TotalAmt": 21840.0,
+            "SyncToken": "0",
+            "PrivateNote": "fops item 1"
+          }
+        }
       }
     }
   ]

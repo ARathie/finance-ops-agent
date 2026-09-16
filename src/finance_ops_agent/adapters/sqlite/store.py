@@ -529,6 +529,13 @@ class SqliteStore:
             )
             return [self._invoice_record(row) for row in rows]
 
+    def invoice_number_in_use(self, number: str) -> bool:
+        with Session(self._engine) as session:
+            return (
+                session.scalars(select(InvoiceRow).where(InvoiceRow.number == number)).first()
+                is not None
+            )
+
     def set_invoice_status(self, external_id: str, status: str) -> None:
         with Session(self._engine) as session, session.begin():
             for row in session.scalars(

@@ -1,6 +1,9 @@
-"""An in-memory accounting system for tests."""
+"""An in-memory accounting system for tests.
 
-from dataclasses import replace
+Like both real adapters, it invoices under the number the application worked
+out (docs/decisions.md #27) and keeps its own external id, which is the thing
+the accounting system knows the invoice by.
+"""
 
 from finance_ops_agent.domain.invoices import Invoice
 from finance_ops_agent.ports.accounting import CreatedInvoice
@@ -19,9 +22,8 @@ class FakeAccounting:
         if existing is not None:
             return existing
         self._counter += 1
-        numbered = replace(invoice, number=f"FAKE-{self._counter}")
         created = CreatedInvoice(
-            number=numbered.number, external_id=f"ext-{self._counter}", pdf=b"%PDF-fake"
+            number=invoice.number, external_id=f"ext-{self._counter}", pdf=b"%PDF-fake"
         )
         self.invoices[item_id] = created
         return created

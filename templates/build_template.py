@@ -52,6 +52,7 @@ SHEETS: dict[str, tuple[list[str], list[object]]] = {
             "Names on timesheets",
             "Email domains",
             "QuickBooks customer",
+            "Invoice code",
             "Notes",
             "Active",
         ],
@@ -67,6 +68,7 @@ SHEETS: dict[str, tuple[list[str], list[object]]] = {
             "Acme; ACME Corp.",
             "acme.example",
             "Acme Corporation",
+            "AC",
             "Example row - replace with a real client",
             "yes",
         ],
@@ -74,6 +76,7 @@ SHEETS: dict[str, tuple[list[str], list[object]]] = {
     "Consultants": (
         [
             "Consultant",
+            "Initials",
             "Other names",
             "Email",
             "Type",
@@ -84,6 +87,7 @@ SHEETS: dict[str, tuple[list[str], list[object]]] = {
         ],
         [
             "Priya Shah",
+            "",
             "P. Shah; Shah, Priya",
             "priya@example.com",
             "contractor",

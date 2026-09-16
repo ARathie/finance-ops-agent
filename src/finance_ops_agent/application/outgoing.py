@@ -16,6 +16,7 @@ from finance_ops_agent.application.context import Mode, RunDeps, RunReport
 from finance_ops_agent.domain import emails
 from finance_ops_agent.domain.emails import EmailAttachment, OutgoingEmail
 from finance_ops_agent.domain.guardrails import GuardrailCheck, check_guardrails
+from finance_ops_agent.domain.invoice_numbers import invoice_number
 from finance_ops_agent.domain.invoices import DRAFT_NUMBER, build_invoice
 from finance_ops_agent.domain.items import (
     InvoiceRecord,
@@ -107,6 +108,51 @@ def guardrails_for(deps: RunDeps, item: Item) -> GuardrailCheck:
     )
 
 
+MAX_NUMBER_ATTEMPTS = 20
+
+
+def next_invoice_number(deps: RunDeps, item: Item) -> str | None:
+    """Kevin's number for this item: `083126MT-PS` (domain/invoice_numbers.py).
+
+    One invoice per consultant per client per month makes the plain number
+    unique, so the only thing normally standing in its way is a correction:
+    the replacement covers the same period as the invoice it replaces, whose
+    number is spent, so it takes the next one along.
+
+    None means the agent cannot number it and has asked Kevin instead. Nothing
+    is invented: the two letters are the client's own and the initials are the
+    consultant's.
+    """
+    client_code = item.snapshot.client_invoice_code
+    consultant_code = item.snapshot.consultant_code
+    if not client_code or not consultant_code:
+        missing = (
+            f'the Clients sheet has no "Invoice code" for {item.client}'
+            if not client_code
+            else f"I can't work out {item.consultant}'s initials from their name"
+        )
+        deps.store.open_review(
+            item.id,
+            ReviewCode.LIST_ROW_PROBLEM.value,
+            f"I can't number the invoice for {item.consultant} at {item.client}:"
+            f" {missing}. Fill it in on the engagement list and I'll pick this up"
+            " on the next run. Nothing was created or sent.",
+        )
+        return None
+    for attempt in range(1, MAX_NUMBER_ATTEMPTS + 1):
+        candidate = invoice_number(item.period.end, client_code, consultant_code, attempt)
+        if not deps.store.invoice_number_in_use(candidate):
+            return candidate
+    deps.store.open_review(
+        item.id,
+        ReviewCode.LIST_ROW_PROBLEM.value,
+        f"I have already used every invoice number I can make for {item.consultant}"
+        f" at {item.client} for {item.period.start} to {item.period.end}."
+        " Nothing was created or sent.",
+    )
+    return None
+
+
 def approve_item(deps: RunDeps, item: Item, report: RunReport) -> None:
     """Create the invoice (idempotently) and write down the billing email.
 
@@ -123,7 +169,13 @@ def approve_item(deps: RunDeps, item: Item, report: RunReport) -> None:
     # recognising the item id in the invoice's private note). So this asks once
     # and never needs a lookup of its own.
     known = {record.external_id for record in deps.store.invoices_for_item(item.id)}
-    draft = build_invoice(item, DRAFT_NUMBER, deps.clock.today(), replaces)
+    # The number is the agent's to assign in both modes, so it reads the same
+    # whether Kevin types it into QuickBooks Desktop or QuickBooks Online was
+    # told to use it (docs/decisions.md #27).
+    number = next_invoice_number(deps, item)
+    if number is None:
+        return  # Kevin has been asked; nothing created, nothing sent
+    draft = build_invoice(item, number, deps.clock.today(), replaces)
     created = deps.accounting.create_invoice(draft, item.id)
     invoice = build_invoice(item, created.number, deps.clock.today(), replaces)
     pdf_sha = deps.store.save_file(created.pdf)

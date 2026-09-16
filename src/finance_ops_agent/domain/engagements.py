@@ -14,6 +14,7 @@ from datetime import date
 from enum import StrEnum
 from typing import TypeVar
 
+from finance_ops_agent.domain.invoice_numbers import initials as initials_from_name
 from finance_ops_agent.domain.money import Money
 from finance_ops_agent.domain.periods import BillingSchedule
 
@@ -76,6 +77,7 @@ class Client:
     names_on_timesheets: tuple[str, ...]
     email_domains: tuple[str, ...]
     quickbooks_customer: str
+    invoice_code: str
     notes: str
     active: bool
     row_number: int
@@ -84,6 +86,7 @@ class Client:
 @dataclass(frozen=True)
 class Consultant:
     name: str
+    initials: str
     other_names: tuple[str, ...]
     emails: tuple[str, ...]
     type: ConsultantType
@@ -225,6 +228,15 @@ def _parse_client(raw: RawRow) -> tuple[Client | None, list[ListRowProblem]]:
     billing_emails = row.emails("Billing email")
     if delivery_value == Delivery.EMAIL.value and not billing_emails:
         row.errors.append("there is no billing email for a client delivered by email")
+    # The two letters in the middle of every invoice number for this client
+    # (docs/engagement-list.md). There is no rule that derives MT from Mastec,
+    # so a blank one is a question for Kevin, never a guess.
+    invoice_code = row.text("Invoice code").upper()
+    active = row.yes_no("Active")
+    if active and not invoice_code:
+        row.errors.append('"Invoice code" is empty, so invoices cannot be numbered')
+    elif invoice_code and not (len(invoice_code) == 2 and invoice_code.isalpha()):
+        row.errors.append(f'"Invoice code" should be two letters like MT, not {invoice_code!r}')
     client = Client(
         name=name,
         legal_name=legal_name,
@@ -237,8 +249,9 @@ def _parse_client(raw: RawRow) -> tuple[Client | None, list[ListRowProblem]]:
         names_on_timesheets=_split(row.text("Names on timesheets")),
         email_domains=_split(row.text("Email domains")),
         quickbooks_customer=row.text("QuickBooks customer"),
+        invoice_code=invoice_code,
         notes=row.text("Notes"),
-        active=row.yes_no("Active"),
+        active=active,
         row_number=raw.row_number,
     )
     return (client if not row.errors else None), row.problems()
@@ -254,6 +267,8 @@ def _parse_consultant(raw: RawRow) -> tuple[Consultant | None, list[ListRowProbl
     paid_by_value = row.choice("Paid by", PaidBy)
     consultant = Consultant(
         name=name,
+        # Optional: blank means the initials are worked out from the name.
+        initials=row.text("Initials").upper(),
         other_names=_split(row.text("Other names")),
         emails=row.emails("Email"),
         type=ConsultantType(type_value) if type_value else ConsultantType.CONTRACTOR,
@@ -346,11 +361,44 @@ def parse_workbook(raw: RawWorkbook) -> EngagementWorkbook:
     vendors = _parse_sheet(raw.vendors, _parse_vendor, problems)
     engagements = _parse_sheet(raw.engagements, _parse_engagement, problems)
 
+    # Two clients sharing a code would make two different invoices share a
+    # number, so this is caught here rather than at invoicing time.
+    codes_seen: dict[str, str] = {}
+    for client in clients:
+        if not (client.active and client.invoice_code):
+            continue
+        first = codes_seen.get(client.invoice_code)
+        if first is not None:
+            problems.append(
+                ListRowProblem(
+                    "Clients",
+                    client.row_number,
+                    f'"Invoice code" {client.invoice_code} is already used by {first}',
+                )
+            )
+        else:
+            codes_seen[client.invoice_code] = client.name
+
     client_names = {_key(client.name) for client in clients}
     consultant_names = {_key(consultant.name) for consultant in consultants}
     vendor_names = {_key(vendor.company) for vendor in vendors}
 
     for consultant in consultants:
+        # Every invoice number carries the consultant's initials, so a name the
+        # agent cannot take them from needs the "Initials" cell filled in.
+        if (
+            consultant.active
+            and not consultant.initials
+            and initials_from_name(consultant.name) is None
+        ):
+            problems.append(
+                ListRowProblem(
+                    "Consultants",
+                    consultant.row_number,
+                    f"I cannot work out initials from {consultant.name!r};"
+                    ' fill in "Initials" so invoices can be numbered',
+                )
+            )
         if (
             consultant.type is ConsultantType.VENDOR
             and _key(consultant.vendor_company) not in vendor_names

@@ -19,6 +19,7 @@ Plain definitions of the words used across these docs. If a word here conflicts 
 - **Approved hours** — the total hours on an approved timesheet. Both the invoice and the consultant's pay are hours times a rate.
 - **Billing contact** — the person (or mailbox) at the client who receives invoices.
 - **Payment terms** — how many days the client has to pay after the invoice date, for example 30 days.
+- **Invoice number** — what Kevin and the client call an invoice: `083126MT-PS`, the end of the billing period, the client's two letters, and the consultant's initials. Not the same thing as the id QuickBooks keeps it under (`engagement-list.md`).
 - **Timesheet item** — the agent's record for one consultant's timesheet for one billing period, with its status. See `status-tracking.md`.
 - **Review item** — a note from the agent that something is unclear and needs Kevin. See `timesheet-checks.md`.
 - **Tracking sheet** — the Excel file the agent keeps up to date with one row per timesheet item, for Kevin's records.

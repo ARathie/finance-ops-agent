@@ -165,3 +165,17 @@ This was got wrong once and the eval set caught it. Measured against made-up tim
 
 Low hours are still never flagged. A consultant may take leave or work part of a month, and the agent has no business asking about that. If under-reporting is ever worth checking -- "this month looks light, is a timesheet missing?" -- the same working-day count is what it should measure against.
 
+
+## 29. Invoice numbers are Kevin's format, and the agent assigns them in both modes
+
+Kevin's invoices are numbered `<MMDDYY><client code>-<consultant code>`: `083126MT-PS` is August 2026 for Priya Shah at Mastec. The date is the **end of the billing period**, not the day the invoice was made, so a late August invoice still reads `083126` and the number says which month's work it is for.
+
+Decision: **the agent works the number out, in manual mode and in QuickBooks Online alike**, and QuickBooks is told to use it (`DocNumber`). Previously manual mode counted `ICON-<year>-<number>` from its own counter and QuickBooks Online let QuickBooks number the invoice, which meant numbering changed shape on the day Icon switched. Consequences:
+
+- The Clients sheet gains **Invoice code** and the Consultants sheet **Initials** (`engagement-list.md`). `MT` does not follow from "Mastec" by any rule, so a missing or duplicated code is a `LIST_ROW_PROBLEM` for Kevin, never a guess. Initials the agent can take from the name are taken from it; the column is for the names it cannot.
+- Two consultants at one client who share initials both switch to the first initial and the whole last name (`PSHAH`, `PSINGH`). Both change rather than only the newcomer, because a number that depended on who Kevin entered first would be worse than either. It applies only at the client where they clash, and only to invoices not yet sent.
+- QuickBooks Online honours `DocNumber` only when **Custom transaction numbers** is on in the company settings. The agent compares the number that comes back with the one it asked for and voids the invoice when they differ, the same way it voids one whose total disagrees: an invoice under a number Kevin did not choose never reaches a client.
+- One invoice per consultant per client per month (rule 3) makes the number unique on its own. A replacement after a correction covers the same period, so it takes `-2`, and the store is asked which numbers are already spent.
+- The number now belongs to `application/outgoing.py`, not to an adapter, so both modes and the fake produce the same one. `domain/invoice_numbers.py` holds the rules.
+
+This supersedes the invoice-numbering line in `open-questions.md` and the counter in decision 11's manual mode. Invoices already sent keep the numbers they were sent under; the agent never renumbers anything.

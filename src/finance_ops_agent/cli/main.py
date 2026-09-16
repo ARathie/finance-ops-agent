@@ -185,7 +185,7 @@ def _build_fake_deps(fixtures: Path, data: Path, today: date | None, mode: Mode)
         clock=FakeClock(today),
         settings=Settings(mode=mode),
         sender=FakeSender(data / "outbox"),
-        accounting=ManualQuickBooks(store, renderer, today),
+        accounting=ManualQuickBooks(store, renderer),
         renderer=renderer,
         tracking_path=data / "tracking.xlsx",
         render_tracking=tracking_sheet_bytes,
@@ -239,7 +239,7 @@ def _accounting(
 ) -> AccountingSystem:
     """Manual mode until QuickBooks Online is connected (docs/decisions.md #11)."""
     if config.accounting != "quickbooks":
-        return ManualQuickBooks(store, renderer, today)
+        return ManualQuickBooks(store, renderer)
     from finance_ops_agent.adapters.quickbooks.client import QuickBooksClient
     from finance_ops_agent.adapters.quickbooks.online import QuickBooksOnline
     from finance_ops_agent.adapters.quickbooks.tokens import TokenStore

@@ -22,7 +22,11 @@ _ANSWERABLE = ("approval_request", "review_email", "ask_again_email")
 
 
 def _stripped_subject(subject: str) -> str:
-    return re.sub(r"^\s*((re|fwd?)\s*:\s*)+", "", subject.strip(), flags=re.IGNORECASE)
+    """The subject without its Re:/Fwd: prefixes, and with runs of whitespace
+    squeezed to one space: a long subject is folded across lines by the sending
+    mail client, and comes back with the odd extra space in it."""
+    without_prefix = re.sub(r"^\s*((re|fwd?)\s*:\s*)+", "", subject.strip(), flags=re.IGNORECASE)
+    return " ".join(without_prefix.split())
 
 
 def _matched_record(deps: RunDeps, message: StoredMessage) -> OutgoingRecord | None:
@@ -34,7 +38,9 @@ def _matched_record(deps: RunDeps, message: StoredMessage) -> OutgoingRecord | N
             return by_id[-1]
     subject = _stripped_subject(message.subject).casefold()
     matches = [
-        record for record in records if str(record.payload.get("subject", "")).casefold() == subject
+        record
+        for record in records
+        if _stripped_subject(str(record.payload.get("subject", ""))).casefold() == subject
     ]
     return matches[-1] if matches else None
 

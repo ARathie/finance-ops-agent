@@ -4,9 +4,9 @@ Icon uses QuickBooks Desktop today and plans to move to QuickBooks Online (QBO).
 
 ## Manual mode (`FOPS_ACCOUNTING=manual`)
 
-- The agent assigns invoice numbers itself from a counter in its database with a prefix Kevin chooses (default `ICON-2026-0001`), renders the PDF from its own template (Icon's name and address, the client's legal name, the one line, hours, rate, total, invoice date, due date, payment terms, PO number if any), and attaches it to the billing email.
+- The agent numbers the invoice in Kevin's format, `<MMDDYY><client code>-<consultant code>` (`083126MT-PS`, see `engagement-list.md`), renders the PDF from its own template (Icon's name and address, the client's legal name, the one line, hours, rate, total, invoice date, due date, payment terms, PO number if any), and attaches it to the billing email.
 - Kevin enters the invoice into QuickBooks Desktop himself. The tracking sheet shows the agent's number; Kevin can use the same number in QuickBooks.
-- Paid status: Kevin can reply to the Monday summary with "paid: ICON-2026-0001" if he wants the tracking sheet to show it; the agent does not chase.
+- Paid status: Kevin can reply to the Monday summary with "paid: 083126MT-PS" if he wants the tracking sheet to show it; the agent does not chase.
 
 ## QuickBooks Online mode (`FOPS_ACCOUNTING=quickbooks`)
 
@@ -14,9 +14,10 @@ Icon uses QuickBooks Desktop today and plans to move to QuickBooks Online (QBO).
 
 1. Icon finishes the Desktop → Online move. The Customers list in QBO must contain every client, with names matching the "QuickBooks customer" column of the engagement list. The agent never creates customers.
 2. Create one service item, for example "Consulting Services", and note its name (`QBO_ITEM_NAME`). Create the payment terms used (Net 30 etc.).
-3. Create an app in the Intuit developer portal (accounting scope). Use its sandbox company first. Store the client id and secret in `.env`.
-4. Run `fops qbo-connect`: it prints and opens the Intuit sign-in page, Kevin (or the developer, with Kevin present) signs in and approves, and a one-shot loopback server on `http://localhost:8723/callback` (register that redirect URI in the Intuit app; `--port` changes it) stores the realm id and tokens in `data/qbo_tokens.json` with owner-only permissions. The `state` value is checked, so another tab's redirect cannot be mistaken for this one.
-5. `fops doctor` then reports two more checks: **quickbooks connection** (connected, and the refresh token is not near expiry) and **quickbooks customers** (every active client's "QuickBooks customer" name — or its legal name where that column is blank — exists in QuickBooks). In manual mode both are skipped with a line saying so.
+3. Turn on **Settings -> Account and settings -> Sales -> Sales form content -> Custom transaction numbers**. Without it QuickBooks numbers invoices from its own counter and ignores the number the agent sends; the agent checks the number that comes back and voids anything numbered otherwise (decision 27).
+4. Create an app in the Intuit developer portal (accounting scope). Use its sandbox company first. Store the client id and secret in `.env`.
+5. Run `fops qbo-connect`: it prints and opens the Intuit sign-in page, Kevin (or the developer, with Kevin present) signs in and approves, and a one-shot loopback server on `http://localhost:8723/callback` (register that redirect URI in the Intuit app; `--port` changes it) stores the realm id and tokens in `data/qbo_tokens.json` with owner-only permissions. The `state` value is checked, so another tab's redirect cannot be mistaken for this one.
+6. `fops doctor` then reports two more checks: **quickbooks connection** (connected, and the refresh token is not near expiry) and **quickbooks customers** (every active client's "QuickBooks customer" name — or its legal name where that column is blank — exists in QuickBooks). In manual mode both are skipped with a line saying so.
 
 ### Tokens
 
@@ -29,13 +30,14 @@ QBO has no "draft" invoices, so the agent creates the invoice only at the moment
 `POST /v3/company/{realmId}/invoice` with:
 
 - `CustomerRef` looked up by the engagement list's "QuickBooks customer" name (looked up once per run, cached);
+- `DocNumber` = the number the agent worked out (decision 27). QuickBooks honours it only with custom transaction numbers on, and refuses a number another invoice already has (Intuit error 6140) -- which is what should happen, because a repeat means a bug, not something to wave through with `include=allowduplicatedocnum`;
 - one line: `SalesItemLineDetail` with `ItemRef` = the service item, `Qty` = approved hours, `UnitPrice` = bill rate, `Description` = "consultant — role — period" (and the PO number if the client's row has one);
 - `TxnDate` = today in Icon's timezone; `DueDate` = TxnDate + payment terms days (also `SalesTermRef` when the terms exist in QBO);
 - `CustomerMemo` = short note if any; `PrivateNote` = the agent's item id and invoice attempt (this is how the agent finds the invoice again after a crash);
 - `BillEmail` = the billing email; `EmailStatus` = `NotSet` (the agent sends the email itself; QBO's own send is never used, or the client would get two emails);
 - no sales tax (`TaxCodeRef` NON) unless Kevin says otherwise.
 
-After the create call: read back `Id`, `DocNumber`, `TotalAmt`, `SyncToken`. `TotalAmt` must equal the agent's stored amount to the cent; if not, void the invoice immediately and raise `QUICKBOOKS_FAILED` with the details. Store `Id` and `DocNumber` on the invoice row. Fetch the PDF with `GET /v3/company/{realmId}/invoice/{Id}/pdf` and attach it to the billing email.
+After the create call: read back `Id`, `DocNumber`, `TotalAmt`, `SyncToken`. `DocNumber` must be the number that was asked for and `TotalAmt` must equal the agent's stored amount to the cent; if either disagrees, void the invoice immediately and raise `QUICKBOOKS_FAILED` with the details (a `DocNumber` QuickBooks chose itself says custom transaction numbers are off, and the message says so). Store `Id` and `DocNumber` on the invoice row. Fetch the PDF with `GET /v3/company/{realmId}/invoice/{Id}/pdf` and attach it to the billing email.
 
 Restart safety: an `outgoing` row of kind `create_invoice` that is `in_flight` is reconciled by querying `SELECT * FROM Invoice WHERE CustomerRef = '<id>' AND TxnDate >= '<yesterday>'` and matching `PrivateNote` to the item id before creating anything. (Intuit also offers a `requestid` parameter for idempotent creates; use it as well if available, but do not rely on it alone.)
 
@@ -59,8 +61,8 @@ All development and the first ask-first runs use a sandbox company (separate rea
 
 ## Testing
 
-Recorded JSON responses in `tests/fixtures/qbo/`, replayed through a real `httpx` client so the adapter's own code runs (`tests/contract/test_quickbooks.py`): a create whose total agrees, a create whose total does **not** agree (voided, with both amounts in the message), finding an invoice by its private note after a crash, a missing customer, a missing service item, balances (paid, partly paid, unpaid), a void that reads the current `SyncToken` first, a token refresh that rotates the refresh token, a refused refresh, and a 401 that one refresh fixes. No network, no credentials, no real company.
+Recorded JSON responses in `tests/fixtures/qbo/`, replayed through a real `httpx` client so the adapter's own code runs (`tests/contract/test_quickbooks.py`): a create whose total agrees, a create whose total does **not** agree (voided, with both amounts in the message), a create QuickBooks numbered itself (voided, naming the setting to turn on), finding an invoice by its private note after a crash, a missing customer, a missing service item, balances (paid, partly paid, unpaid), a void that reads the current `SyncToken` first, a token refresh that rotates the refresh token, a refused refresh, and a 401 that one refresh fixes. No network, no credentials, no real company.
 
-Two facts worth keeping straight in tests and in code: the invoice **number** (`DocNumber`) is what Kevin and the client see, and the **external id** (`Id`) is what QuickBooks and the agent's own invoice rows key on. In manual mode they happen to be the same string; in QuickBooks Online they are not.
+Two facts worth keeping straight in tests and in code: the invoice **number** (`DocNumber`) is what Kevin and the client see, and the **external id** (`Id`) is what QuickBooks and the agent's own invoice rows key on. In manual mode they happen to be the same string; in QuickBooks Online they are not. The number itself is the agent's in both modes (decision 27), so it reads the same either side of the move.
 
 A sandbox smoke test behind `FOPS_LIVE_TESTS=1` is still to come; the first real exercise is ask first mode against the sandbox company (see the roadmap).

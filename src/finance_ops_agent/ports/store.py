@@ -163,6 +163,12 @@ class Store(Protocol):
 
     def invoices_for_item(self, item_id: int) -> list[InvoiceRecord]: ...
 
+    def invoice_number_in_use(self, number: str) -> bool:
+        """Has this invoice number been given out already? Cancelled invoices
+        still count: their number is spent, and the replacement takes the next
+        one (domain/invoice_numbers.py)."""
+        ...
+
     def set_invoice_status(self, external_id: str, status: str) -> None: ...
 
     def record_payment_instruction(self, record: PaymentInstructionRecord) -> bool:

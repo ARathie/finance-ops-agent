@@ -144,7 +144,7 @@ The boxes below come in pairs marked **(test)** and **(live)**. The test half ru
 Done when:
 
 - [x] The starter workbook loads through the engagement list reader with zero problems, and a test proves it. `templates/engagements-template.xlsx`, rebuilt by `templates/build_template.py`; `tests/unit/test_engagements_template.py` loads the committed file through the real reader and fails if a column ever drifts from it.
-- [ ] **Needs a person:** Kevin fills the engagement list (every active client, consultant, vendor, engagement, and rate) and answers the timezone question; `fops doctor` shows zero engagement-list problems. For the test cycle a tester's own address may stand in for each client's **Billing email** and **CC email**; `dry_run` already stops anything reaching a client, and this is the second lock. PR 15's first box is where they are put back.
+- [ ] **Needs a person:** Kevin fills the engagement list (every active client, consultant, vendor, engagement, and rate, including each client's two-letter **Invoice code** -- invoices cannot be numbered without it) and answers the timezone question; `fops doctor` shows zero engagement-list problems. For the test cycle a tester's own address may stand in for each client's **Billing email** and **CC email**; `dry_run` already stops anything reaching a client, and this is the second lock. PR 15's first box is where they are put back.
 - [x] **Needs a person (test):** `FOPS_TIMESHEET_FORWARDERS` is set to the one address that will forward old timesheets in, and `fops doctor` shows it (decision 25). Nobody outside Icon is told anything yet. Done Sep 2026: three real timesheets forwarded from that address were read, matched to their consultant by the name on the page, and priced — 176.00, 168.00 and 168.00 hours, with both vendor invoice totals matched to the cent.
 - [ ] **Needs a person (live):** Kevin tells consultants to send timesheets to the agent's address (as well as, or instead of, his own), and `FOPS_TIMESHEET_FORWARDERS` is emptied.
 - [ ] **Needs a person:** the Mac is set up per `running-it.md` stage 1 with `FOPS_MODE=dry_run`, and `fops doctor` passes.
@@ -191,8 +191,8 @@ The code exists (PR 9). This needs an Intuit developer app and a sandbox company
 
 Done when:
 
-- [ ] **Needs a person:** the Intuit app is created; `fops qbo-connect` against the sandbox; `fops doctor` passes the QuickBooks checks; one ask-first invoice is created in the sandbox and its total equals the agent's to the cent.
-- [ ] **Needs a person:** after Icon's move to QuickBooks Online: the customer names in QuickBooks match the engagement list's "QuickBooks customer" column; `fops qbo-connect` against the real company; `FOPS_ACCOUNTING=quickbooks`; the first live cycle's invoices are reviewed by Kevin in QuickBooks; the daily paid check marks a real paid invoice `client_paid`.
+- [ ] **Needs a person:** the Intuit app is created; **Custom transaction numbers** is turned on in the sandbox company (Settings -> Account and settings -> Sales), or QuickBooks ignores Kevin's numbering (decision 29); `fops qbo-connect` against the sandbox; `fops doctor` passes the QuickBooks checks; one ask-first invoice is created in the sandbox, its number is the one the agent asked for, and its total equals the agent's to the cent.
+- [ ] **Needs a person:** after Icon's move to QuickBooks Online: **Custom transaction numbers** is on in the real company too; the customer names in QuickBooks match the engagement list's "QuickBooks customer" column; `fops qbo-connect` against the real company; `FOPS_ACCOUNTING=quickbooks`; the first live cycle's invoices are reviewed by Kevin in QuickBooks; the daily paid check marks a real paid invoice `client_paid`.
 
 ## PR 17 — Automatic mode, engagement by engagement
 

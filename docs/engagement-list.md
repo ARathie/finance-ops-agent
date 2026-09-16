@@ -23,6 +23,7 @@ One row per company Icon sends invoices to. If Icon invoices a staffing company 
 | Names on timesheets | Other names this client appears under on timesheets; separate with `;` | Acme; ACME Corp. |
 | Email domains | Email domains that count as this client when a manager forwards an approval; separate with `;` | acme.example |
 | QuickBooks customer | The customer name exactly as it appears in QuickBooks | Acme Corporation |
+| Invoice code | The two letters this client gets in every invoice number | MT |
 | Notes | PO numbers, special instructions | PO 4471 must appear on invoice |
 | Active | `yes` or `no` | yes |
 
@@ -33,6 +34,7 @@ One row per person doing work.
 | Column | Meaning | Example |
 |---|---|---|
 | Consultant | Full name | Priya Shah |
+| Initials | Their letters in the invoice number; leave blank and the agent takes them from the name | |
 | Other names | Names the person appears under on timesheets; separate with `;` | P. Shah; Shah, Priya |
 | Email | Addresses this person sends timesheets from; separate with `;` | priya@example.com; pshah@acme.example |
 | Type | `employee` (Icon W-2), `contractor` (independent), or `vendor` (through another company) | contractor |
@@ -73,6 +75,17 @@ One row per consultant working for one client. When a rate changes, add a new ro
 | Send automatically | `yes` lets the agent send clean invoices without asking when it is in automatic mode; `no` always asks | no |
 | Active | `yes` or `no` | yes |
 
+## How an invoice is numbered
+
+Every invoice number is `<MMDDYY><client code>-<consultant code>`, so August's invoice for Priya Shah at Mastec is **`083126MT-PS`**.
+
+- **The date is the last day of the billing period**, not the day the invoice goes out. August's invoice reads `083126` even if it is sent in the middle of September.
+- **The client code** is the two letters in that client's **Invoice code** cell: `MT` for Mastec, `IS` for iStream. There is no rule that turns a company name into its letters, so the agent never invents one. An active client without a code, a code that is not two letters, and two clients sharing a code are each a problem the agent emails Kevin about, and it invoices nothing for that client until it is fixed.
+- **The consultant code** is their initials: `PS` for Priya Shah. Fill in **Initials** on their row only when the agent should not work it out from the name; a name it cannot take initials from (a single word, say) is a question for Kevin rather than a guess.
+- **When two consultants at the same client have the same initials**, both of them get the first initial and the whole last name instead: Priya Shah becomes `PSHAH` and Paul Singh `PSINGH`. It happens only where the clash is, so Priya Shah is still `PS` at every other client, and only from the next invoice onwards -- invoices already sent keep the number they were sent under.
+
+One invoice per consultant per client per month means that number is unique by itself. The one exception is a correction: a replacement invoice covers the same period as the one it replaces, so it takes the next number along, `083126MT-PS-2`.
+
 ## Standing in for a real address while testing
 
 Only two cells in this whole workbook ever cause an email to leave for someone outside Icon: a client's **Billing email** and **CC email**. Every other email the agent writes -- the timesheet received note, the invoice preview, the approval question, the payment instruction, the Monday summary, every review -- goes to Kevin, and the client's billing email always carries him on CC.
@@ -90,7 +103,7 @@ Two places **not** to put a stand-in address:
 - For a timesheet, the agent uses the Engagements row for that consultant and client whose "Rates from" date is the latest one on or before the first day of the billing period. If the rate changes in the middle of a period, the agent asks Kevin rather than splitting the invoice.
 - There must be exactly one active engagement for a consultant and client on any given date. Two rows with the same consultant, client, and "Rates from" date are an error.
 - Billing periods: `monthly` = calendar month; `twice a month` = 1st to 15th and 16th to month end; `every two weeks` = 14-day periods counted from "First period start"; `weekly` = 7-day periods counted from "First period start". The first and last period of an engagement are cut short at the start and end dates.
-- The agent never edits this file. If a row is incomplete or contradictory (missing rate, unknown client name, `vendor` type without a vendor company, no billing email for a client delivered by email, a pay rate higher than the bill rate), the agent emails Kevin a review item naming the sheet and row, and leaves any affected timesheets waiting.
+- The agent never edits this file. If a row is incomplete or contradictory (missing rate, unknown client name, `vendor` type without a vendor company, no billing email for a client delivered by email, no invoice code for an active client, a pay rate higher than the bill rate), the agent emails Kevin a review item naming the sheet and row, and leaves any affected timesheets waiting.
 - Money in this sheet is entered in dollars with cents (140.00). The agent works in whole cents internally so totals never drift.
 
 ## Example

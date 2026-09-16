@@ -266,6 +266,9 @@ class FakeStore:
     def invoices_for_item(self, item_id: int) -> list[InvoiceRecord]:
         return [record for record in self._invoices if record.item_id == item_id]
 
+    def invoice_number_in_use(self, number: str) -> bool:
+        return any(record.number == number for record in self._invoices)
+
     def set_invoice_status(self, external_id: str, status: str) -> None:
         self._invoices = [
             replace(record, status=status) if record.external_id == external_id else record

@@ -9,6 +9,10 @@ Three rules from docs/integrations/quickbooks-online.md carry the weight:
   invoice it already created after a crash, instead of creating a second one.
 - EmailStatus is NotSet: the agent sends the billing email itself, so
   QuickBooks must never also send one or the client would get two.
+- DocNumber is Kevin's number, worked out by the application (decision 27).
+  QuickBooks only honours it when "Custom transaction numbers" is on in the
+  company settings, so the number that comes back is checked against the one
+  that was asked for, and an invoice QuickBooks numbered itself is voided.
 """
 
 from datetime import date, timedelta
@@ -96,7 +100,20 @@ class QuickBooksOnline:
         raw = created.get("Invoice", created)
         quickbooks_id = str(raw["Id"])
         total_cents = _cents(raw.get("TotalAmt", 0))
+        given_number = str(raw.get("DocNumber") or "")
 
+        if given_number != invoice.number:
+            # QuickBooks numbered it itself, which means custom transaction
+            # numbers are off. Kevin's numbering is how he and the client find
+            # an invoice again, so this is not something to paper over.
+            self._void(quickbooks_id, str(raw.get("SyncToken", "0")))
+            raise QuickBooksFailed(
+                f"I asked QuickBooks to number this invoice {invoice.number} and it"
+                f" used {given_number or '(nothing)'} instead. Turn on Settings ->"
+                " Account and settings -> Sales -> Custom transaction numbers, and"
+                " I'll number invoices the way you do. I voided it and sent nothing"
+                " to the client."
+            )
         if total_cents != invoice.total.cents:
             # Void first, then report: an amount the agent cannot vouch for must
             # not survive, and it must never reach a client.
@@ -181,6 +198,10 @@ class QuickBooksOnline:
             "CustomerRef": {
                 "value": self.customer_ref(invoice.quickbooks_customer or invoice.client_legal_name)
             },
+            # Kevin's number, not QuickBooks'. Needs "Custom transaction
+            # numbers" on in the company settings, which create_invoice checks
+            # by comparing what comes back.
+            "DocNumber": invoice.number,
             "TxnDate": invoice.issue_date.isoformat(),
             "DueDate": invoice.due_date.isoformat(),
             "PrivateNote": private_note(item_id, invoice.replaces_number),

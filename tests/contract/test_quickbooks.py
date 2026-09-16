@@ -75,7 +75,7 @@ def build(
     return QuickBooksOnline(client, "Consulting Services", TODAY), client, store
 
 
-def worked_example_invoice(number: str = "(assigned on approval)") -> Invoice:
+def worked_example_invoice(number: str = "083126AC-PS") -> Invoice:
     return build_invoice(worked_example_item(), number, TODAY)
 
 
@@ -176,7 +176,7 @@ class TestCreateInvoice:
 
         created = accounting.create_invoice(worked_example_invoice(), item_id=1)
 
-        assert created.number == "1042"
+        assert created.number == "083126AC-PS"
         assert created.external_id == "145"
         assert created.pdf.startswith(b"%PDF")
 
@@ -189,6 +189,8 @@ class TestCreateInvoice:
 
         body = next(entry for entry in replay.bodies if isinstance(entry, dict) and "Line" in entry)
         assert body["PrivateNote"] == "fops item 1"
+        # Kevin's number, not QuickBooks' own counter.
+        assert body["DocNumber"] == "083126AC-PS"
         # If QuickBooks also emailed the invoice, the client would get it twice.
         assert body["EmailStatus"] == "NotSet"
         assert body["CustomerRef"] == {"value": "58"}
@@ -213,6 +215,25 @@ class TestCreateInvoice:
         assert any("operation=void" in url for _, url in replay.calls)
         void_body = replay.bodies[-1]
         assert void_body == {"Id": "146", "SyncToken": "0"}
+
+    def test_an_invoice_quickbooks_numbered_itself_is_voided_and_reported(
+        self, tmp_path: Path
+    ) -> None:
+        """The failure path for Kevin's numbering: QuickBooks only honours
+        DocNumber when custom transaction numbers are on, and an invoice under
+        a number Kevin did not choose never reaches a client."""
+        replay = replay_from("create_own_number")
+        accounting, _, _ = build(replay, tmp_path)
+
+        with pytest.raises(QuickBooksFailed) as error:
+            accounting.create_invoice(worked_example_invoice(), item_id=1)
+
+        message = str(error.value)
+        assert "083126AC-PS" in message  # what was asked for
+        assert "1042" in message  # what QuickBooks used instead
+        assert "Custom transaction numbers" in message  # and what to turn on
+        assert any("operation=void" in url for _, url in replay.calls)
+        assert replay.bodies[-1] == {"Id": "145", "SyncToken": "0"}
 
     def test_a_missing_customer_says_what_to_fix(self, tmp_path: Path) -> None:
         replay = replay_from("missing_customer")

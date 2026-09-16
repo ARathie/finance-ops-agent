@@ -21,9 +21,12 @@ class CreatedInvoice:
 
 class AccountingSystem(Protocol):
     def create_invoice(self, invoice: Invoice, item_id: int) -> CreatedInvoice:
-        """Create the invoice (assigning the number in manual mode) and return
-        it with its rendered PDF. The returned total must equal the invoice's
-        exactly; adapters verify and refuse otherwise."""
+        """Create the invoice under the number it already carries, and return
+        it with its rendered PDF. The number is Kevin's and is worked out by
+        the application before either adapter is asked (docs/decisions.md #27).
+        The returned total must equal the invoice's exactly, and the returned
+        number must be the one that was asked for; adapters verify and refuse
+        otherwise."""
         ...
 
     def find_invoice(self, item_id: int) -> CreatedInvoice | None: ...

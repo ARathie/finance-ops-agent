@@ -34,6 +34,7 @@ from finance_ops_agent.domain.engagements import (
     Vendor,
     parse_workbook,
 )
+from finance_ops_agent.domain.invoice_numbers import codes_for_client
 from finance_ops_agent.domain.items import EngagementSnapshot, Item, TimesheetRecord
 from finance_ops_agent.domain.messages import (
     InboundEmail,
@@ -154,6 +155,31 @@ def _vendor_by_name(workbook: EngagementWorkbook, name: str) -> Vendor | None:
     return None
 
 
+def _consultant_code(workbook: EngagementWorkbook, rate_row: Engagement) -> str:
+    """The consultant's part of the invoice number, for this client.
+
+    Worked out across everyone engaged at the client, because two consultants
+    who share initials there both change to the longer form
+    (domain/invoice_numbers.py). Blank when the name gives nothing to work
+    with, which the caller turns into a review.
+    """
+    peers = {
+        engagement.consultant
+        for engagement in workbook.engagements
+        if checks.names_match(engagement.client, rate_row.client)
+    }
+    overrides: dict[str, str] = {}
+    for name in peers:
+        consultant = _consultant_by_name(workbook, name)
+        if consultant is not None:
+            overrides[consultant.name] = consultant.initials
+    codes = codes_for_client(overrides)
+    for name, code in codes.items():
+        if checks.names_match(name, rate_row.consultant):
+            return code
+    return ""
+
+
 def _build_snapshot(
     workbook: EngagementWorkbook, rate_row: Engagement
 ) -> EngagementSnapshot | None:
@@ -185,6 +211,8 @@ def _build_snapshot(
         role=rate_row.role,
         client_legal_name=client.legal_name,
         quickbooks_customer=client.quickbooks_customer,
+        client_invoice_code=client.invoice_code,
+        consultant_code=_consultant_code(workbook, rate_row),
         client_delivery=client.delivery.value,
         send_automatically=rate_row.send_automatically,
     )
