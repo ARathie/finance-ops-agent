@@ -197,3 +197,16 @@ This amends rule 1 in `CLAUDE.md`, which said the bill rate comes only from the 
 The direction of travel is to stop keeping the rate in two places: once what the agent needs from the engagement list can be read from QuickBooks Online instead, the bill rate stops being a spreadsheet column and this cross-check goes with it. The **pay rate** cannot follow it there -- QuickBooks holds what Icon charges, not what Icon pays -- so the engagement list does not disappear on the strength of this.
 
 Every QuickBooks call, and every way one can fail, is now logged as a JSON line (`logs.py`): the lookups and what they found, the create with its item id and number, a number QuickBooks assigned itself, a total that disagrees, a void, a retry, and the text of anything QuickBooks refused. Rates and amounts stay out of the log, as they do everywhere else.
+
+## 31. The first real exercise may be Icon's own QuickBooks company, not a sandbox
+
+`integrations/quickbooks-online.md` said sandbox first, and for development it still is: every test in this repository runs against recorded responses, and nothing about that changes.
+
+For the **first live exercise**, though, Icon's own QuickBooks Online company is the better place, and Kevin has asked for it. The sandbox is full of Intuit's sample data, so nothing in it resembles what the agent will meet: the customers are not Icon's clients, the products are not Icon's consultants, and the invoice template is not the one Kevin has customised. A pass there would prove very little. Icon's own company has the real customers, the real per-consultant products with their rates, and the real template -- and Icon is not yet using QuickBooks Online for anything, so there is no live bookkeeping to disturb.
+
+What makes this safe is `fops qbo-test-invoice` (the section above): it exercises the create path with no mailbox, no email and no approval reply, and deletes the invoice afterwards, so the company is left as it was found. Nothing about it can reach a client, because nothing about it sends anything.
+
+Two things still hold, and are why this is a decision rather than a shortcut:
+
+- **Before any run that is not this command**, each client's **Billing email** and **CC email** must be a stand-in address. The moment the mode is `ask_first` and Kevin replies "approve", the billing email goes wherever those two cells point. That is the roadmap's PR 13 box and it is not weakened by this.
+- **Once Icon starts using QuickBooks Online for real**, this stops being true and the sandbox is the place again. This decision is about a window, not a policy.

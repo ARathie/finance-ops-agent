@@ -249,6 +249,22 @@ class QuickBooksOnline:
         assert isinstance(content, bytes)
         return content
 
+    def delete_invoice(self, external_id: str) -> None:
+        """Remove an invoice entirely, leaving no record of it.
+
+        Only `fops qbo-test-invoice` uses this, to leave a company Icon is not
+        yet using exactly as it found it. A real correction never deletes: it
+        voids, so the invoice that went to a client stays visible in the books
+        (docs/status-tracking.md).
+        """
+        raw = self._client.get(self.company_url(f"/invoice/{external_id}"))
+        invoice = raw.get("Invoice", raw)
+        logs.log("deleting a quickbooks invoice", quickbooks_id=external_id)
+        self._client.post(
+            self.company_url("/invoice?operation=delete"),
+            json={"Id": external_id, "SyncToken": str(invoice.get("SyncToken", "0"))},
+        )
+
     def _void(self, quickbooks_id: str, sync_token: str) -> None:
         logs.log("voiding a quickbooks invoice", quickbooks_id=quickbooks_id)
         self._client.post(

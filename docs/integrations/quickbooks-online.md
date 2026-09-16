@@ -53,6 +53,24 @@ When Kevin cancels an item after the invoice was created, or accepts a corrected
 
 All development and the first ask-first runs use a sandbox company (separate realm id and tokens). Switching to production is a settings change plus `fops qbo-connect` against the real company.
 
+## Proving the create path: `fops qbo-test-invoice`
+
+The ordinary flow cannot test this. `dry_run` creates nothing in QuickBooks, on purpose, so the only other way in is Kevin approving an invoice -- and approving sends the billing email to whatever address the client's row holds. That makes "did the invoice come out right?" and "can anything reach a client?" the same question, which they should not be.
+
+```
+fops qbo-test-invoice --consultant "Priya Shah" --client "Acme Corp" \
+    --period-end 2026-08-31 --hours 156.00
+```
+
+It goes through the real code -- the engagement list, the billing period from the engagement's schedule, the rate row in force, the invoice number, the customer and product lookups, the create, the checks on what came back, the PDF -- and stops there. No mailbox is opened, no email is written, nothing is recorded in the agent's own database.
+
+- **It removes what it made.** By default the invoice is deleted, so a company Icon is not yet using is left exactly as it was and the number is free again. `--cleanup void` leaves the voided record instead (which is what a real correction does, and the number stays spent); `--cleanup keep` leaves the invoice there to be looked at.
+- **A number QuickBooks already has is stepped past**, `-2` then `-3`, the same way a replacement invoice does. That is what a run after `--cleanup void` or `--cleanup keep` will do.
+- **The PDF is written to a file** (`--pdf`, otherwise into the data folder), so the invoice template can be looked at without sending anything.
+- The private note carries a marker that is different every run, so an invoice left behind by an earlier run is never mistaken for this one's. `--item-id` fixes it if you want to test the crash-recovery lookup.
+
+If it fails, the reason is printed and the JSON log holds the whole exchange, including the text of anything QuickBooks refused.
+
 ## Errors
 
 - 401 → refresh the token once, then `QUICKBOOKS_RECONNECT`.

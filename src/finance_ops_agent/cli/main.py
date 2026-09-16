@@ -111,6 +111,37 @@ def build_parser() -> argparse.ArgumentParser:
         help="loopback port for the redirect (must match the Intuit app)",
     )
 
+    test_invoice = commands.add_parser(
+        "qbo-test-invoice",
+        help="create one invoice in QuickBooks to prove the path works, then remove it"
+        " (sends no email, touches no client)",
+    )
+    test_invoice.add_argument("--consultant", required=True)
+    test_invoice.add_argument("--client", required=True, help="as the engagement list names it")
+    test_invoice.add_argument(
+        "--period-end",
+        required=True,
+        type=date.fromisoformat,
+        help="any day in the billing period to invoice, usually its last (2026-08-31)",
+    )
+    test_invoice.add_argument("--hours", required=True, help="approved hours, e.g. 156.00")
+    test_invoice.add_argument(
+        "--cleanup",
+        choices=("delete", "void", "keep"),
+        default="delete",
+        help="delete leaves the company as it was and frees the number (default);"
+        " void leaves the voided record; keep leaves the invoice there",
+    )
+    test_invoice.add_argument(
+        "--pdf", type=Path, default=None, help="where to write the PDF QuickBooks renders"
+    )
+    test_invoice.add_argument(
+        "--item-id",
+        type=int,
+        default=None,
+        help="the marker kept in the invoice's private note (default: a new one each run)",
+    )
+
     backup_cmd = commands.add_parser("backup", help="zip the data folder")
     backup_cmd.add_argument(
         "--to",
@@ -562,6 +593,30 @@ def _warn_about_ageing_connections(config: "Config") -> None:
         print(f"Warning: {warning}")
 
 
+def _command_qbo_test_invoice(args: argparse.Namespace) -> int:
+    """One invoice into QuickBooks and back out again, with nothing attached."""
+    from finance_ops_agent.cli.qbo_test import run_test_invoice
+    from finance_ops_agent.config import Config
+    from finance_ops_agent.domain.money import Hours
+
+    config = Config.from_env()
+    try:
+        hours = Hours.parse(args.hours)
+    except ValueError as error:
+        print(f"--hours should look like 156.00: {error}")
+        return 1
+    return run_test_invoice(
+        config,
+        consultant=args.consultant,
+        client=args.client,
+        period_end=args.period_end,
+        hours=hours,
+        cleanup=args.cleanup,
+        pdf_path=args.pdf,
+        item_id=args.item_id,
+    )
+
+
 def _command_backup(args: argparse.Namespace) -> int:
     from finance_ops_agent.application.backup import back_up
     from finance_ops_agent.config import Config, MissingSettingError
@@ -763,6 +818,8 @@ def main(argv: list[str] | None = None) -> int:
         return _command_run(args)
     if args.command == "qbo-connect":
         return _command_qbo_connect(args)
+    if args.command == "qbo-test-invoice":
+        return _command_qbo_test_invoice(args)
     if args.command == "backup":
         return _command_backup(args)
     if args.command == "restore":
