@@ -174,7 +174,6 @@ class QuickBooksSettings:
     client_id: str
     client_secret: str
     environment: str  # sandbox | production
-    item_name: str
 
     @classmethod
     def from_env(cls) -> "QuickBooksSettings":
@@ -187,7 +186,6 @@ class QuickBooksSettings:
             client_id=_required("QBO_CLIENT_ID"),
             client_secret=_required("QBO_CLIENT_SECRET"),
             environment=environment,
-            item_name=os.environ.get("QBO_ITEM_NAME", "Consulting Services"),
         )
 
 

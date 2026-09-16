@@ -15,6 +15,7 @@ from urllib.parse import quote
 
 import httpx
 
+from finance_ops_agent import logs
 from finance_ops_agent.adapters.quickbooks.tokens import Tokens, TokenStore, utcnow
 
 PRODUCTION_BASE = "https://quickbooks.api.intuit.com"
@@ -115,6 +116,11 @@ class QuickBooksClient:
             },
         )
         if response.status_code >= 400:
+            logs.log(
+                "quickbooks would not renew the connection",
+                status=response.status_code,
+                said=response.text[:400],
+            )
             raise QuickBooksReconnect(
                 "QuickBooks would not renew the connection"
                 f" ({response.status_code}). Run `fops qbo-connect` to reconnect."
@@ -153,7 +159,15 @@ class QuickBooksClient:
                 "Accept": accept,
             }
             response = self._http.request(method, url, json=json, headers=headers)
+            logs.log(
+                "quickbooks call",
+                method=method,
+                url=url,
+                status=response.status_code,
+                attempt=attempt,
+            )
             if response.status_code == 401 and not refreshed:
+                logs.log("quickbooks refused the token; renewing it once", url=url)
                 self.refresh()  # one refresh, then give up and ask Kevin
                 refreshed = True
                 continue
@@ -163,9 +177,25 @@ class QuickBooksClient:
                     " Run `fops qbo-connect` to reconnect."
                 )
             if response.status_code in (429, 500, 502, 503, 504) and attempt < MAX_TRIES:
+                logs.log(
+                    "quickbooks was busy; trying again",
+                    method=method,
+                    url=url,
+                    status=response.status_code,
+                    attempt=attempt,
+                )
                 self._sleep(2.0 * attempt)
                 continue
             if response.status_code >= 400:
+                # The whole of QuickBooks' complaint, which is usually a named
+                # field: without it a 400 is unfixable from a log.
+                logs.log(
+                    "quickbooks refused the call",
+                    method=method,
+                    url=url,
+                    status=response.status_code,
+                    said=response.text[:400],
+                )
                 raise QuickBooksFailed(
                     f"{method} {url} returned {response.status_code}: {response.text[:400]}"
                 )

@@ -9,18 +9,24 @@ Three rules from docs/integrations/quickbooks-online.md carry the weight:
   invoice it already created after a crash, instead of creating a second one.
 - EmailStatus is NotSet: the agent sends the billing email itself, so
   QuickBooks must never also send one or the client would get two.
+- Each consultant is a product in QuickBooks and the product carries the rate,
+  so the line is priced from QuickBooks, not from the engagement list
+  (decision 30). The total that comes back is still checked against the
+  engagement list, which is what catches the two drifting apart.
 - DocNumber is Kevin's number, worked out by the application (decision 27).
   QuickBooks only honours it when "Custom transaction numbers" is on in the
   company settings, so the number that comes back is checked against the one
   that was asked for, and an invoice QuickBooks numbered itself is voided.
 """
 
+from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
 
+from finance_ops_agent import logs
 from finance_ops_agent.adapters.quickbooks.client import QuickBooksClient, QuickBooksFailed
 from finance_ops_agent.domain.invoices import Invoice
-from finance_ops_agent.domain.money import Money
+from finance_ops_agent.domain.money import Money, invoice_amount
 from finance_ops_agent.ports.accounting import CreatedInvoice
 
 PRIVATE_NOTE_PREFIX = "fops item"
@@ -50,13 +56,21 @@ def _cents(amount: Any) -> int:
     return round(float(amount) * 100)
 
 
+@dataclass(frozen=True)
+class Product:
+    """A consultant's product in QuickBooks, and the rate on it."""
+
+    ref: str
+    name: str
+    unit_price_cents: int
+
+
 class QuickBooksOnline:
-    def __init__(self, client: QuickBooksClient, item_name: str, today: date) -> None:
+    def __init__(self, client: QuickBooksClient, today: date) -> None:
         self._client = client
-        self._item_name = item_name
         self._today = today  # from the Clock port, never the system clock
         self._customers: dict[str, str] = {}
-        self._item_ref: str | None = None
+        self._products: dict[str, Product] = {}
 
     # --- lookups, cached for the run ---
 
@@ -68,26 +82,51 @@ class QuickBooksOnline:
             f"SELECT Id, DisplayName FROM Customer WHERE DisplayName = '{escaped}'"
         )
         if not rows:
+            logs.log("quickbooks customer not found", customer=quickbooks_customer)
             raise QuickBooksFailed(
                 f"QuickBooks has no customer called {quickbooks_customer!r}."
                 ' Add it in QuickBooks, or fix the "QuickBooks customer" column'
                 " in the engagement list. I never create customers myself."
             )
         reference = str(rows[0]["Id"])
+        logs.log("quickbooks customer found", customer=quickbooks_customer, quickbooks_id=reference)
         self._customers[quickbooks_customer] = reference
         return reference
 
-    def item_ref(self) -> str:
-        if self._item_ref is None:
-            escaped = self._item_name.replace("'", "\\'")
-            rows = self._client.query(f"SELECT Id, Name FROM Item WHERE Name = '{escaped}'")
-            if not rows:
-                raise QuickBooksFailed(
-                    f"QuickBooks has no service item called {self._item_name!r}."
-                    " Create it, or set QBO_ITEM_NAME to the one you use."
-                )
-            self._item_ref = str(rows[0]["Id"])
-        return self._item_ref
+    def product_for(self, consultant: str) -> Product:
+        """The consultant's own product, which is where the rate lives now.
+
+        Looked up by the consultant's name exactly as the engagement list
+        spells it (decision 30). The agent never creates products, and never
+        falls back to another one: billing a consultant under someone else's
+        product would bill the wrong rate.
+        """
+        if consultant in self._products:
+            return self._products[consultant]
+        escaped = consultant.replace("'", "\\'")
+        rows = self._client.query(f"SELECT Id, Name, UnitPrice FROM Item WHERE Name = '{escaped}'")
+        if not rows:
+            logs.log("quickbooks product not found", consultant=consultant)
+            raise QuickBooksFailed(
+                f"QuickBooks has no product called {consultant!r}. Every consultant"
+                " needs their own product, with their rate on it, and its name has to"
+                " match the Consultants sheet exactly. I never create products myself."
+            )
+        if rows[0].get("UnitPrice") is None:
+            logs.log("quickbooks product has no rate", consultant=consultant)
+            raise QuickBooksFailed(
+                f"The QuickBooks product for {consultant!r} has no rate on it, and the"
+                " rate on the product is what I bill. Put their hourly rate on the"
+                " product in QuickBooks."
+            )
+        product = Product(
+            ref=str(rows[0]["Id"]),
+            name=str(rows[0].get("Name") or consultant),
+            unit_price_cents=_cents(rows[0]["UnitPrice"]),
+        )
+        logs.log("quickbooks product found", consultant=consultant, quickbooks_id=product.ref)
+        self._products[consultant] = product
+        return product
 
     # --- the AccountingSystem port ---
 
@@ -96,6 +135,13 @@ class QuickBooksOnline:
         if existing is not None:
             return existing  # a crash left one behind; never create a second
         body = self._invoice_body(invoice, item_id)
+        logs.log(
+            "creating a quickbooks invoice",
+            item_id=item_id,
+            number=invoice.number,
+            consultant=invoice.consultant,
+            client=invoice.client_legal_name,
+        )
         created = self._client.post(self.company_url("/invoice"), json=body)
         raw = created.get("Invoice", created)
         quickbooks_id = str(raw["Id"])
@@ -103,6 +149,12 @@ class QuickBooksOnline:
         given_number = str(raw.get("DocNumber") or "")
 
         if given_number != invoice.number:
+            logs.log(
+                "quickbooks numbered the invoice itself",
+                item_id=item_id,
+                asked_for=invoice.number,
+                given=given_number,
+            )
             # QuickBooks numbered it itself, which means custom transaction
             # numbers are off. Kevin's numbering is how he and the client find
             # an invoice again, so this is not something to paper over.
@@ -116,7 +168,15 @@ class QuickBooksOnline:
             )
         if total_cents != invoice.total.cents:
             # Void first, then report: an amount the agent cannot vouch for must
-            # not survive, and it must never reach a client.
+            # not survive, and it must never reach a client. Since the rate now
+            # comes off the product, this is also what catches the product's
+            # rate and the engagement list's having drifted apart.
+            logs.log(
+                "quickbooks total disagrees with the engagement list",
+                item_id=item_id,
+                number=invoice.number,
+                consultant=invoice.consultant,
+            )
             sync_token = str(raw.get("SyncToken", "0"))
             self._void(quickbooks_id, sync_token)
             raise QuickBooksFailed(
@@ -126,8 +186,14 @@ class QuickBooksOnline:
                 " This usually means the item, rate, or tax settings in QuickBooks"
                 " differ from the engagement list."
             )
+        logs.log(
+            "quickbooks invoice created",
+            item_id=item_id,
+            number=given_number,
+            quickbooks_id=quickbooks_id,
+        )
         return CreatedInvoice(
-            number=str(raw.get("DocNumber") or quickbooks_id),
+            number=given_number,
             external_id=quickbooks_id,
             pdf=self.invoice_pdf(quickbooks_id),
         )
@@ -184,6 +250,7 @@ class QuickBooksOnline:
         return content
 
     def _void(self, quickbooks_id: str, sync_token: str) -> None:
+        logs.log("voiding a quickbooks invoice", quickbooks_id=quickbooks_id)
         self._client.post(
             self.company_url("/invoice?operation=void"),
             json={"Id": quickbooks_id, "SyncToken": sync_token},
@@ -191,13 +258,19 @@ class QuickBooksOnline:
 
     def _invoice_body(self, invoice: Invoice, item_id: int) -> dict[str, Any]:
         hours = invoice.approved_hours.hundredths / 100
-        rate = invoice.bill_rate.cents / 100
+        # The client is looked up first, so a workbook naming a client
+        # QuickBooks has never heard of says so before anything else.
+        customer = self.customer_ref(invoice.quickbooks_customer or invoice.client_legal_name)
+        # The rate comes off the consultant's product in QuickBooks, not off
+        # the engagement list (decision 30). The total that comes back is
+        # checked against the engagement list, which is what notices drift.
+        product = self.product_for(invoice.consultant)
+        rate = product.unit_price_cents / 100
+        line_total = invoice_amount(invoice.approved_hours, Money(product.unit_price_cents))
         return {
             # The engagement list's "QuickBooks customer" column decides, since
             # QuickBooks often spells a company differently from the invoice.
-            "CustomerRef": {
-                "value": self.customer_ref(invoice.quickbooks_customer or invoice.client_legal_name)
-            },
+            "CustomerRef": {"value": customer},
             # Kevin's number, not QuickBooks'. Needs "Custom transaction
             # numbers" on in the company settings, which create_invoice checks
             # by comparing what comes back.
@@ -210,10 +283,14 @@ class QuickBooksOnline:
             "Line": [
                 {
                     "DetailType": "SalesItemLineDetail",
-                    "Description": invoice.line_description(),
-                    "Amount": invoice.total.cents / 100,
+                    # The product is the consultant, so the description Kevin's
+                    # invoice template prints is their name.
+                    "Description": invoice.consultant,
+                    "Amount": line_total.cents / 100,
                     "SalesItemLineDetail": {
-                        "ItemRef": {"value": self.item_ref()},
+                        "ItemRef": {"value": product.ref},
+                        # Kevin's template labels this column "period ending".
+                        "ServiceDate": invoice.period.end.isoformat(),
                         "Qty": hours,
                         "UnitPrice": rate,
                         "TaxCodeRef": {"value": "NON"},

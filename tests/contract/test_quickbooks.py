@@ -72,7 +72,7 @@ def build(
         now=lambda: NOW,
         sleep=lambda _seconds: None,
     )
-    return QuickBooksOnline(client, "Consulting Services", TODAY), client, store
+    return QuickBooksOnline(client, TODAY), client, store
 
 
 def worked_example_invoice(number: str = "083126AC-PS") -> Invoice:
@@ -241,11 +241,47 @@ class TestCreateInvoice:
         with pytest.raises(QuickBooksFailed, match="never create customers"):
             accounting.create_invoice(worked_example_invoice(), item_id=1)
 
-    def test_a_missing_service_item_says_what_to_fix(self, tmp_path: Path) -> None:
+    def test_a_product_rate_that_has_drifted_is_voided_and_reported(self, tmp_path: Path) -> None:
+        """The rate is billed from the product now, so the engagement list is
+        what notices when the two stop agreeing. Nothing is sent on a rate the
+        agent cannot vouch for: the invoice is voided and Kevin is told."""
+        replay = replay_from("product_rate_drifted")
+        accounting, _, _ = build(replay, tmp_path)
+
+        with pytest.raises(QuickBooksFailed) as error:
+            accounting.create_invoice(worked_example_invoice(), item_id=1)
+
+        message = str(error.value)
+        assert "$22,620.00" in message  # 156.00 hours at the product's rate
+        assert "$21,840.00" in message  # what the engagement list comes to
+        assert "voided it and sent nothing to the client" in message
+        assert any("operation=void" in url for _, url in replay.calls)
+
+    def test_a_consultant_with_no_product_says_what_to_fix(self, tmp_path: Path) -> None:
+        """Each consultant is a product and the product carries the rate, so a
+        missing one is never worked around: billing them under someone else's
+        product would bill the wrong rate."""
         replay = replay_from("missing_item")
         accounting, _, _ = build(replay, tmp_path)
-        with pytest.raises(QuickBooksFailed, match="QBO_ITEM_NAME"):
+        with pytest.raises(QuickBooksFailed, match="no product called 'Priya Shah'"):
             accounting.create_invoice(worked_example_invoice(), item_id=1)
+
+    def test_the_line_is_priced_from_the_product_and_dated_by_the_period(
+        self, tmp_path: Path
+    ) -> None:
+        """Decision 30: the rate comes off the consultant's product, the
+        description is their name, and the service date is the period end,
+        which is the column Kevin's template labels "period ending"."""
+        replay = replay_from("create_ok")
+        accounting, _, _ = build(replay, tmp_path)
+        accounting.create_invoice(worked_example_invoice(), item_id=1)
+
+        body = next(entry for entry in replay.bodies if isinstance(entry, dict) and "Line" in entry)
+        line = body["Line"][0]
+        assert line["Description"] == "Priya Shah"
+        assert line["SalesItemLineDetail"]["ItemRef"] == {"value": "12"}
+        assert line["SalesItemLineDetail"]["ServiceDate"] == "2026-08-31"
+        assert line["SalesItemLineDetail"]["UnitPrice"] == 140.0  # off the product
 
 
 class TestFindAfterACrash:

@@ -179,3 +179,21 @@ Decision: **the agent works the number out, in manual mode and in QuickBooks Onl
 - The number now belongs to `application/outgoing.py`, not to an adapter, so both modes and the fake produce the same one. `domain/invoice_numbers.py` holds the rules.
 
 This supersedes the invoice-numbering line in `open-questions.md` and the counter in decision 11's manual mode. Invoices already sent keep the numbers they were sent under; the agent never renumbers anything.
+
+## 30. In QuickBooks Online mode the bill rate comes off the consultant's product
+
+Kevin has set QuickBooks Online up so that **each consultant is a product**, with their hourly rate on it, and has customised the invoice template so each line shows period ending date, description, hours, rate and amount.
+
+Decision: **in QuickBooks Online mode the agent bills the rate on the product, not the rate in the engagement list.** One service item for everybody (`QBO_ITEM_NAME`) is gone; the agent looks the consultant's own product up by name and takes `UnitPrice` from it. Consequences:
+
+- `Description` is the consultant's name, because the product is the consultant. `ServiceDate` is the **end of the billing period** -- that is the field Kevin's template labels "period ending".
+- Customers and products are looked up by the name the engagement list spells, exactly. A client or consultant QuickBooks has never heard of is a `QUICKBOOKS_FAILED` naming them; the agent creates neither, and never bills a consultant under another consultant's product, which would bill the wrong rate.
+- A product with no rate on it is refused rather than billed at zero.
+- **The engagement list is still the cross-check.** The agent computes the invoice amount from its own bill rate, as it always did, and the existing "the total QuickBooks returns must equal the agent's to the cent" rule now catches the product's rate and the engagement list's having drifted apart: the invoice is voided and Kevin is told both figures. It has to work this way while both exist, because everything else the agent writes -- the preview, the approval question, the payment instruction, the tracking sheet, the guardrail on an unusual amount -- is built from the engagement list figure, and an invoice priced differently from all of them would make every one of those wrong.
+- Manual mode is unchanged: there is no QuickBooks to ask, so the engagement list prices the invoice.
+
+This amends rule 1 in `CLAUDE.md`, which said the bill rate comes only from the engagement list. The rule it was protecting is intact -- a rate never comes from an email, a timesheet, or the model -- but there are now two systems of record for the bill rate, and the agent refuses to invoice while they disagree.
+
+The direction of travel is to stop keeping the rate in two places: once what the agent needs from the engagement list can be read from QuickBooks Online instead, the bill rate stops being a spreadsheet column and this cross-check goes with it. The **pay rate** cannot follow it there -- QuickBooks holds what Icon charges, not what Icon pays -- so the engagement list does not disappear on the strength of this.
+
+Every QuickBooks call, and every way one can fail, is now logged as a JSON line (`logs.py`): the lookups and what they found, the create with its item id and number, a number QuickBooks assigned itself, a total that disagrees, a void, a retry, and the text of anything QuickBooks refused. Rates and amounts stay out of the log, as they do everywhere else.

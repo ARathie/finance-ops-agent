@@ -12,7 +12,7 @@ This repository is the billing agent for Icon Technologies: it reads consultant 
 
 ## Rules that must never be broken
 
-1. **Two rates, one source.** The bill rate (charged to the client) and the pay rate (paid to the consultant or vendor) are different numbers and come only from the engagement list. Never from an email, a timesheet, or the model.
+1. **Two rates, never from the reading.** The bill rate (charged to the client) and the pay rate (paid to the consultant or vendor) are different numbers, and neither ever comes from an email, a timesheet, or the model. The **pay rate** comes only from the engagement list. The **bill rate** comes from the consultant's product in QuickBooks Online when that is the accounting mode, and from the engagement list in manual mode; where both exist and disagree, the invoice is voided and Kevin is told (decision 30).
 2. **When unsure, ask Kevin.** Uncertainty about who, which client, which dates, how many hours, whether it was approved, the rate, or who to send to becomes a review item emailed to Kevin. The code never guesses.
 3. **One record per consultant per billing period.** A second timesheet for the same consultant and period is a duplicate or a correction, never a second invoice.
 4. **Nothing goes to a client without Kevin on CC, and nothing is sent or created twice.** Every client email and every invoice creation is written to the `outgoing` table before it happens and reconciled after a restart.

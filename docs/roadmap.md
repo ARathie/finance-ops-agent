@@ -191,7 +191,7 @@ The code exists (PR 9). This needs an Intuit developer app and a sandbox company
 
 Done when:
 
-- [ ] **Needs a person:** the Intuit app is created; **Custom transaction numbers** is turned on in the sandbox company (Settings -> Account and settings -> Sales), or QuickBooks ignores Kevin's numbering (decision 29); `fops qbo-connect` against the sandbox; `fops doctor` passes the QuickBooks checks; one ask-first invoice is created in the sandbox, its number is the one the agent asked for, and its total equals the agent's to the cent.
+- [ ] **Needs a person:** the Intuit app is created; **Custom transaction numbers** is turned on in the sandbox company (Settings -> Account and settings -> Sales), or QuickBooks ignores Kevin's numbering (decision 29); every active consultant has a product with their bill rate on it, named as the Consultants sheet names them (decision 30); `fops qbo-connect` against the sandbox; `fops doctor` passes the QuickBooks checks; one ask-first invoice is created in the sandbox, its number is the one the agent asked for, and its total equals the agent's to the cent.
 - [ ] **Needs a person:** after Icon's move to QuickBooks Online: **Custom transaction numbers** is on in the real company too; the customer names in QuickBooks match the engagement list's "QuickBooks customer" column; `fops qbo-connect` against the real company; `FOPS_ACCOUNTING=quickbooks`; the first live cycle's invoices are reviewed by Kevin in QuickBooks; the daily paid check marks a real paid invoice `client_paid`.
 
 ## PR 17 — Automatic mode, engagement by engagement

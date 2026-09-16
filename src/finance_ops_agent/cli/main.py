@@ -249,7 +249,7 @@ def _accounting(
     client = QuickBooksClient(
         TokenStore(config.qbo_token_path), settings.client_id, settings.client_secret
     )
-    return QuickBooksOnline(client, settings.item_name, today)
+    return QuickBooksOnline(client, today)
 
 
 def _mail_account(mail: "MailSettings") -> "MailAccount":
@@ -475,6 +475,7 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
         Check,
         CheckResult,
         check_quickbooks_customers,
+        check_quickbooks_products,
         check_quickbooks_tokens,
     )
     from finance_ops_agent.config import MissingSettingError, QuickBooksSettings
@@ -489,7 +490,7 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
     if results[0].result is CheckResult.FAIL:
         return results
     client = QuickBooksClient(store, settings.client_id, settings.client_secret)
-    accounting = QuickBooksOnline(client, settings.item_name, date.today())  # noqa: DTZ011
+    accounting = QuickBooksOnline(client, date.today())  # noqa: DTZ011
 
     def wanted_customers() -> list[str]:
         parsed = parse_workbook(ExcelEngagementList(config.engagement_list).load())
@@ -501,7 +502,12 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
             }
         )
 
+    def wanted_consultants() -> list[str]:
+        parsed = parse_workbook(ExcelEngagementList(config.engagement_list).load())
+        return sorted({consultant.name for consultant in parsed.consultants if consultant.active})
+
     results.append(check_quickbooks_customers(accounting, wanted_customers))
+    results.append(check_quickbooks_products(accounting, wanted_consultants))
     return results
 
 

@@ -35,7 +35,7 @@
               {
                 "Id": "12",
                 "Name": "Priya Shah",
-                "UnitPrice": 140.0
+                "UnitPrice": 145.0
               }
             ]
           }
@@ -48,9 +48,9 @@
         "status": 200,
         "json": {
           "Invoice": {
-            "Id": "146",
+            "Id": "145",
             "DocNumber": "083126AC-PS",
-            "TotalAmt": 23678.4,
+            "TotalAmt": 22620.0,
             "SyncToken": "0",
             "PrivateNote": "fops item 1"
           }
@@ -63,11 +63,8 @@
         "status": 200,
         "json": {
           "Invoice": {
-            "Id": "146",
-            "DocNumber": "083126AC-PS",
-            "TotalAmt": 23678.4,
-            "SyncToken": "0",
-            "PrivateNote": "fops item 1"
+            "Id": "145",
+            "SyncToken": "0"
           }
         }
       }

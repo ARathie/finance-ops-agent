@@ -214,6 +214,30 @@ def check_quickbooks_customers(accounting: object, wanted: Callable[[], list[str
     return _run(name, run)
 
 
+def check_quickbooks_products(accounting: object, wanted: Callable[[], list[str]]) -> Check:
+    """Every consultant the agent may invoice for must have their own product
+    in QuickBooks, with their rate on it: that rate is what is billed
+    (docs/decisions.md #30)."""
+    from finance_ops_agent.adapters.quickbooks.online import QuickBooksOnline
+
+    name = "quickbooks products"
+    assert isinstance(accounting, QuickBooksOnline)
+
+    def run() -> str:
+        names = wanted()
+        problems: list[str] = []
+        for consultant in names:
+            try:
+                accounting.product_for(consultant)
+            except Exception as error:
+                problems.append(f"{consultant}: {error}")
+        if problems:
+            raise RuntimeError("QuickBooks cannot price these consultants. " + " ".join(problems))
+        return f"all {len(names)} consultant(s) have a product with a rate"
+
+    return _run(name, run)
+
+
 # The agent's credentials arrive as ordinary environment variables, from `.env`
 # via launchd, `env_file`, or systemd (docs/running-it.md). The Anthropic SDK
 # reads either of these names itself.
