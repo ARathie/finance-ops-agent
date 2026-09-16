@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — Icon Technologies Billing Agent</title>
+<style>
+  :root { color-scheme: light dark; --ink: #1a1a1a; --paper: #ffffff; --quiet: #5a5a5a; --rule: #e0e0e0; }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink: #e8e8e8; --paper: #161616; --quiet: #a0a0a0; --rule: #333; }
+  }
+  body { background: var(--paper); color: var(--ink); margin: 0;
+         font: 17px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  main { max-width: 42rem; margin: 0 auto; padding: 3rem 16px 5rem; }
+  h1 { font-size: 1.7rem; line-height: 1.25; margin: 0 0 .25rem; }
+  h2 { font-size: 1.15rem; margin: 2.25rem 0 .5rem; }
+  .date { color: var(--quiet); margin: 0 0 2rem; font-size: .95rem; }
+  ul { padding-left: 1.25rem; }
+  li { margin: .4rem 0; }
+  hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5rem 0; }
+  footer { color: var(--quiet); font-size: .95rem; }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Privacy Policy</h1>
+<p class="date">Icon Technologies billing agent · Effective 16 September 2026</p>
+
+<p>This policy describes how the Icon Technologies billing agent (“the agent”) handles information. The agent is internal software built and operated by Icon Technologies for its own billing. It is not offered to the public, it has no accounts for outside users, and nobody outside Icon Technologies signs in to it.</p>
+
+<h2>What the agent does</h2>
+<p>The agent reads timesheets that consultants email to an Icon Technologies mailbox, checks them, prepares the matching client invoice in Icon Technologies’ QuickBooks Online company, emails the invoice to the client with Icon Technologies’ administrator copied, and tells the administrator what each consultant is owed. It never pays anyone and never moves money.</p>
+
+<h2>Information the agent handles</h2>
+<ul>
+  <li><strong>Timesheets and the emails carrying them</strong> — the sender’s address, the subject, the message text, and the attached documents. A timesheet typically names a consultant, the client they worked for, the dates worked, the hours, and whoever approved them.</li>
+  <li><strong>Business contact details</strong> — the names and email addresses of consultants, of client billing contacts, and of Icon Technologies’ administrator.</li>
+  <li><strong>Commercial terms</strong> — the rate charged to each client, the rate paid to each consultant or their company, and payment terms. These are Icon Technologies’ own business records.</li>
+  <li><strong>Invoices</strong> — the invoice number, dates, hours, rate, amount, and the resulting record in QuickBooks Online.</li>
+</ul>
+<p>The agent does not handle bank details, payment card numbers, government identifiers, or any special category of personal data. It is not designed to receive them, and nothing in it asks for them.</p>
+
+<h2>Where the information comes from</h2>
+<p>From email sent to Icon Technologies’ own mailbox by consultants and by client managers approving work; from a spreadsheet Icon Technologies maintains listing its clients, consultants and engagements; and from Icon Technologies’ own QuickBooks Online company.</p>
+
+<h2>Who it is shared with</h2>
+<p>The agent uses a small number of service providers to do its work. It shares with each of them only what that service needs:</p>
+<ul>
+  <li><strong>Anthropic</strong> — timesheet documents and the text of the emails carrying them are sent to Anthropic’s API so that its model can read them and report what they say. Consultant and client names are also sent, so that names on a document can be matched to the right spelling. Rates and email addresses are not sent. Anthropic processes this in order to return a reading, and under its commercial API terms does not use it to train its models.</li>
+  <li><strong>Intuit (QuickBooks Online)</strong> — the client’s name, the consultant’s name, the billing period, the hours, the rate and the invoice total, in order to create the invoice in Icon Technologies’ own QuickBooks company.</li>
+  <li><strong>Rackspace</strong> — hosts the mailbox the agent reads and sends from, so it holds the emails in the ordinary way an email provider does.</li>
+  <li><strong>The provider of Icon Technologies’ backup storage</strong> — holds the nightly backup archives described below.</li>
+</ul>
+<p>Information is not sold, rented, or shared for advertising. There is no advertising, no analytics, and no tracking of any kind in the agent.</p>
+
+<h2>Who receives email from the agent</h2>
+<p>Only two kinds of recipient. Icon Technologies’ administrator receives every email the agent writes. A client’s billing contact receives the invoice for that client’s own work, with the administrator copied on every one. The agent writes to nobody else.</p>
+
+<h2>Where it is kept, and for how long</h2>
+<p>The agent stores its records — the timesheets it has read, the invoices it has prepared, and its own working notes — in a database and file store on a server Icon Technologies controls, reachable only by Icon Technologies. Backups are written nightly to storage Icon Technologies controls: daily backups are kept for 90 days, and the first backup of each month is kept indefinitely, because invoices are financial records that Icon Technologies is required to retain.</p>
+
+<h2>How it is protected</h2>
+<p>The server accepts no inbound connections other than administrative access by cryptographic key. Credentials are held in environment settings readable only by the account the agent runs as, never in its source code and never in its logs. The agent’s logs deliberately exclude email bodies, attachment contents, rates and amounts. Connections to every service above are encrypted in transit.</p>
+
+<h2>Questions, and requests about your information</h2>
+<p>If you are a consultant or a client contact and you want to know what the agent holds about you, or want it corrected, write to <a href="mailto:kevin@icon-technologies.com">kevin@icon-technologies.com</a>. Icon Technologies will respond within a reasonable period. Where Icon Technologies holds your information on behalf of a client company under a contract with that company, it will also tell that company about your request.</p>
+
+<h2>Changes</h2>
+<p>If this policy changes, the revised version will be published at this address with a new effective date.</p>
+
+<hr>
+<footer>
+<p>Icon Technologies<br>
+[Icon Technologies business address]<br>
+<a href="mailto:kevin@icon-technologies.com">kevin@icon-technologies.com</a></p>
+</footer>
+
+</main>
+</body>
+</html>

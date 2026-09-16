@@ -17,6 +17,7 @@ Things only Icon can answer. Until they are answered, the agent will use the def
 | Any sales tax on invoices? | None. |
 | Invoice numbering: should the agent continue Kevin's current sequence? | **Answered (Sep 2026):** `<MMDDYY><client code>-<consultant code>`, for example `083126MT-PS`, where the date is the end of the billing period. The agent assigns it in both modes and QuickBooks is told to use it (decision 29). |
 | Can Kevin share a few real timesheets (with names changed) to test with? | **Answered (Sep 2026):** samples in the real format with invented data are being added to the eval set. They are weekly, not daily: hours are listed per week, and a week that straddles the month end contributes only part of its hours. |
+| Where are the EULA and privacy policy published? | Intuit will not issue production QuickBooks credentials without both at a public https address (`docs/legal/`). Write the two URLs here once they are live. |
 | Which server will the agent run on for real? | A 1 vCPU / 1 GB Ubuntu LTS virtual machine at DigitalOcean, Hetzner, or AWS Lightsail, running the agent as a container (`running-it.md` stage 2). The Mac is for the first test only. |
 | Who holds Icon's Rackspace Email admin login, to create the agent's mailbox? | **Answered (Sep 2026): Kevin.** The agent's mailbox has been created from that login. |
 | Will the agent's mailbox be a standard Rackspace Email (IMAP) mailbox like Kevin's, not Hosted Exchange? | Rackspace Email, the same kind as Kevin's. |
