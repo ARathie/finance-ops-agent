@@ -83,11 +83,11 @@ def test_the_invoices_total_settles_the_timesheets_part_week() -> None:
     invoice = make(stated=17600)
 
     # The timesheet alone cannot be billed: its 06/27 week runs into June.
-    alone, _ = check_hours(timesheet)
+    alone, _ = check_hours(timesheet, None)
     assert alone is None
 
     combined, findings = combine_readings([timesheet, invoice])
-    total, hour_findings = check_hours(combined)
+    total, hour_findings = check_hours(combined, None)
     assert total == 17600
     assert findings == []
     assert hour_findings == []
@@ -98,7 +98,7 @@ def test_the_order_of_the_attachments_does_not_matter() -> None:
     invoice = make(stated=17600)
     first, _ = combine_readings([timesheet, invoice])
     second, _ = combine_readings([invoice, timesheet])
-    assert check_hours(first)[0] == check_hours(second)[0] == 17600
+    assert check_hours(first, None)[0] == check_hours(second, None)[0] == 17600
 
 
 def test_the_approval_comes_from_the_timesheet_not_the_invoice() -> None:
@@ -147,4 +147,4 @@ def test_a_blank_second_attachment_changes_nothing() -> None:
     combined, findings = combine_readings([timesheet, nothing])
     assert findings == []
     assert combined.consultant_name.value == "Ravi Balakrishnan"
-    assert check_hours(combined)[0] == 17600
+    assert check_hours(combined, None)[0] == 17600

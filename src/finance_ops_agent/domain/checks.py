@@ -245,7 +245,7 @@ def _sort_rows(
 
 
 def check_hours(
-    reading: TimesheetReading, period: BillingPeriod | None = None
+    reading: TimesheetReading, period: BillingPeriod | None
 ) -> tuple[int | None, list[Finding]]:
     """The hours to invoice (hundredths), plus anything wrong with them.
 
@@ -254,6 +254,12 @@ def check_hours(
     timesheet's own span, and a note assigning a straddling week's hours to the
     month is checked against the printed total rather than trusted over it
     (decision 26).
+
+    `period` has no default on purpose. Omitting it counts every day and week
+    on the document, whatever month they belong to, which is how a May
+    timesheet came to be billed at 192 hours instead of 168 and how Kevin was
+    then told 192 while the invoice said 168. Pass `None` only where there
+    genuinely is no engagement to bill against, as the eval runner does.
     """
     stated = reading.stated_total_hours_hundredths.value
     summed = reading.summed_daily_hundredths()

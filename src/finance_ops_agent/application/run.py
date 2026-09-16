@@ -555,7 +555,7 @@ def _timesheet_summary(
     period: BillingPeriod | None,
     item: Item | None,
 ) -> TimesheetSummary:
-    total, _ = checks.check_hours(reading)
+    total, _ = checks.check_hours(reading, period or (item.period if item else None))
     approval = reading.approval.value
     if approval is None or approval.kind.value == "none":
         approval_text = "no approval found"

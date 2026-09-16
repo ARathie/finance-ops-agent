@@ -82,14 +82,16 @@ class TestRateRow:
 
 class TestHours:
     def test_missing(self) -> None:
-        total, findings = checks.check_hours(reading(AUG.start, AUG.end, total_hundredths=None))
+        total, findings = checks.check_hours(
+            reading(AUG.start, AUG.end, total_hundredths=None), None
+        )
         assert total is None
         assert findings[0].code is ReviewCode.HOURS_MISSING
 
     def test_daily_hours_within_a_quarter_hour_are_fine(self) -> None:
         dailies = [(date(2026, 8, day), 779) for day in range(3, 13)]  # sums to 77.90
         total, findings = checks.check_hours(
-            reading(date(2026, 8, 1), date(2026, 8, 14), 7_800, dailies=dailies)
+            reading(date(2026, 8, 1), date(2026, 8, 14), 7_800, dailies=dailies), None
         )
         assert findings == []
         assert total == 7_800  # the printed total is what gets invoiced
@@ -97,25 +99,25 @@ class TestHours:
     def test_daily_hours_off_by_more_are_a_review(self) -> None:
         dailies = [(date(2026, 8, day), 700) for day in range(3, 13)]  # sums to 70.00
         _, findings = checks.check_hours(
-            reading(date(2026, 8, 1), date(2026, 8, 14), 7_800, dailies=dailies)
+            reading(date(2026, 8, 1), date(2026, 8, 14), 7_800, dailies=dailies), None
         )
         assert [finding.code for finding in findings] == [ReviewCode.HOURS_DONT_ADD_UP]
 
     def test_zero_hours_are_unusual(self) -> None:
-        _, findings = checks.check_hours(reading(AUG.start, AUG.end, 0))
+        _, findings = checks.check_hours(reading(AUG.start, AUG.end, 0), None)
         assert [finding.code for finding in findings] == [ReviewCode.HOURS_UNUSUAL]
 
     def test_more_than_24_hours_in_a_day_is_unusual(self) -> None:
         dailies = [(date(2026, 8, 3), 2_500)]
         _, findings = checks.check_hours(
-            reading(date(2026, 8, 3), date(2026, 8, 3), 2_500, dailies=dailies)
+            reading(date(2026, 8, 3), date(2026, 8, 3), 2_500, dailies=dailies), None
         )
         assert ReviewCode.HOURS_UNUSUAL in [finding.code for finding in findings]
 
     def test_over_full_time_is_unusual(self) -> None:
         # August 2026 has 21 weekdays; full time 168 h; 5% over is 176.4 h.
-        _, ok = checks.check_hours(reading(AUG.start, AUG.end, 17_600))
-        _, over = checks.check_hours(reading(AUG.start, AUG.end, 17_700))
+        _, ok = checks.check_hours(reading(AUG.start, AUG.end, 17_600), None)
+        _, over = checks.check_hours(reading(AUG.start, AUG.end, 17_700), None)
         assert ok == []
         assert [finding.code for finding in over] == [ReviewCode.HOURS_UNUSUAL]
 

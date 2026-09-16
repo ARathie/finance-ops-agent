@@ -191,6 +191,38 @@ class TestTheWholeWayThroughToMoney:
         assert item.approved_hours == Hours(16_800)
 
 
+class TestTheNumberKevinReads:
+    """What the "timesheet received" email says must be what gets billed.
+
+    They came from two calls to the same check, one of which was not given the
+    billing period, so Kevin was told 192 hours for a May timesheet the agent
+    then correctly invoiced at 168. Nothing was wrong with the money; the
+    number he was asked to check it against was wrong, which is worse than
+    useless in a cycle whose whole purpose is Kevin checking.
+    """
+
+    def test_the_hours_in_kevins_email_are_the_hours_billed(self, env: ScenarioEnv) -> None:
+        spilling = [
+            (date(2026, 7, 30), 800),
+            (date(2026, 7, 31), 800),
+            *[(date(2026, 8, day), 800) for day in (3, 4, 5, 6, 7)],
+        ]
+        env.add_email(
+            PRIYA,
+            scripted_reading=reading(
+                date(2026, 7, 30), AUG_END, total_hundredths=None, dailies=spilling
+            ),
+        )
+        env.run()
+
+        item = env.the_item()
+        assert item.approved_hours == Hours(4_000)
+        received = [e for e in env.sender.sent_emails() if "Timesheet received" in e.subject]
+        assert received, "no timesheet-received email"
+        assert "40.00 hours" in received[0].subject, received[0].subject
+        assert "56.00" not in received[0].subject, "the document's own total, not the month's"
+
+
 class TestCorrections:
     def test_corrected_before_sent(self, env: ScenarioEnv) -> None:
         env.add_email(PRIYA, scripted_reading=reading(AUG_START, AUG_END))

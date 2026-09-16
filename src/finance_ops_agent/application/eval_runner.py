@@ -182,7 +182,7 @@ def missing_time_systems(cases: list[EvalCase], required: list[str]) -> list[str
 
 
 def _total_hundredths(reading: TimesheetReading) -> int | None:
-    total, _ = checks.check_hours(reading)
+    total, _ = checks.check_hours(reading, None)  # no engagement behind an eval case
     return total
 
 
@@ -199,7 +199,8 @@ def _names_equal(actual: str | None, expected: str | None) -> bool:
 
 def _codes_for(reading: TimesheetReading) -> set[str]:
     """The document-only checks: hours, approval, and confidence."""
-    _, hour_findings = checks.check_hours(reading)
+    # Scored on its own: there is no engagement behind an eval case, so no period.
+    _, hour_findings = checks.check_hours(reading, None)
     findings = hour_findings + checks.check_approval(reading) + checks.check_confidence(reading)
     return {finding.code.value for finding in findings}
 
