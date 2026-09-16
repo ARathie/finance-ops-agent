@@ -73,6 +73,10 @@ If it fails, the reason is printed and the JSON log holds the whole exchange, in
 
 ## Errors
 
+Every failure becomes a review item emailed to Kevin, never an end to the run: the other timesheets are still read, their emails still go out, and the invoice is made on a later run once the problem is fixed. `QUICKBOOKS_RECONNECT` is raised once per run rather than once per item — asking again for each one would mean another attempt at the token endpoint each time.
+
+Intuit puts a trace id in the `intuit_tid` response header. It is logged on every call and repeated in whatever the agent reports, because it is the first thing Intuit's support asks for.
+
 - 401 → refresh the token once, then `QUICKBOOKS_RECONNECT`.
 - 429 / 5xx → retry with backoff, at most 3 attempts across runs, then `QUICKBOOKS_FAILED`.
 - Validation errors (400) → `QUICKBOOKS_FAILED` at once with the message from QBO (usually a missing customer or item).

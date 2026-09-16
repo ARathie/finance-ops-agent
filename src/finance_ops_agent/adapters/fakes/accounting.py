@@ -15,9 +15,16 @@ class FakeAccounting:
         self.cancelled: list[str] = []
         self.paid: set[str] = set()
         self.asked: list[str] = []
+        # Tests set these to make the accounting system misbehave the way a
+        # real one does: a refusal, or a connection that needs renewing.
+        self.fail_with: Exception | None = None
+        self.create_attempts = 0
         self._counter = 0
 
     def create_invoice(self, invoice: Invoice, item_id: int) -> CreatedInvoice:
+        self.create_attempts += 1
+        if self.fail_with is not None:
+            raise self.fail_with
         existing = self.find_invoice(item_id)
         if existing is not None:
             return existing
@@ -38,5 +45,7 @@ class FakeAccounting:
         self.cancelled.append(external_id)
 
     def paid_status(self, external_ids: list[str]) -> dict[str, bool]:
+        if self.fail_with is not None:
+            raise self.fail_with
         self.asked.extend(external_ids)
         return {external_id: external_id in self.paid for external_id in external_ids}

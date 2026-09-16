@@ -614,6 +614,82 @@ class TestInvoiceNumbering:
         assert "initials" in env.store.open_reviews()[-1].message
 
 
+class TestWhenQuickBooksIsUnhappy:
+    """A QuickBooks problem is a question for Kevin, not the end of the run
+    (docs/timesheet-checks.md: QUICKBOOKS_FAILED and QUICKBOOKS_RECONNECT)."""
+
+    def _auto(self, env: ScenarioEnv) -> None:
+        from tests.scenarios.conftest import engagement_row
+
+        env.mode = Mode.AUTO
+        env.workbook.engagements[0] = engagement_row(2, **{"Send automatically": "yes"})
+        clean_timesheet(env)
+
+    def test_a_refusal_becomes_a_review_and_nothing_reaches_the_client(
+        self, env: ScenarioEnv
+    ) -> None:
+        from finance_ops_agent.ports.accounting import AccountingFailed
+
+        self._auto(env)
+        env.accounting.fail_with = AccountingFailed("Business Validation Error: no such account")
+        report = env.run()
+
+        review = next(r for r in env.store.open_reviews() if r.code == "QUICKBOOKS_FAILED")
+        assert "Priya Shah" in review.message
+        assert "no such account" in review.message  # what QuickBooks actually said
+        assert "nothing went to the client" in review.message
+        # No invoice, no billing email, and the item is still waiting to be one.
+        assert env.store.invoices_for_item(env.the_item().id) == []
+        assert [e for e in env.sender.sent_emails() if e.to == ("ap@acme.example",)] == []
+        assert env.the_item().status is not ItemStatus.INVOICE_SENT
+        assert report.invoices_created == 0
+
+    def test_a_dead_connection_is_asked_about_once_not_once_per_item(
+        self, env: ScenarioEnv
+    ) -> None:
+        """Asking again per item would mean another go at the token endpoint
+        each time, which is exactly what Intuit asks apps not to do."""
+        from finance_ops_agent.ports.accounting import AccountingNeedsReconnect
+
+        self._auto(env)
+        env.accounting.fail_with = AccountingNeedsReconnect("the refresh token has expired")
+        report = env.run()
+
+        assert report.quickbooks_unavailable
+        assert env.accounting.create_attempts == 1
+        review = next(r for r in env.store.open_reviews() if r.code == "QUICKBOOKS_RECONNECT")
+        assert "fops qbo-connect" in review.message
+        assert env.store.invoices_for_item(env.the_item().id) == []
+
+    def test_the_rest_of_the_run_still_happens(self, env: ScenarioEnv) -> None:
+        """The timesheet was still read and Kevin still hears about it. The
+        payment instruction waits for the invoice, as it does in every mode
+        that makes one: it is enqueued alongside it."""
+        from finance_ops_agent.ports.accounting import AccountingNeedsReconnect
+
+        self._auto(env)
+        env.accounting.fail_with = AccountingNeedsReconnect("the refresh token has expired")
+        env.run()
+
+        assert any(s.startswith("Timesheet received") for s in env.sent_subjects())
+        assert any(s.startswith("Needs your review") for s in env.sent_subjects())
+        assert not any(s.startswith("Payment due") for s in env.sent_subjects())
+
+    def test_it_recovers_on_the_next_run(self, env: ScenarioEnv) -> None:
+        from finance_ops_agent.ports.accounting import AccountingNeedsReconnect
+
+        self._auto(env)
+        env.accounting.fail_with = AccountingNeedsReconnect("the refresh token has expired")
+        env.run()
+
+        env.accounting.fail_with = None  # Kevin ran fops qbo-connect
+        env.run()
+
+        item = env.the_item()
+        assert item.status is ItemStatus.INVOICE_SENT
+        assert [r.number for r in env.store.invoices_for_item(item.id)] == ["083126AC-PS"]
+
+
 class TestMondaySummary:
     def test_sent_on_monday_with_the_tracking_sheet(self, env: ScenarioEnv) -> None:
         env.today = date(2026, 9, 7)  # a Monday

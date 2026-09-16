@@ -12,6 +12,24 @@ from typing import Protocol
 from finance_ops_agent.domain.invoices import Invoice
 
 
+class AccountingFailed(Exception):
+    """The accounting system refused or could not do it (becomes QUICKBOOKS_FAILED).
+
+    Defined here rather than in an adapter because the application has to catch
+    it, and `application/` never imports an adapter (decision 6). Adapters raise
+    their own subclasses of these two.
+    """
+
+
+class AccountingNeedsReconnect(AccountingFailed):
+    """The connection is no longer usable (becomes QUICKBOOKS_RECONNECT).
+
+    A subclass, so anything catching AccountingFailed catches this too, and
+    anything that wants to tell them apart catches this one first. Manual mode
+    raises neither: there is nothing to connect to.
+    """
+
+
 @dataclass(frozen=True)
 class CreatedInvoice:
     number: str

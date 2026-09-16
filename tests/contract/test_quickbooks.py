@@ -235,6 +235,30 @@ class TestCreateInvoice:
         assert any("operation=void" in url for _, url in replay.calls)
         assert replay.bodies[-1] == {"Id": "145", "SyncToken": "0"}
 
+    def test_intuits_trace_id_is_kept_and_repeated_back(self, tmp_path: Path) -> None:
+        """Intuit's support team asks for intuit_tid first, so it is captured
+        from every response and put into anything the agent reports."""
+        replay = replay_from("create_mismatch")
+        accounting, client, _ = build(replay, tmp_path)
+
+        with pytest.raises(QuickBooksFailed) as error:
+            accounting.create_invoice(worked_example_invoice(), item_id=1)
+
+        assert client.last_intuit_tid == "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        assert "QuickBooks reference 1-68c9a0f1-2b7d4e8a9c1f3b5d" in str(error.value)
+
+    def test_a_failure_without_a_trace_id_reads_normally(self, tmp_path: Path) -> None:
+        """Not every response carries one; the message must not trail an empty
+        bracket when it does not."""
+        replay = replay_from("missing_item")
+        accounting, client, _ = build(replay, tmp_path)
+
+        with pytest.raises(QuickBooksFailed) as error:
+            accounting.create_invoice(worked_example_invoice(), item_id=1)
+
+        assert client.last_intuit_tid == ""
+        assert "QuickBooks reference" not in str(error.value)
+
     def test_a_missing_customer_says_what_to_fix(self, tmp_path: Path) -> None:
         replay = replay_from("missing_customer")
         accounting, _, _ = build(replay, tmp_path)

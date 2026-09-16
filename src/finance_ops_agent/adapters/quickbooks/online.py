@@ -24,7 +24,11 @@ from datetime import date, timedelta
 from typing import Any
 
 from finance_ops_agent import logs
-from finance_ops_agent.adapters.quickbooks.client import QuickBooksClient, QuickBooksFailed
+from finance_ops_agent.adapters.quickbooks.client import (
+    QuickBooksClient,
+    QuickBooksFailed,
+    with_trace,
+)
 from finance_ops_agent.domain.invoices import Invoice
 from finance_ops_agent.domain.money import Money, invoice_amount
 from finance_ops_agent.ports.accounting import CreatedInvoice
@@ -160,11 +164,14 @@ class QuickBooksOnline:
             # an invoice again, so this is not something to paper over.
             self._void(quickbooks_id, str(raw.get("SyncToken", "0")))
             raise QuickBooksFailed(
-                f"I asked QuickBooks to number this invoice {invoice.number} and it"
-                f" used {given_number or '(nothing)'} instead. Turn on Settings ->"
-                " Account and settings -> Sales -> Custom transaction numbers, and"
-                " I'll number invoices the way you do. I voided it and sent nothing"
-                " to the client."
+                with_trace(
+                    f"I asked QuickBooks to number this invoice {invoice.number} and it"
+                    f" used {given_number or '(nothing)'} instead. Turn on Settings ->"
+                    " Account and settings -> Sales -> Custom transaction numbers, and"
+                    " I'll number invoices the way you do. I voided it and sent nothing"
+                    " to the client.",
+                    self._client.last_intuit_tid,
+                )
             )
         if total_cents != invoice.total.cents:
             # Void first, then report: an amount the agent cannot vouch for must
@@ -180,11 +187,15 @@ class QuickBooksOnline:
             sync_token = str(raw.get("SyncToken", "0"))
             self._void(quickbooks_id, sync_token)
             raise QuickBooksFailed(
-                f"QuickBooks totalled invoice {raw.get('DocNumber', quickbooks_id)} at"
-                f" ${Money(total_cents)}, but this timesheet comes to"
-                f" ${invoice.total}. I voided it and sent nothing to the client."
-                " This usually means the item, rate, or tax settings in QuickBooks"
-                " differ from the engagement list."
+                with_trace(
+                    f"QuickBooks totalled invoice {raw.get('DocNumber', quickbooks_id)} at"
+                    f" ${Money(total_cents)}, but this timesheet comes to"
+                    f" ${invoice.total}. I voided it and sent nothing to the client."
+                    " This usually means the rate on the consultant's product in"
+                    " QuickBooks and the rate on the engagement list have stopped"
+                    " agreeing.",
+                    self._client.last_intuit_tid,
+                )
             )
         logs.log(
             "quickbooks invoice created",

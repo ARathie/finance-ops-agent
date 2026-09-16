@@ -17,7 +17,12 @@ import httpx
 
 from finance_ops_agent import logs
 from finance_ops_agent.adapters.quickbooks.tokens import Tokens, TokenStore, utcnow
+from finance_ops_agent.ports.accounting import AccountingFailed, AccountingNeedsReconnect
 
+# Intuit puts a trace id on every response. Their support asks for it first
+# when anything is wrong, so it is logged on every call and repeated in any
+# failure the agent reports.
+TRACE_HEADER = "intuit_tid"
 PRODUCTION_BASE = "https://quickbooks.api.intuit.com"
 SANDBOX_BASE = "https://sandbox-quickbooks.api.intuit.com"
 TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
@@ -26,12 +31,22 @@ SCOPE = "com.intuit.quickbooks.accounting"
 MAX_TRIES = 3
 
 
-class QuickBooksFailed(Exception):
+class QuickBooksFailed(AccountingFailed):
     """A QuickBooks call failed (becomes QUICKBOOKS_FAILED)."""
 
 
-class QuickBooksReconnect(Exception):
+class QuickBooksReconnect(AccountingNeedsReconnect):
     """The connection is no longer usable (becomes QUICKBOOKS_RECONNECT)."""
+
+
+def trace_id(response: httpx.Response) -> str:
+    return str(response.headers.get(TRACE_HEADER, ""))
+
+
+def with_trace(message: str, tid: str) -> str:
+    """Intuit's support team asks for this id, so Kevin should be able to read
+    it off the email rather than go looking in a log."""
+    return f"{message} (QuickBooks reference {tid})" if tid else message
 
 
 def base_url(environment: str) -> str:
@@ -66,7 +81,11 @@ def exchange_code(
     )
     if response.status_code >= 400:
         raise QuickBooksReconnect(
-            f"exchanging the sign-in code failed ({response.status_code}): {response.text[:300]}"
+            with_trace(
+                f"exchanging the sign-in code failed ({response.status_code}):"
+                f" {response.text[:300]}",
+                trace_id(response),
+            )
         )
     payload: dict[str, Any] = response.json()
     return payload
@@ -89,6 +108,9 @@ class QuickBooksClient:
         self._now = now
         self._sleep = sleep
         self._tokens: Tokens | None = None
+        # The trace id from the most recent response, for anything that fails
+        # after the call itself succeeded (a total that disagrees, say).
+        self.last_intuit_tid: str = ""
 
     @property
     def tokens(self) -> Tokens:
@@ -115,15 +137,20 @@ class QuickBooksClient:
                 "Accept": "application/json",
             },
         )
+        self.last_intuit_tid = trace_id(response)
         if response.status_code >= 400:
             logs.log(
                 "quickbooks would not renew the connection",
                 status=response.status_code,
                 said=response.text[:400],
+                intuit_tid=self.last_intuit_tid,
             )
             raise QuickBooksReconnect(
-                "QuickBooks would not renew the connection"
-                f" ({response.status_code}). Run `fops qbo-connect` to reconnect."
+                with_trace(
+                    "QuickBooks would not renew the connection"
+                    f" ({response.status_code}). Run `fops qbo-connect` to reconnect.",
+                    self.last_intuit_tid,
+                )
             )
         payload = response.json()
         rotated = current.rotated(
@@ -159,12 +186,14 @@ class QuickBooksClient:
                 "Accept": accept,
             }
             response = self._http.request(method, url, json=json, headers=headers)
+            self.last_intuit_tid = trace_id(response)
             logs.log(
                 "quickbooks call",
                 method=method,
                 url=url,
                 status=response.status_code,
                 attempt=attempt,
+                intuit_tid=self.last_intuit_tid,
             )
             if response.status_code == 401 and not refreshed:
                 logs.log("quickbooks refused the token; renewing it once", url=url)
@@ -173,8 +202,11 @@ class QuickBooksClient:
                 continue
             if response.status_code == 401:
                 raise QuickBooksReconnect(
-                    "QuickBooks refused the connection even after renewing it."
-                    " Run `fops qbo-connect` to reconnect."
+                    with_trace(
+                        "QuickBooks refused the connection even after renewing it."
+                        " Run `fops qbo-connect` to reconnect.",
+                        self.last_intuit_tid,
+                    )
                 )
             if response.status_code in (429, 500, 502, 503, 504) and attempt < MAX_TRIES:
                 logs.log(
@@ -183,6 +215,7 @@ class QuickBooksClient:
                     url=url,
                     status=response.status_code,
                     attempt=attempt,
+                    intuit_tid=self.last_intuit_tid,
                 )
                 self._sleep(2.0 * attempt)
                 continue
@@ -195,9 +228,13 @@ class QuickBooksClient:
                     url=url,
                     status=response.status_code,
                     said=response.text[:400],
+                    intuit_tid=self.last_intuit_tid,
                 )
                 raise QuickBooksFailed(
-                    f"{method} {url} returned {response.status_code}: {response.text[:400]}"
+                    with_trace(
+                        f"{method} {url} returned {response.status_code}: {response.text[:400]}",
+                        self.last_intuit_tid,
+                    )
                 )
             if accept == "application/pdf":
                 return response.content

@@ -17,7 +17,7 @@ from finance_ops_agent.domain import emails
 from finance_ops_agent.domain.emails import EmailAttachment, OutgoingEmail
 from finance_ops_agent.domain.guardrails import GuardrailCheck, check_guardrails
 from finance_ops_agent.domain.invoice_numbers import invoice_number
-from finance_ops_agent.domain.invoices import DRAFT_NUMBER, build_invoice
+from finance_ops_agent.domain.invoices import DRAFT_NUMBER, Invoice, build_invoice
 from finance_ops_agent.domain.items import (
     InvoiceRecord,
     Item,
@@ -28,6 +28,11 @@ from finance_ops_agent.domain.money import Money
 from finance_ops_agent.domain.reading import TimesheetReading
 from finance_ops_agent.domain.review import ReviewCode
 from finance_ops_agent.domain.statuses import ItemStatus
+from finance_ops_agent.ports.accounting import (
+    AccountingFailed,
+    AccountingNeedsReconnect,
+    CreatedInvoice,
+)
 from finance_ops_agent.ports.sender import NotSent, RecipientRefused
 
 MAX_SEND_ATTEMPTS = 3
@@ -153,6 +158,66 @@ def next_invoice_number(deps: RunDeps, item: Item) -> str | None:
     return None
 
 
+def tell_kevin(
+    deps: RunDeps, report: RunReport, code: ReviewCode, about: str, message: str, key: str
+) -> None:
+    """Open the review and write the email that carries it.
+
+    A review row on its own is only a note to the agent: reviews become emails
+    where they are raised, so one raised here has to bring its own.
+    """
+    item_id = None  # these are about the connection, not one timesheet
+    if not deps.store.open_review(item_id, code.value, message):
+        return  # already open from an earlier run; Kevin has been told once
+    report.reviews_opened += 1
+    email = emails.needs_review(deps.settings.admin_email, about, [message])
+    enqueue_email(deps, "review_email", f"review:{key}", item_id, email)
+
+
+def _create_invoice(
+    deps: RunDeps, draft: Invoice, item: Item, report: RunReport
+) -> CreatedInvoice | None:
+    """Ask the accounting system for the invoice, or tell Kevin why not.
+
+    A QuickBooks problem is a question for Kevin, not the end of the run: the
+    other timesheets in this run still get read, still get their emails, and
+    the invoice is made next run once the connection is back. None means it did
+    not happen and a review has been opened.
+    """
+    try:
+        return deps.accounting.create_invoice(draft, item.id)
+    except AccountingNeedsReconnect as error:
+        # Every other item this run would fail the same way, and each one would
+        # mean another go at the token endpoint.
+        report.quickbooks_unavailable = True
+        tell_kevin(
+            deps,
+            report,
+            ReviewCode.QUICKBOOKS_RECONNECT,
+            "QuickBooks",
+            "QuickBooks needs to be reconnected, so I have not made any invoices this"
+            " time and nothing went to a client. Run `fops qbo-connect` and I will pick"
+            f" them up on the next run. QuickBooks said: {error}",
+            "quickbooks-reconnect",
+        )
+        report.note(f"QuickBooks needs reconnecting; no invoice for {item.consultant}")
+        return None
+    except AccountingFailed as error:
+        message = (
+            f"I could not make the invoice for {item.consultant} at {item.client}"
+            f" ({item.period.start} to {item.period.end}) in QuickBooks, so nothing"
+            f" went to the client. I will try again next run. QuickBooks said: {error}"
+        )
+        if deps.store.open_review(item.id, ReviewCode.QUICKBOOKS_FAILED.value, message):
+            report.reviews_opened += 1
+            email = emails.needs_review(
+                deps.settings.admin_email, f"{item.consultant} — {item.client}", [message]
+            )
+            enqueue_email(deps, "review_email", f"review:quickbooks:{item.id}", item.id, email)
+        report.note(f"QuickBooks would not make the invoice for {item.consultant}: {error}")
+        return None
+
+
 def approve_item(deps: RunDeps, item: Item, report: RunReport) -> None:
     """Create the invoice (idempotently) and write down the billing email.
 
@@ -176,7 +241,9 @@ def approve_item(deps: RunDeps, item: Item, report: RunReport) -> None:
     if number is None:
         return  # Kevin has been asked; nothing created, nothing sent
     draft = build_invoice(item, number, deps.clock.today(), replaces)
-    created = deps.accounting.create_invoice(draft, item.id)
+    created = _create_invoice(deps, draft, item, report)
+    if created is None:
+        return  # Kevin has been told; nothing created, nothing sent
     invoice = build_invoice(item, created.number, deps.clock.today(), replaces)
     pdf_sha = deps.store.save_file(created.pdf)
     if created.external_id not in known:
@@ -271,6 +338,8 @@ def plan_outgoing(deps: RunDeps, report: RunReport) -> None:
         # Only automatic mode can skip asking, and only when every guardrail
         # holds. Anything else is handled as ask first: the invoice still
         # happens, Kevin just sees it first.
+        if report.quickbooks_unavailable:
+            continue  # the connection is down; Kevin already has the review
         guardrails = guardrails_for(deps, item) if mode is Mode.AUTO else None
         if guardrails is not None and guardrails.may_send_automatically:
             approve_item(deps, item, report)
