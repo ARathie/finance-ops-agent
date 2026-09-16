@@ -4,13 +4,9 @@ Intuit will not issue production QuickBooks credentials without a public end-use
 
 ## Before publishing them
 
-Three things in both files are placeholders and must be filled in:
+Both pages are filled in: Icon's address at 5755 North Point Pkwy, Suite 28, Alpharetta, GA 30022, Georgia law in section 10 of the EULA, and `kevin@icon-technologies.com` as the address a consultant or client contact writes to.
 
-- `[Icon Technologies business address]` in the footer of each page.
-- `[state or jurisdiction]` in section 10 of the EULA.
-- `kevin@icon-technologies.com` as the contact address — correct it if questions about the agent should go somewhere else, because this is the address a consultant or a client contact will write to.
-
-Then have someone read them against Icon's client contracts. The privacy policy says that timesheet documents are sent to Anthropic to be read. That is true and it has to be in there, but if a client contract limits where that client's data may be processed, that is worth knowing before the policy is public rather than after.
+What is left is to have someone read them against Icon's client contracts. The privacy policy says that timesheet documents are sent to Anthropic to be read. That is true and it has to be in there, but if a client contract limits where that client's data may be processed, that is worth knowing before the policy is public rather than after.
 
 ## Where they go
 
