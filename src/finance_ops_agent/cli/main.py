@@ -91,6 +91,15 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="lower FOPS_MODE for this run; while FOPS_MODE=dry_run nothing can raise it",
     )
+    for command in (run_cmd, dry_run):
+        command.add_argument(
+            "--since",
+            type=date.fromisoformat,
+            default=None,
+            metavar="YYYY-MM-DD",
+            help="read the inbox from this date again, ignoring how far the agent had got"
+            " (nothing is handled twice: a message already stored is skipped by its Message-ID)",
+        )
 
     connect = commands.add_parser(
         "qbo-connect", help="the one-time QuickBooks sign-in (run with Kevin present)"
@@ -260,13 +269,14 @@ def _mail_account(mail: "MailSettings") -> "MailAccount":
     )
 
 
-def _real_deps(mode_override: "Mode | None" = None) -> RunDeps:
+def _real_deps(mode_override: "Mode | None" = None, since: "date | None" = None) -> RunDeps:
     """Wire the real adapters from the environment (docs/technical-design.md)."""
     from finance_ops_agent.adapters.claude.reader import ClaudeReader
     from finance_ops_agent.adapters.clock import SystemClock
     from finance_ops_agent.adapters.email.inbox import ImapInbox
     from finance_ops_agent.adapters.email.sender import SmtpSender
     from finance_ops_agent.adapters.excel.engagement_list import ExcelEngagementList
+    from finance_ops_agent.application.run import MAILBOX_POSITION_KEY
     from finance_ops_agent.config import Config, MailSettings
 
     config = Config.from_env()
@@ -277,7 +287,14 @@ def _real_deps(mode_override: "Mode | None" = None) -> RunDeps:
     clock = SystemClock(config.timezone)
     # The first run reads from today unless MAIL_START_DATE says otherwise, so a
     # mailbox with history in it is not processed from the beginning of time.
-    start_date = mail.start_date or _remembered_start_date(store, clock.today())
+    start_date = since or mail.start_date or _remembered_start_date(store, clock.today())
+    if since is not None:
+        # Two things decide what a run sees: the date, and how far the mailbox
+        # was read last time. Moving the date alone changes nothing about mail
+        # the agent has already walked past, so the position goes back to the
+        # start as well. Re-reading is safe: a message already stored is
+        # skipped by its Message-ID, so nothing is handled or sent twice.
+        store.set_state(MAILBOX_POSITION_KEY, "")
     return RunDeps(
         engagement_list=ExcelEngagementList(config.engagement_list),
         inbox=ImapInbox(account, config.agent_mailbox, start_date),
@@ -317,7 +334,7 @@ def _command_run(args: argparse.Namespace) -> int:
 
     try:
         config = Config.from_env()
-        deps = _real_deps(args.mode)
+        deps = _real_deps(args.mode, since=getattr(args, "since", None))
     except MissingSettingError as error:
         print(f"Not configured: {error}. Run `fops doctor` for the whole list.")
         return 2

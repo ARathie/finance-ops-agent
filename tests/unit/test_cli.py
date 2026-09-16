@@ -1,5 +1,7 @@
 import re
 from argparse import Namespace
+from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -78,3 +80,40 @@ def test_eval_accepts_the_price_flags() -> None:
     args = build_parser().parse_args(["eval", "--price-input", "500", "--price-output", "2500"])
     assert (args.price_input, args.price_output) == (500, 2500)
     assert build_parser().parse_args(["eval"]).price_input is None
+
+
+def test_since_is_accepted_by_run_and_dry_run() -> None:
+    """Both take it: a real `fops dry-run` is `fops run` in dry-run mode."""
+    from finance_ops_agent.cli.main import build_parser
+
+    parser = build_parser()
+    for command in ("run", "dry-run"):
+        args = parser.parse_args([command, "--since", "2026-09-09"])
+        assert args.since == date(2026, 9, 9)
+
+
+def test_the_top_level_parser_still_owns_its_own_options() -> None:
+    """--version belongs to `fops`, not to a subcommand. A loop adding an
+    option to several subparsers once rebound the name `parser` and quietly
+    moved it."""
+    from finance_ops_agent.cli.main import build_parser
+
+    with pytest.raises(SystemExit) as exit_code:
+        build_parser().parse_args(["--version"])
+    assert exit_code.value.code == 0
+
+
+def test_reading_again_from_a_date_forgets_how_far_it_had_got(tmp_path: Path) -> None:
+    """--since moves two things, not one: the date, and the position the agent
+    had reached. Without the second, mail it has already walked past stays
+    invisible however far back the date goes."""
+    from finance_ops_agent.adapters.email.inbox import decode_position, encode_position
+    from finance_ops_agent.application.run import MAILBOX_POSITION_KEY
+    from finance_ops_agent.cli.main import _open_store
+
+    store = _open_store(tmp_path)
+    store.set_state(MAILBOX_POSITION_KEY, encode_position(uidvalidity=7, last_uid=42))
+    assert decode_position(store.get_state(MAILBOX_POSITION_KEY), 7) == 42
+
+    store.set_state(MAILBOX_POSITION_KEY, "")  # what --since does
+    assert decode_position(store.get_state(MAILBOX_POSITION_KEY), 7) == 0
