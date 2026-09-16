@@ -16,6 +16,7 @@ class ReviewCode(StrEnum):
     ENGAGEMENT_UNCLEAR = "ENGAGEMENT_UNCLEAR"
     PERIOD_UNCLEAR = "PERIOD_UNCLEAR"
     PERIOD_MISMATCH = "PERIOD_MISMATCH"
+    PART_WEEK_DISAGREES = "PART_WEEK_DISAGREES"
     HOURS_MISSING = "HOURS_MISSING"
     HOURS_DONT_ADD_UP = "HOURS_DONT_ADD_UP"
     PART_WEEK_UNCLEAR = "PART_WEEK_UNCLEAR"
@@ -44,6 +45,10 @@ REVIEW_MESSAGES: dict[ReviewCode, str] = {
         "I can't tell which client this is for, or there is no active engagement for these dates."
     ),
     ReviewCode.PERIOD_UNCLEAR: "I can't tell which dates this covers.",
+    ReviewCode.PART_WEEK_DISAGREES: (
+        "A note on the timesheet and the total on the invoice disagree about how many"
+        " of a straddling week's hours belong to this month."
+    ),
     ReviewCode.PERIOD_MISMATCH: (
         "The dates don't line up with the billing schedule for this engagement."
     ),

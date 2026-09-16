@@ -579,8 +579,12 @@ class TestSending:
 
         sender = SmtpSender(env.server.account(), AGENT, lambda: env.now, connect_smtp=connect)
         email = OutgoingEmail(to=("nobody@acme.example",), subject="Invoice", body="x")
-        with pytest.raises(RecipientRefused, match="nobody@acme.example"):
+        with pytest.raises(RecipientRefused) as refusal:
             sender.send(email, {}, "<refused@icon-technologies.com>")
+        # Not just the address: the server's reason is what says whether the
+        # address is wrong or the mailbox may not send there.
+        assert "nobody@acme.example" in str(refusal.value)
+        assert "550" in str(refusal.value) and "no such user" in str(refusal.value)
 
         # Through the application: SEND_FAILED at once, not three attempts.
         assert env.store.record_outgoing("billing_email", "billing:1", None, email.payload())

@@ -2,7 +2,6 @@ Consultant,Marcus Webb
 Client,Bluewater Systems
 Period,2026-01-01,2026-01-31
 Date,Hours,Status
-2026-01-01,8.00,Submitted
 2026-01-02,8.00,Submitted
 2026-01-05,8.00,Submitted
 2026-01-06,8.00,Submitted
@@ -14,7 +13,6 @@ Date,Hours,Status
 2026-01-14,8.00,Submitted
 2026-01-15,8.00,Submitted
 2026-01-16,8.00,Submitted
-2026-01-19,8.00,Submitted
 2026-01-20,8.00,Submitted
 2026-01-21,8.00,Submitted
 2026-01-22,8.00,Submitted
@@ -24,5 +22,5 @@ Date,Hours,Status
 2026-01-28,8.00,Submitted
 2026-01-29,8.00,Submitted
 2026-01-30,8.00,Submitted
-Total,176.00,
+Total,160.00,
 Approved by Lee Fontaine on 2026-01-31

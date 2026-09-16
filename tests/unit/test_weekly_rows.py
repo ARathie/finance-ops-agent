@@ -30,8 +30,8 @@ def reading(
 ) -> TimesheetReading:
     high = Confidence.HIGH
     return TimesheetReading(
-        consultant_name=ReadField[str](value="Sridhar Doraiswamy", confidence=high),
-        client_name=ReadField[str](value="MasTec", confidence=high),
+        consultant_name=ReadField[str](value="Ravi Balakrishnan", confidence=high),
+        client_name=ReadField[str](value="Northwind Utilities", confidence=high),
         end_client_name=ReadField[str](),
         period_start=ReadField[date](value=start, confidence=high),
         period_end=ReadField[date](value=end, confidence=high),
@@ -39,7 +39,7 @@ def reading(
         row_entries=ReadField[list[RowEntry]](value=rows, confidence=high),
         stated_total_hours_hundredths=ReadField[int](value=stated, confidence=high),
         approval=ReadField[Approval](
-            value=Approval(kind=ApprovalKind.APPROVED_STATUS, approver="Ajaya Rautray"),
+            value=Approval(kind=ApprovalKind.APPROVED_STATUS, approver="Lena Ortiz"),
             confidence=high,
         ),
     )
@@ -67,14 +67,14 @@ JULY_WEEKS_AS_LOGGED = [
 
 def test_a_week_running_past_the_period_is_not_summed() -> None:
     """Summing the rows would bill 192 hours where the invoice says 176."""
-    total, findings = check_hours(reading(JULY_WEEKS_AS_LOGGED, stated=None))
+    total, findings = check_hours(reading(JULY_WEEKS_AS_LOGGED, stated=None), None)
     assert total is None
     assert [f.code for f in findings] == [ReviewCode.PART_WEEK_UNCLEAR]
 
 
 def test_a_printed_total_settles_the_part_week() -> None:
     """The vendor invoice prints "176 hours", so nothing has to be guessed."""
-    total, findings = check_hours(reading(JULY_WEEKS_AS_LOGGED, stated=17600))
+    total, findings = check_hours(reading(JULY_WEEKS_AS_LOGGED, stated=17600), None)
     assert total == 17600
     assert [f.code for f in findings] == []
 
@@ -86,7 +86,7 @@ def test_weeks_inside_the_period_are_summed_without_a_printed_total() -> None:
         week(date(2026, 7, 18), 4000),
     ]
     total, findings = check_hours(
-        reading(rows, stated=None, start=date(2026, 7, 4), end=date(2026, 7, 24))
+        reading(rows, stated=None, start=date(2026, 7, 4), end=date(2026, 7, 24)), None
     )
     assert total == 12000
     assert [f.code for f in findings] == []
@@ -95,7 +95,7 @@ def test_weeks_inside_the_period_are_summed_without_a_printed_total() -> None:
 def test_weekly_rows_that_contradict_the_printed_total_are_a_review() -> None:
     rows = [week(date(2026, 7, 4), 4000), week(date(2026, 7, 11), 4000)]
     _, findings = check_hours(
-        reading(rows, stated=16000, start=date(2026, 7, 4), end=date(2026, 7, 17))
+        reading(rows, stated=16000, start=date(2026, 7, 4), end=date(2026, 7, 17)), None
     )
     assert ReviewCode.HOURS_DONT_ADD_UP in [f.code for f in findings]
 
@@ -110,16 +110,16 @@ def test_august_matches_the_invoice() -> None:
         week(date(2026, 8, 29), 4000),  # 40 logged, only 8 fall in August
     ]
     august = {"start": date(2026, 8, 1), "end": date(2026, 8, 31)}
-    total, findings = check_hours(reading(rows, stated=None, **august))
+    total, findings = check_hours(reading(rows, stated=None, **august), None)
     assert total is None
     assert [f.code for f in findings] == [ReviewCode.PART_WEEK_UNCLEAR]
 
-    total, findings = check_hours(reading(rows, stated=16800, **august))
+    total, findings = check_hours(reading(rows, stated=16800, **august), None)
     assert total == 16800
     assert [f.code for f in findings] == []
 
 
 def test_a_timesheet_with_no_rows_at_all_is_still_hours_missing() -> None:
-    total, findings = check_hours(reading([], stated=None))
+    total, findings = check_hours(reading([], stated=None), None)
     assert total is None
     assert [f.code for f in findings] == [ReviewCode.HOURS_MISSING]

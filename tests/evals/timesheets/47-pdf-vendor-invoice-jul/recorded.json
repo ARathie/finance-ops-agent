@@ -5,17 +5,17 @@
     "confidence": "low"
   },
   "client_name": {
-    "value": "Mastec",
-    "quote": "MasTec Consulting Service for Mastec",
+    "value": "Northwind Utilities",
+    "quote": "Northwind Utilities",
     "confidence": "high"
   },
   "end_client_name": {
-    "value": "Mastec",
-    "quote": "Consulting Service for Mastec",
-    "confidence": "high"
+    "value": null,
+    "quote": null,
+    "confidence": "low"
   },
   "period_start": {
-    "value": "2026-07-01",
+    "value": "2026-06-27",
     "quote": null,
     "confidence": "high"
   },
@@ -23,6 +23,16 @@
     "value": "2026-07-31",
     "quote": null,
     "confidence": "high"
+  },
+  "stated_month_start": {
+    "value": "2026-07-01",
+    "quote": "07/31/2026",
+    "confidence": "high"
+  },
+  "noted_in_month_hundredths": {
+    "value": null,
+    "quote": null,
+    "confidence": "low"
   },
   "daily_entries": {
     "value": [],
@@ -67,17 +77,17 @@
   },
   "stated_total_hours_hundredths": {
     "value": 17600,
-    "quote": "176 hours * $110 = $19,360",
+    "quote": "176 hours",
     "confidence": "high"
   },
   "approval": {
-    "value": null,
+    "value": {
+      "kind": "none",
+      "approver": null,
+      "approval_date": null
+    },
     "quote": null,
     "confidence": "low"
   },
-  "unusual_items": [
-    "The column is headed 'WEEK ENDING' but the dates are each week's first day.",
-    "A rate of 110.00 an hour is printed on every line.",
-    "The 06/27/2026 line bills 16 hours of that week, not the whole week."
-  ]
+  "unusual_items": []
 }

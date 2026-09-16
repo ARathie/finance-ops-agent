@@ -1,0 +1,5 @@
+{
+  "time_system": "client daily timesheet, one page per week",
+  "origin": "real_format_invented_data",
+  "notes": "Five pages, each a Sunday-to-Saturday week. The first begins 27 April, so 24 of the document's 192 hours belong to April and only 168 to May. Summing the pages billed 192 (decision 27)."
+}

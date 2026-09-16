@@ -19,6 +19,7 @@ from pathlib import Path
 from openpyxl import Workbook
 from PIL import Image, ImageDraw
 
+from finance_ops_agent.domain.holidays import is_holiday
 from finance_ops_agent.domain.reading import (
     Approval,
     ApprovalKind,
@@ -67,10 +68,14 @@ class Case:
 
 
 def weekday_dailies(start: date, end: date, per_day: int) -> list[tuple[date, int]]:
+    """A day's hours for every working day: a weekday that is not a public
+    holiday. Icon's consultants are not expected to work holidays (decision
+    28), so a made-up month that has them working Thanksgiving would be an
+    invented problem, not a test."""
     days: list[tuple[date, int]] = []
     day = start
     while day <= end:
-        if day.weekday() < 5:
+        if day.weekday() < 5 and not is_holiday(day):
             days.append((day, per_day))
         day += timedelta(days=1)
     return days

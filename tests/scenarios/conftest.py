@@ -115,6 +115,7 @@ def reading(
     consultant: str = "Priya Shah",
     client: str = "Acme Corp",
     dailies: list[tuple[date, int]] | None = None,
+    month: date | None = None,
     approved: bool = True,
     confidence: Confidence = Confidence.HIGH,
 ) -> TimesheetReading:
@@ -129,6 +130,7 @@ def reading(
         end_client_name=ReadField[str](confidence=Confidence.LOW),
         period_start=ReadField[date](value=start, quote=str(start), confidence=confidence),
         period_end=ReadField[date](value=end, quote=str(end), confidence=confidence),
+        stated_month_start=ReadField[date](value=month, confidence=confidence),
         daily_entries=ReadField[list[DailyEntry]](
             value=[DailyEntry(day=day, hours_hundredths=hours) for day, hours in dailies or []],
             confidence=confidence,
@@ -159,6 +161,7 @@ class ScenarioEnv:
     today: date = TODAY
     now: datetime | None = None  # None = noon UTC on `today`
     mode: Mode = Mode.DRY_RUN
+    forwarders: tuple[str, ...] = ()
     replies: dict[str, ReplyReading] = field(default_factory=dict)
     _deps: RunDeps | None = field(default=None, repr=False)
 
@@ -170,7 +173,12 @@ class ScenarioEnv:
         message_id: str | None = None,
         scripted_reading: TimesheetReading | None = None,
         body: str = "Please see attached.",
+        attachments: list[tuple[str, bytes, TimesheetReading | None]] | None = None,
     ) -> str:
+        """`attachments` carries several files in the order the email lists
+        them, which is what decides nothing and must be shown to decide
+        nothing: a consultant working through a firm sends the approved
+        timesheet and the firm's invoice together, in either order."""
         self.email_count += 1
         name = f"{self.email_count:02d}-email"
         message = EmailMessage()
@@ -180,13 +188,17 @@ class ScenarioEnv:
         message["Message-ID"] = message_id or f"<{name}@example>"
         message["Date"] = "Tue, 08 Sep 2026 09:00:00 +0000"
         message.set_content(body)
-        if attachment is not None:
-            filename, content = attachment
+        files = (
+            attachments
+            if attachments is not None
+            else ([(*attachment, scripted_reading)] if attachment is not None else [])
+        )
+        for filename, content, reading in files:
             message.add_attachment(
                 content, maintype="application", subtype="pdf", filename=filename
             )
-            if scripted_reading is not None:
-                self.readings[filename] = scripted_reading
+            if reading is not None:
+                self.readings[filename] = reading
         (self.mailbox_dir / f"{name}.eml").write_bytes(bytes(message))
         return name
 
@@ -197,7 +209,7 @@ class ScenarioEnv:
             reader=FakeReader(self.readings, self.replies),
             store=self.store,
             clock=FakeClock(self.today, self.now),
-            settings=Settings(mode=self.mode),
+            settings=Settings(mode=self.mode, timesheet_forwarders=self.forwarders),
             sender=self.sender,
             accounting=self.accounting,
             renderer=TextPdfRenderer(),

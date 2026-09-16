@@ -25,7 +25,22 @@
       "quote": "2026-05-31",
       "confidence": "high"
     },
+    "stated_month_start": {
+      "value": null,
+      "quote": null,
+      "confidence": "low"
+    },
+    "noted_in_month_hundredths": {
+      "value": null,
+      "quote": null,
+      "confidence": "low"
+    },
     "daily_entries": {
+      "value": [],
+      "quote": null,
+      "confidence": "low"
+    },
+    "row_entries": {
       "value": [],
       "quote": null,
       "confidence": "low"

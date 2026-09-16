@@ -10,6 +10,7 @@ with the command line because every check is about a concrete adapter, and
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 
 from finance_ops_agent.adapters.email.client import (
     Folders,
@@ -110,14 +111,48 @@ def check_smtp_login(account: MailAccount) -> Check:
     return _run("send mail (smtp)", run)
 
 
-def check_engagement_list(load: Callable[[], tuple[int, list[str]]]) -> Check:
+def check_timesheet_forwarders(forwarders: tuple[str, ...], mode: str) -> Check:
+    """Say, loudly, when an address may send in someone else's timesheet.
+
+    This exists for the first-cycle test, where old timesheets are forwarded by
+    hand instead of arriving from the consultants themselves (decision 25). It
+    is the one setting that widens who the agent will take a timesheet from, so
+    it is never silent, and outside dry run it is a warning rather than a note.
+    """
+    name = "timesheet forwarders"
+    if not forwarders:
+        return Check(
+            name,
+            CheckResult.SKIP,
+            "none; timesheets count only from the addresses on the engagement list",
+        )
+    listed = ", ".join(forwarders)
+    if mode == "dry_run":
+        return Check(
+            name, CheckResult.PASS, f"{listed} may forward someone else's timesheet (testing)"
+        )
+    return Check(
+        name,
+        CheckResult.FAIL,
+        f"{listed} may forward someone else's timesheet, and the mode is {mode}, not dry_run;"
+        " clear FOPS_TIMESHEET_FORWARDERS before the agent sends anything for real",
+    )
+
+
+def check_engagement_list(load: Callable[[], tuple[int, list[str]]], path: Path) -> Check:
+    """Say which file was read, not only what was in it.
+
+    `FOPS_ENGAGEMENT_LIST` is usually a relative path, so the file depends on
+    the folder the command was run in, and a copy edited somewhere else looks
+    exactly like a change that did not take. The resolved path settles it.
+    """
+
     def run() -> str:
         rows, problems = load()
+        where = f"{rows} engagement row(s) from {path.resolve()}"
         if problems:
-            raise MailboxProblem(
-                f"{rows} engagement row(s), but {len(problems)} problem(s): {problems[0]}"
-            )
-        return f"{rows} engagement row(s), no problems"
+            raise MailboxProblem(f"{where}, but {len(problems)} problem(s): {problems[0]}")
+        return f"{where}, no problems"
 
     return _run("engagement list", run)
 

@@ -48,7 +48,9 @@ open -e .env      # fill in ANTHROPIC_API_KEY and the rest, save, close
 uv run fops doctor
 ```
 
-`fops doctor` prints one line per check, names anything still missing, and sends nothing to anybody. `ok claude api: ... answers` means the key works. On the server it is the same idea with Docker instead of `uv`; stage 2 below has the commands.
+`fops doctor` prints one line per check, names anything still missing, and sends nothing to anybody.
+
+**Reading the mailbox again from a date.** A run looks at mail that arrived on or after `MAIL_START_DATE` *and* that it has not already walked past, so moving the date alone does nothing about older mail. `uv run fops dry-run --since 2026-09-09` moves both: it reads from that date and forgets how far it had got. Nothing is handled or sent twice -- a message already stored is skipped by its Message-ID -- but it only sees the **inbox**, so anything the agent has already filed into `Agent/Processed`, `Agent/Needs Review` or `Agent/Ignored` has to be dragged back to the inbox first. `ok claude api: ... answers` means the key works. On the server it is the same idea with Docker instead of `uv`; stage 2 below has the commands.
 
 ## Stage 1 — the real-life test on a Mac (temporary)
 

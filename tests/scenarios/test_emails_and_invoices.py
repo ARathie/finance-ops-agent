@@ -37,6 +37,29 @@ class TestDryRun:
         assert env.the_item().status is ItemStatus.READY
         assert env.store.invoices_for_item(env.the_item().id) == []
 
+    def test_no_address_but_kevins_is_ever_written_to(self, env: ScenarioEnv) -> None:
+        """The guarantee the first cycle rests on: while the mode is dry run,
+        the only person the agent can write to is Kevin. On every path, and on
+        CC as well as To -- the client's address is on the engagement list the
+        whole time and still hears nothing.
+        """
+        clean_timesheet(env)
+        env.add_email("newsletter@conference.example", subject="Speaker invitation")
+        env.run()
+        env.add_email(
+            PRIYA,
+            subject="Corrected timesheet",
+            attachment=("timesheet-v2.pdf", b"PDFDATA2"),
+            scripted_reading=reading(AUG_START, AUG_END, total_hundredths=15_000),
+        )
+        env.run()
+
+        written_to = {
+            address for email in env.sender.sent_emails() for address in (*email.to, *email.cc)
+        }
+        assert written_to == {"kevin@icon-technologies.com"}
+        assert env.sender.sent_emails(), "the run sent nothing, so this proves nothing"
+
     def test_kevin_sees_what_would_be_sent_and_what_is_owed(self, env: ScenarioEnv) -> None:
         clean_timesheet(env)
         env.run()
@@ -61,6 +84,51 @@ class TestDryRun:
         assert not env.accounting.invoices
         for email in env.sender.sent_emails():
             assert email.to == ("kevin@icon-technologies.com",)
+
+
+class TestWhichFileIsAttached:
+    """A consultant working through a firm sends the approved timesheet and the
+    firm's invoice in one email, in whichever order they please. The file the
+    agent attaches to its own emails must be the timesheet.
+
+    The firm's invoice shows what Icon pays -- the pay rate -- so sending it to
+    a client breaks rule 4. It reached one because the attachment was chosen by
+    position: whichever file the email listed first.
+    """
+
+    def invoice_first(self, env: ScenarioEnv) -> None:
+        env.add_email(
+            PRIYA,
+            attachments=[
+                # The firm's invoice: a total, no approval, and a pay rate on it.
+                ("vendor-invoice.pdf", b"INVOICE", reading(AUG_START, AUG_END, approved=False)),
+                # The timesheet: what the client approved.
+                ("timesheet.pdf", b"TIMESHEET", reading(AUG_START, AUG_END)),
+            ],
+        )
+
+    def test_kevin_is_shown_the_timesheet_not_the_invoice(self, env: ScenarioEnv) -> None:
+        self.invoice_first(env)
+        env.run()
+
+        details = [e for e in env.sender.sent_emails() if "Timesheet received" in e.subject]
+        assert details, "no timesheet-received email"
+        names = [a.filename for a in details[0].attachments]
+        assert names == ["timesheet.pdf"], names
+
+    def test_the_client_is_never_sent_the_firms_invoice(self, env: ScenarioEnv) -> None:
+        env.mode = Mode.AUTO
+        from tests.scenarios.conftest import engagement_row
+
+        env.workbook.engagements[0] = engagement_row(2, **{"Send automatically": "yes"})
+        self.invoice_first(env)
+        env.run()
+
+        billing = [e for e in env.sender.sent_emails() if e.to == ("ap@acme.example",)]
+        assert billing, "the client was sent nothing to check"
+        names = [a.filename for a in billing[0].attachments]
+        assert "vendor-invoice.pdf" not in names, f"the pay rate went to the client: {names}"
+        assert "timesheet.pdf" in names, names
 
 
 class TestAskFirst:

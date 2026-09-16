@@ -24,6 +24,16 @@
     "quote": "2026-05-31",
     "confidence": "high"
   },
+  "stated_month_start": {
+    "value": null,
+    "quote": null,
+    "confidence": "low"
+  },
+  "noted_in_month_hundredths": {
+    "value": null,
+    "quote": null,
+    "confidence": "low"
+  },
   "daily_entries": {
     "value": [
       {
@@ -91,10 +101,6 @@
         "hours_hundredths": 800
       },
       {
-        "day": "2026-05-25",
-        "hours_hundredths": 800
-      },
-      {
         "day": "2026-05-26",
         "hours_hundredths": 800
       },
@@ -114,9 +120,14 @@
     "quote": "hours per day",
     "confidence": "high"
   },
+  "row_entries": {
+    "value": [],
+    "quote": null,
+    "confidence": "low"
+  },
   "stated_total_hours_hundredths": {
-    "value": 16800,
-    "quote": "Total: 168.00",
+    "value": 16000,
+    "quote": "Total: 160.00",
     "confidence": "high"
   },
   "approval": {

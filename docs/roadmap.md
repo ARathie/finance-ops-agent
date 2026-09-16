@@ -6,6 +6,7 @@ Work is done in small pull requests in this order. Each PR ticks its boxes here 
 
 - `[x]` done and verified. `[ ]` not done.
 - **Needs a person** marks a box a coding agent cannot tick. Someone has to create an account, run a command on a real machine with real credentials, or judge a result. A coding agent that finishes the code for a PR with such boxes leaves them unticked and ends its work by telling its operator, in plain words, exactly what to do and how they will know it worked (decision 23). Never tick one on the strength of a mock or a fake, and never skip one silently.
+- **(test)** and **(live)** mark a box that comes in a pair. The test half is done on timesheets forwarded by hand while the agent is being proved (decision 25); the live half is the same work with the real path in place, and only it counts towards "used in real life". Ticking a test box never ticks its live twin.
 - Every other box is verified by tests or commands that run with no credentials and no network, and a coding agent ticks it only after running them.
 
 ## Where things stand
@@ -108,9 +109,10 @@ Done when:
 - [x] `MAIL_START_DATE` respected; `fops doctor` output tested with and without settings; the scenario suite is green on the fakes (the never-twice tests now describe the SMTP behaviour: wait, then ask Kevin).
 - [x] `grep -ri "microsoft\|graph\|msal\|entra" src tests` finds nothing; in `docs` only this roadmap, decisions 13 and 21, and the sentences in the email doc, glossary, and README that say the mailbox is not Microsoft 365.
 - [x] `.env.example` is committed and lists every setting in `technical-design.md`.
-- [ ] **Needs a person:** the agent mailbox exists at Rackspace Email; its address and password are in `.env` on the machine that will run the test; the name of whoever holds Icon's Rackspace admin login is written in `open-questions.md`.
-- [ ] **Needs a person:** `uv run fops doctor --send-test-email` passes every line, Kevin receives the test email, and the copy appears in the agent mailbox's Sent folder.
-- [ ] **Needs a person:** one real email with a timesheet attached, sent from a consultant address that is on the engagement list, is picked up by `uv run fops dry-run` (real mailbox, dry run) and produces the "timesheet received" email to Kevin.
+- [x] **Needs a person:** the agent mailbox exists at Rackspace Email; its address and password are in `.env` on the machine that will run the test; the name of whoever holds Icon's Rackspace admin login is written in `open-questions.md`. Done Sep 2026: `jay@icon-technologies.com`, proven by `fops doctor` logging in over both IMAP and SMTP from the Mac; the admin is Kevin, recorded in `open-questions.md`.
+- [x] **Needs a person:** `uv run fops doctor --send-test-email` passes every line, Kevin receives the test email, and the copy appears in the agent mailbox's Sent folder. Done Sep 2026: every mailbox line passes, the test email is in Kevin's inbox (not his spam folder), and the copy is in `INBOX.Sent`. One line still fails and is not this PR's: the engagement list does not exist until Kevin fills it in, which is PR 13's first person box.
+- [x] **Needs a person (test):** one real email with a timesheet attached, **forwarded** from an address in `FOPS_TIMESHEET_FORWARDERS` (decision 25), is picked up by `uv run fops dry-run` (real mailbox, dry run) and produces the "timesheet received" email to Kevin. Done Sep 2026: two real emails, each carrying a timesheet and Harbour Point's invoice, forwarded from the tester's address; both were read, both hours came out right (176.00 and 168.00), and Kevin received a "Timesheet received" email for each, with a copy in the agent's Sent folder. The period was `unclear` on both, which is what decision 26 then fixed.
+- [ ] **Needs a person (live):** the same thing with nothing forwarded: a timesheet sent straight from a consultant address on the engagement list, with `FOPS_TIMESHEET_FORWARDERS` empty. This is the one that proves the real path; the test box above proves everything after the front door.
 
 ## PR 12 — Prove the reader on real timesheets
 
@@ -137,13 +139,17 @@ Almost entirely a person's work. The agent reads Icon's real mailbox for one ful
 
 Code: a starter workbook `templates/engagements-template.xlsx` with the exact columns and one made-up example row per sheet; `fops doctor` prints the mode and the start date so nobody runs live by accident; whatever the first cycle turns up.
 
+The boxes below come in pairs marked **(test)** and **(live)**. The test half runs on timesheets forwarded by hand from one named address, because at the start of the cycle no consultant has been told to write to the agent yet (decision 25); the live half is the same work with nothing forwarded. Ticking the test half is real progress: everything after the front door -- reading, checks, money, emails, reviews -- is identical.
+
 Done when:
 
-- [ ] The starter workbook loads through the engagement list reader with zero problems, and a test proves it.
-- [ ] **Needs a person:** Kevin fills the engagement list (every active client, consultant, vendor, engagement, and rate) and answers the timezone question; `fops doctor` shows zero engagement-list problems.
-- [ ] **Needs a person:** Kevin tells consultants to send timesheets to the agent's address (as well as, or instead of, his own).
+- [x] The starter workbook loads through the engagement list reader with zero problems, and a test proves it. `templates/engagements-template.xlsx`, rebuilt by `templates/build_template.py`; `tests/unit/test_engagements_template.py` loads the committed file through the real reader and fails if a column ever drifts from it.
+- [ ] **Needs a person:** Kevin fills the engagement list (every active client, consultant, vendor, engagement, and rate) and answers the timezone question; `fops doctor` shows zero engagement-list problems. For the test cycle a tester's own address may stand in for each client's **Billing email** and **CC email**; `dry_run` already stops anything reaching a client, and this is the second lock. PR 15's first box is where they are put back.
+- [x] **Needs a person (test):** `FOPS_TIMESHEET_FORWARDERS` is set to the one address that will forward old timesheets in, and `fops doctor` shows it (decision 25). Nobody outside Icon is told anything yet. Done Sep 2026: three real timesheets forwarded from that address were read, matched to their consultant by the name on the page, and priced — 176.00, 168.00 and 168.00 hours, with both vendor invoice totals matched to the cent.
+- [ ] **Needs a person (live):** Kevin tells consultants to send timesheets to the agent's address (as well as, or instead of, his own), and `FOPS_TIMESHEET_FORWARDERS` is emptied.
 - [ ] **Needs a person:** the Mac is set up per `running-it.md` stage 1 with `FOPS_MODE=dry_run`, and `fops doctor` passes.
-- [ ] **Needs a person:** for one whole billing cycle, every timesheet produced a "timesheet received" email and either a "would invoice" preview or a review; Kevin confirms each preview's client, consultant, period, hours, and amount against his own invoice.
+- [ ] **Needs a person (test):** for one whole billing cycle's worth of **forwarded** timesheets, every one produced a "timesheet received" email and either a "would invoice" preview or a review; Kevin confirms each preview's client, consultant, period, hours, and amount against his own invoice. Forwarding changes only who the email came from, so this exercises the reading, the checks, the money, and the emails in full.
+- [ ] **Needs a person (live):** at least one whole cycle with timesheets arriving straight from consultants, judged the same way.
 - [ ] **Needs a person:** Kevin answered at least one review by replying, and the agent applied the answer.
 - [ ] **Needs a person:** the cycle-1 table in `first-cycle.md` is filled in. Exit rule: zero previews with a wrong amount that were not also a review.
 
@@ -173,6 +179,7 @@ Code: only fixes for whatever the cycle turns up.
 
 Done when:
 
+- [ ] **Needs a person:** every stand-in address is out of the engagement list. During the test cycles a tester's own address stands in for the client's so that nothing can reach a real client; before this PR each client's **Billing email** and **CC email** must be the real one. Those two columns are the only ones in the workbook that mail ever goes to: every other email the agent writes goes to Kevin. Check this **first**, because `ask_first` is the first mode in which an invoice can leave the building.
 - [ ] **Needs a person:** `FOPS_MODE=ask_first` is set on the server and `fops doctor` reports the mode.
 - [ ] **Needs a person:** the first "approve this invoice?" email is answered, the client receives the billing email with Kevin on CC and both attachments, and Kevin receives the payment instruction.
 - [ ] **Needs a person:** the cycle-2 table in `first-cycle.md` is filled in. Exit rule: zero incorrect invoices sent to a client.

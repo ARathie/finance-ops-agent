@@ -42,6 +42,9 @@ class Settings:
     admin_email: str = "kevin@icon-technologies.com"
     mode: Mode = Mode.DRY_RUN
     agent_mailbox: str = "jay@icon-technologies.com"
+    # Addresses allowed to forward someone else's timesheet in (decision 25).
+    # Test scaffolding: empty everywhere except the first-cycle machine.
+    timesheet_forwarders: tuple[str, ...] = ()
 
 
 @dataclass

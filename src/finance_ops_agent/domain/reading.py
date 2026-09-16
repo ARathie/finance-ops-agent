@@ -95,6 +95,13 @@ class TimesheetReading(BaseModel):
     end_client_name: ReadField[str]
     period_start: ReadField[date]
     period_end: ReadField[date]
+    # The month this document says it bills, as that month's first day. A
+    # weekly timesheet's rows span two months and never say which is being
+    # billed; a vendor invoice does (decision 26). Kept as a plain date so the
+    # form asks nothing of the model it is not already asked elsewhere.
+    stated_month_start: ReadField[date] = ReadField[date]()
+    # Hours a note assigns to the billed month for a week that straddles it.
+    noted_in_month_hundredths: ReadField[int] = ReadField[int]()
     daily_entries: ReadField[list[DailyEntry]]
     row_entries: ReadField[list[RowEntry]] = ReadField[list[RowEntry]](value=[])
     stated_total_hours_hundredths: ReadField[int]
