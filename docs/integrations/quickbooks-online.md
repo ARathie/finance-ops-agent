@@ -29,7 +29,7 @@ QBO has no "draft" invoices, so the agent creates the invoice only at the moment
 
 `POST /v3/company/{realmId}/invoice` with:
 
-- `CustomerRef` looked up by the engagement list's "QuickBooks customer" name (looked up once per run, cached);
+- `CustomerRef` looked up by the engagement list's "QuickBooks customer" name, against `DisplayName` and then `CompanyName` (decision 32; looked up once per run, cached). A company name shared by several customers is refused rather than guessed between;
 - `DocNumber` = the number the agent worked out (decision 27). QuickBooks honours it only with custom transaction numbers on, and refuses a number another invoice already has (Intuit error 6140) -- which is what should happen, because a repeat means a bug, not something to wave through with `include=allowduplicatedocnum`;
 - one line: `SalesItemLineDetail` with `ItemRef` = **the consultant's product**, `Qty` = approved hours, `UnitPrice` = the rate read off that product, `ServiceDate` = the **end of the billing period** (the column Kevin's invoice template labels "period ending"), `Description` = the consultant's name (the product is the consultant);
 - `TxnDate` = today in Icon's timezone; `DueDate` = TxnDate + payment terms days (also `SalesTermRef` when the terms exist in QBO);
@@ -83,7 +83,7 @@ Intuit puts a trace id in the `intuit_tid` response header. It is logged on ever
 
 ## Testing
 
-Recorded JSON responses in `tests/fixtures/qbo/`, replayed through a real `httpx` client so the adapter's own code runs (`tests/contract/test_quickbooks.py`): a create whose total agrees, a create whose total does **not** agree (voided, with both amounts in the message), a create QuickBooks numbered itself (voided, naming the setting to turn on), finding an invoice by its private note after a crash, a missing customer, a consultant with no product, a product whose rate has drifted from the engagement list (voided, with both totals), balances (paid, partly paid, unpaid), a void that reads the current `SyncToken` first, a token refresh that rotates the refresh token, a refused refresh, and a 401 that one refresh fixes. No network, no credentials, no real company.
+Recorded JSON responses in `tests/fixtures/qbo/`, replayed through a real `httpx` client so the adapter's own code runs (`tests/contract/test_quickbooks.py`): a create whose total agrees, a create whose total does **not** agree (voided, with both amounts in the message), a create QuickBooks numbered itself (voided, naming the setting to turn on), finding an invoice by its private note after a crash, a customer found by its company name where its display name is a person, a company name shared by two customers (refused), a missing customer, a consultant with no product, a product whose rate has drifted from the engagement list (voided, with both totals), balances (paid, partly paid, unpaid), a void that reads the current `SyncToken` first, a token refresh that rotates the refresh token, a refused refresh, and a 401 that one refresh fixes. No network, no credentials, no real company.
 
 Two facts worth keeping straight in tests and in code: the invoice **number** (`DocNumber`) is what Kevin and the client see, and the **external id** (`Id`) is what QuickBooks and the agent's own invoice rows key on. In manual mode they happen to be the same string; in QuickBooks Online they are not. The number itself is the agent's in both modes (decision 27), so it reads the same either side of the move.
 

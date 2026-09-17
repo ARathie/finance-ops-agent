@@ -22,7 +22,7 @@ One row per company Icon sends invoices to. If Icon invoices a staffing company 
 | Time system | What the consultant's timesheets come from, if known; helps the agent recognise the format | Fieldglass |
 | Names on timesheets | Other names this client appears under on timesheets; separate with `;` | Acme; ACME Corp. |
 | Email domains | Email domains that count as this client when a manager forwards an approval; separate with `;` | acme.example |
-| QuickBooks customer | The customer name exactly as it appears in QuickBooks | Acme Corporation |
+| QuickBooks customer | The customer in QuickBooks: its display name, or its company name where the display name is a person | Acme Corporation |
 | Invoice code | The two letters this client gets in every invoice number | MT |
 | Notes | PO numbers, special instructions | PO 4471 must appear on invoice |
 | Active | `yes` or `no` | yes |

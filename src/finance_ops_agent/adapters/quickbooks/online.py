@@ -9,6 +9,9 @@ Three rules from docs/integrations/quickbooks-online.md carry the weight:
   invoice it already created after a crash, instead of creating a second one.
 - EmailStatus is NotSet: the agent sends the billing email itself, so
   QuickBooks must never also send one or the client would get two.
+- A client is found by its display name in QuickBooks or, failing that, by its
+  company name: an agency is often filed under a person's name with the
+  organisation in the company field (decision 32).
 - Each consultant is a product in QuickBooks and the product carries the rate,
   so the line is priced from QuickBooks, not from the engagement list
   (decision 30). The total that comes back is still checked against the
@@ -79,21 +82,53 @@ class QuickBooksOnline:
     # --- lookups, cached for the run ---
 
     def customer_ref(self, quickbooks_customer: str) -> str:
+        """The client's customer id, by display name or by company name.
+
+        QuickBooks fills a customer's display name from whoever was typed in
+        first, which for an agency is often a person rather than the
+        organisation, while the organisation sits in the company name field. So
+        the name on the engagement list is tried against both (decision 32).
+        Display name is unique in QuickBooks and company name is not, so a
+        company name matching more than one customer is refused rather than
+        guessed between.
+        """
         if quickbooks_customer in self._customers:
             return self._customers[quickbooks_customer]
         escaped = quickbooks_customer.replace("'", "\\'")
+        matched_on = "DisplayName"
         rows = self._client.query(
             f"SELECT Id, DisplayName FROM Customer WHERE DisplayName = '{escaped}'"
         )
         if not rows:
+            matched_on = "CompanyName"
+            rows = self._client.query(
+                f"SELECT Id, DisplayName, CompanyName FROM Customer WHERE CompanyName = '{escaped}'"
+            )
+        if len(rows) > 1:
+            names = ", ".join(sorted(str(row.get("DisplayName") or row["Id"]) for row in rows))
+            logs.log("quickbooks company name is ambiguous", customer=quickbooks_customer)
+            raise QuickBooksFailed(
+                f"QuickBooks has more than one customer whose company is"
+                f" {quickbooks_customer!r}: {names}. I will not guess which one to"
+                ' invoice. Put the one you mean in the "QuickBooks customer" column'
+                " of the engagement list, spelled as QuickBooks shows it in the list"
+                " of customers."
+            )
+        if not rows:
             logs.log("quickbooks customer not found", customer=quickbooks_customer)
             raise QuickBooksFailed(
-                f"QuickBooks has no customer called {quickbooks_customer!r}."
-                ' Add it in QuickBooks, or fix the "QuickBooks customer" column'
-                " in the engagement list. I never create customers myself."
+                f"QuickBooks has no customer whose name or company is"
+                f" {quickbooks_customer!r}. Add it in QuickBooks, or fix the"
+                ' "QuickBooks customer" column in the engagement list. I never'
+                " create customers myself."
             )
         reference = str(rows[0]["Id"])
-        logs.log("quickbooks customer found", customer=quickbooks_customer, quickbooks_id=reference)
+        logs.log(
+            "quickbooks customer found",
+            customer=quickbooks_customer,
+            quickbooks_id=reference,
+            matched_on=matched_on,
+        )
         self._customers[quickbooks_customer] = reference
         return reference
 

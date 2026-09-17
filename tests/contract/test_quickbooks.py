@@ -260,9 +260,10 @@ class TestCreateInvoice:
         assert "QuickBooks reference" not in str(error.value)
 
     def test_a_missing_customer_says_what_to_fix(self, tmp_path: Path) -> None:
+        """Neither the display name nor the company name matched."""
         replay = replay_from("missing_customer")
         accounting, _, _ = build(replay, tmp_path)
-        with pytest.raises(QuickBooksFailed, match="never create customers"):
+        with pytest.raises(QuickBooksFailed, match="no customer whose name or company"):
             accounting.create_invoice(worked_example_invoice(), item_id=1)
 
     def test_a_product_rate_that_has_drifted_is_voided_and_reported(self, tmp_path: Path) -> None:
@@ -306,6 +307,84 @@ class TestCreateInvoice:
         assert line["SalesItemLineDetail"]["ItemRef"] == {"value": "12"}
         assert line["SalesItemLineDetail"]["ServiceDate"] == "2026-08-31"
         assert line["SalesItemLineDetail"]["UnitPrice"] == 140.0  # off the product
+
+
+class TestFindingTheCustomer:
+    """QuickBooks fills a customer's display name from whoever was typed in
+    first, so an agency is often filed under a person with the organisation in
+    the company field (decision 32)."""
+
+    BASE = f"https://sandbox-quickbooks.api.intuit.com/v3/company/{REALM}"
+
+    def _replay(self, by_company: dict[str, object]) -> Replay:
+        from urllib.parse import quote
+
+        name = "Virginia Information Technology Agency"
+        return Replay(
+            {
+                f"GET {self.BASE}/query?query="
+                + quote(f"SELECT Id, DisplayName FROM Customer WHERE DisplayName = '{name}'"): [
+                    {"status": 200, "json": {"QueryResponse": {}}}
+                ],
+                f"GET {self.BASE}/query?query="
+                + quote(
+                    "SELECT Id, DisplayName, CompanyName FROM Customer"
+                    f" WHERE CompanyName = '{name}'"
+                ): [{"status": 200, "json": by_company}],
+            }
+        )
+
+    def test_the_company_name_is_tried_when_the_display_name_is_a_person(
+        self, tmp_path: Path
+    ) -> None:
+        replay = self._replay(
+            {
+                "QueryResponse": {
+                    "Customer": [
+                        {
+                            "Id": "77",
+                            "DisplayName": "Dana Whitfield",
+                            "CompanyName": "Virginia Information Technology Agency",
+                        }
+                    ]
+                }
+            }
+        )
+        accounting, _, _ = build(replay, tmp_path)
+
+        assert accounting.customer_ref("Virginia Information Technology Agency") == "77"
+
+    def test_it_is_looked_up_once_and_remembered(self, tmp_path: Path) -> None:
+        replay = self._replay(
+            {"QueryResponse": {"Customer": [{"Id": "77", "DisplayName": "Dana Whitfield"}]}}
+        )
+        accounting, _, _ = build(replay, tmp_path)
+
+        accounting.customer_ref("Virginia Information Technology Agency")
+        accounting.customer_ref("Virginia Information Technology Agency")
+        assert len(replay.calls) == 2  # the two from the first lookup, none after
+
+    def test_a_company_name_shared_by_two_customers_is_refused(self, tmp_path: Path) -> None:
+        """Display name is unique in QuickBooks and company name is not, so
+        this one has to be a question rather than a guess."""
+        replay = self._replay(
+            {
+                "QueryResponse": {
+                    "Customer": [
+                        {"Id": "77", "DisplayName": "Dana Whitfield"},
+                        {"Id": "78", "DisplayName": "VITA — Accounts Payable"},
+                    ]
+                }
+            }
+        )
+        accounting, _, _ = build(replay, tmp_path)
+
+        with pytest.raises(QuickBooksFailed) as error:
+            accounting.customer_ref("Virginia Information Technology Agency")
+        message = str(error.value)
+        assert "more than one customer" in message
+        assert "Dana Whitfield" in message and "VITA — Accounts Payable" in message
+        assert "will not guess" in message
 
 
 class TestFindAfterACrash:

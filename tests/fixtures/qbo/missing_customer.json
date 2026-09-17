@@ -17,6 +17,15 @@
           "QueryResponse": {}
         }
       }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20Id%2C%20DisplayName%2C%20CompanyName%20FROM%20Customer%20WHERE%20CompanyName%20%3D%20%27Acme%20Corporation%27",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {}
+        }
+      }
     }
   ]
 }

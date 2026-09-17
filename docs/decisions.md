@@ -210,3 +210,13 @@ Two things still hold, and are why this is a decision rather than a shortcut:
 
 - **Before any run that is not this command**, each client's **Billing email** and **CC email** must be a stand-in address. The moment the mode is `ask_first` and Kevin replies "approve", the billing email goes wherever those two cells point. That is the roadmap's PR 13 box and it is not weakened by this.
 - **Once Icon starts using QuickBooks Online for real**, this stops being true and the sandbox is the place again. This decision is about a window, not a policy.
+
+## 32. A client is found in QuickBooks by its display name or its company name
+
+`fops doctor` reported that QuickBooks had no customer called "Virginia Information Technology Agency", and QuickBooks was right: the customer's **display name** there is a person -- the contact the record was first created from -- and the organisation sits in the **company name** field. QuickBooks fills the display name from whatever was typed in first, so this is the ordinary shape of a customer record for an agency, not a mistake anyone made.
+
+Decision: the name in the engagement list's "QuickBooks customer" column is matched against the **display name first, then the company name**. Neither field has to be changed in QuickBooks, and Kevin does not have to record a person's name in a column that says "client".
+
+Display name is unique in QuickBooks; company name is not. So a company name matching **more than one** customer is refused, naming the candidates, rather than guessed between -- an invoice sent to the wrong customer record is not something the agent should be able to do by picking the first row. The way out of that is to put the display name of the one you mean in the "QuickBooks customer" column, which is what the column was always for.
+
+This widens the lookup rule in decision 30 and does not otherwise change it: the agent still never creates a customer, and still refuses to invoice a client it cannot find.
