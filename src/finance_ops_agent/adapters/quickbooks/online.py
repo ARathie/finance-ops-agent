@@ -79,6 +79,17 @@ class QuickBooksOnline:
         self._customers: dict[str, str] = {}
         self._products: dict[str, Product] = {}
 
+    @property
+    def company(self) -> str:
+        """Which company this is actually connected to, in words.
+
+        Worth saying out loud whenever a lookup fails: a name missing from the
+        sandbox while it sits in the real company looks exactly like a name
+        that is spelled wrong.
+        """
+        tokens = self._client.tokens
+        return f"the {tokens.environment} company {tokens.realm_id}"
+
     # --- lookups, cached for the run ---
 
     def customer_ref(self, quickbooks_customer: str) -> str:

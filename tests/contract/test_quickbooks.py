@@ -387,6 +387,36 @@ class TestFindingTheCustomer:
         assert "will not guess" in message
 
 
+class TestTheDoctorCheck:
+    """A check that says only "missing" is a check that cannot be acted on:
+    spelled differently, two of them, and connected to the wrong company all
+    look the same once the reason is thrown away."""
+
+    def test_it_repeats_the_reason_and_names_the_company(self, tmp_path: Path) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_customers
+
+        replay = replay_from("missing_customer")
+        accounting, _, _ = build(replay, tmp_path)
+
+        check = check_quickbooks_customers(accounting, lambda: ["Acme Corporation"])
+
+        assert check.result is CheckResult.FAIL
+        assert f"the sandbox company {REALM}" in check.detail
+        assert "no customer whose name or company" in check.detail
+        assert "Acme Corporation" in check.detail
+
+    def test_a_pass_says_which_company_it_looked_in(self, tmp_path: Path) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_customers
+
+        replay = replay_from("create_ok")
+        accounting, _, _ = build(replay, tmp_path)
+
+        check = check_quickbooks_customers(accounting, lambda: ["Acme Corporation"])
+
+        assert check.result is CheckResult.PASS
+        assert f"the sandbox company {REALM}" in check.detail
+
+
 class TestFindAfterACrash:
     """The crash question: did I already create this invoice?"""
 

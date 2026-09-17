@@ -196,20 +196,21 @@ def check_quickbooks_customers(accounting: object, wanted: Callable[[], list[str
 
     def run() -> str:
         names = wanted()
-        missing: list[str] = []
+        problems: list[str] = []
         for customer in names:
             try:
                 accounting.customer_ref(customer)
-            except Exception:
-                missing.append(customer)
-        if missing:
+            except Exception as error:
+                # The reason matters: "spelled differently", "there are two of
+                # them", and "you are connected to the wrong company" all look
+                # the same once it is flattened to "missing".
+                problems.append(f"{customer}: {error}")
+        if problems:
             raise RuntimeError(
-                "QuickBooks has no customer called "
-                + ", ".join(repr(entry) for entry in missing)
-                + '. Add them in QuickBooks, or fix the "QuickBooks customer"'
-                " column in the engagement list."
+                f"I looked in {accounting.company} and could not use"
+                f" {len(problems)} of {len(names)} client name(s). " + " ".join(problems)
             )
-        return f"all {len(names)} client name(s) exist in QuickBooks"
+        return f"all {len(names)} client name(s) exist in {accounting.company}"
 
     return _run(name, run)
 
