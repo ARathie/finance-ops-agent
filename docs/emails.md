@@ -30,7 +30,7 @@ Ask first mode only. Sent when a timesheet passes every check.
 
 - **Subject:** `Approve? Invoice for Acme Corp — Priya Shah — Aug 2026 — $21,840.00`
 - **Body:** client, the billing contact it will go to, consultant, period, hours, bill rate, total, due date, and the billing email exactly as it will be sent.
-- **Attachments:** the invoice PDF and the timesheet. **The timesheet, not another file on the same email.** A consultant working through their own firm sends the approved timesheet and the firm's invoice to Icon together, and that invoice shows the firm's own rate -- what Icon pays. The file the agent attaches is the one showing the client's approval, whichever order the email listed them in.
+- **Attachments:** the invoice PDF -- the real one, made in QuickBooks under its real number before this email is written (decision 33) -- and the timesheet. **The timesheet, not another file on the same email.** A consultant working through their own firm sends the approved timesheet and the firm's invoice to Icon together, and that invoice shows the firm's own rate -- what Icon pays. The file the agent attaches is the one showing the client's approval, whichever order the email listed them in.
 - **Kevin replies** `approve` to send, or `cancel` (with a reason if he likes) to stop. Anything else gets a short reply asking for one of the two words. Only replies from Kevin's address in the same thread count.
 
 In automatic mode this email is not sent for engagements marked "send automatically"; Kevin sees the billing email itself instead, because he is always on CC.

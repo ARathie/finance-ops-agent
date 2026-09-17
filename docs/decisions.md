@@ -220,3 +220,20 @@ Decision: the name in the engagement list's "QuickBooks customer" column is matc
 Display name is unique in QuickBooks; company name is not. So a company name matching **more than one** customer is refused, naming the candidates, rather than guessed between -- an invoice sent to the wrong customer record is not something the agent should be able to do by picking the first row. The way out of that is to put the display name of the one you mean in the "QuickBooks customer" column, which is what the column was always for.
 
 This widens the lookup rule in decision 30 and does not otherwise change it: the agent still never creates a customer, and still refuses to invoice a client it cannot find.
+
+## 33. The invoice is made before Kevin is asked, not after
+
+Until now, ask first drew its own picture of the invoice -- a PDF rendered from the agent's template, numbered `(assigned on approval)` and attached as `proposed-invoice.pdf` -- and only made the real one once Kevin replied "approve". The reason was that QuickBooks has no draft invoices, so anything made before approval and then cancelled has to be voided rather than removed.
+
+That reasoning has been overtaken. Since decision 30 the **rate comes off the consultant's product in QuickBooks**, and the PDF the client receives is rendered by **Kevin's own customised invoice template**, with period ending, description, hours, rate and amount laid out the way he arranged them. A PDF drawn here shares neither. Kevin would have been approving a picture of an invoice while a different-looking document went to the client, which is the opposite of what asking him is for.
+
+Decision: **the invoice is created in the accounting system before the approval email is written**, and that email carries the real invoice PDF, under its real number. Nothing is sent to the client until Kevin answers.
+
+Consequences:
+
+- **Cancelling now voids.** Kevin replying "cancel" voids the invoice in QuickBooks and marks the agent's record cancelled. The voided invoice stays in the books and its number stays spent, which is what QuickBooks having no drafts costs; the replacement, if one comes, takes the next number along (decision 29). If the voiding itself fails, Kevin is told to void it by hand and the item is cancelled anyway, because he said so.
+- **Making and sending are now separate steps** in `application/outgoing.py`: `prepare_invoice` makes and records it, `approve_item` writes the billing email for one that already exists. Both are idempotent per item, so asking and then approving makes one invoice, and a restart in between makes none.
+- **Dry run is unchanged** and still creates nothing at all, in any accounting mode. It remains the stop button.
+- A guardrail that sends an automatic item to ask first now also makes the invoice first. The guarantee that matters is untouched: nothing reaches a client without Kevin.
+
+This reverses the "never before" rule in `integrations/quickbooks-online.md`, which came from decision 11 when the agent rendered its own invoices and QuickBooks Online was a plan rather than a thing Kevin had set up.

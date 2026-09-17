@@ -42,6 +42,8 @@ class FakeAccounting:
         return created
 
     def cancel_invoice(self, external_id: str) -> None:
+        if self.fail_with is not None:
+            raise self.fail_with
         self.cancelled.append(external_id)
 
     def paid_status(self, external_ids: list[str]) -> dict[str, bool]:

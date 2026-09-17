@@ -157,17 +157,73 @@ class TestAskFirst:
         assert invoices[0].status == "sent"
         assert env.store.payment_instructions_for_item(item.id)
 
-    def test_cancel_stops_it(self, env: ScenarioEnv) -> None:
+    def test_kevin_is_shown_the_real_invoice_not_a_stand_in(self, env: ScenarioEnv) -> None:
+        """Decision 33: the rate comes off the product in QuickBooks and the
+        PDF is Kevin's own invoice template, so a stand-in drawn here would be
+        approving something other than what the client receives."""
+        env.mode = Mode.ASK_FIRST
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        [record] = env.store.invoices_for_item(item.id)
+        assert record.number == "083126AC-PS"
+        assert record.status == "created"
+
+        approval = next(
+            email for email in env.sender.sent_emails() if email.subject.startswith("Approve?")
+        )
+        names = [attachment.filename for attachment in approval.attachments]
+        assert "invoice-083126AC-PS.pdf" in names
+        assert "proposed-invoice.pdf" not in names
+        # Made, but not sent anywhere near a client.
+        assert not any(email.to == ("ap@acme.example",) for email in env.sender.sent_emails())
+
+    def test_approving_does_not_make_a_second_invoice(self, env: ScenarioEnv) -> None:
         env.mode = Mode.ASK_FIRST
         clean_timesheet(env)
         env.run()
         approval = next(s for s in env.sent_subjects() if s.startswith("Approve?"))
+
+        env.reply_from_kevin(approval, "approve")
+        env.run()
+
+        item = env.the_item()
+        assert [r.number for r in env.store.invoices_for_item(item.id)] == ["083126AC-PS"]
+
+    def test_cancel_stops_it_and_voids_the_invoice(self, env: ScenarioEnv) -> None:
+        """The invoice exists by the time Kevin sees it, and QuickBooks has no
+        drafts, so cancelling voids it rather than taking it back."""
+        env.mode = Mode.ASK_FIRST
+        clean_timesheet(env)
+        env.run()
+        approval = next(s for s in env.sent_subjects() if s.startswith("Approve?"))
+        [record] = env.store.invoices_for_item(env.the_item().id)
 
         env.reply_from_kevin(approval, "cancel — she was on leave")
         env.run()
 
         assert env.the_item().status is ItemStatus.CANCELLED
         assert not any(email.to == ("ap@acme.example",) for email in env.sender.sent_emails())
+        assert record.external_id in env.accounting.cancelled
+        assert env.store.invoices_for_item(env.the_item().id)[0].status == "cancelled"
+
+    def test_a_void_that_fails_still_cancels_and_tells_kevin(self, env: ScenarioEnv) -> None:
+        from finance_ops_agent.ports.accounting import AccountingFailed
+
+        env.mode = Mode.ASK_FIRST
+        clean_timesheet(env)
+        env.run()
+        approval = next(s for s in env.sent_subjects() if s.startswith("Approve?"))
+
+        env.accounting.fail_with = AccountingFailed("that invoice is already paid")
+        env.reply_from_kevin(approval, "cancel")
+        env.run()
+
+        assert env.the_item().status is ItemStatus.CANCELLED  # Kevin said so
+        review = next(r for r in env.store.open_reviews() if r.code == "QUICKBOOKS_FAILED")
+        assert "void it there by hand" in review.message.lower()
+        assert "already paid" in review.message
 
     def test_anything_else_gets_a_short_reply_asking_for_one_of_the_two_words(
         self, env: ScenarioEnv
@@ -266,7 +322,14 @@ class TestAutomatic:
         september = next(i for i in env.store.list_items() if i.period.start == date(2026, 9, 1))
         assert env.store.get_item(september.id).status is ItemStatus.WAITING_FOR_APPROVAL
         assert any("25% away from the recent invoices" in line for line in report.lines)
-        assert env.store.invoices_for_item(september.id) == []
+        # The invoice exists, because Kevin is shown the real one (decision 33),
+        # but nothing about September has gone to the client.
+        billing = [
+            record
+            for record in env.store.outgoing_records()
+            if record.kind == "billing_email" and record.item_id == september.id
+        ]
+        assert billing == []
 
 
 def _auto_clean_timesheet(env: ScenarioEnv) -> None:

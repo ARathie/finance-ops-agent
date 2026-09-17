@@ -25,7 +25,7 @@ Access tokens last one hour; refresh tokens rotate on use and expire after about
 
 ### Creating an invoice
 
-QBO has no "draft" invoices, so the agent creates the invoice only at the moment the item is approved (ask first) or passes the guardrails (automatic), never before.
+QBO has no "draft" invoices. The agent creates the invoice **before** asking Kevin to approve it, so that the PDF he approves is the one the client will receive -- his own invoice template, priced from the consultant's product (decision 33). Cancelling therefore voids it, and the voided invoice stays in the books. Dry run still creates nothing at all.
 
 `POST /v3/company/{realmId}/invoice` with:
 

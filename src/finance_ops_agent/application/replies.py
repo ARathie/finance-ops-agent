@@ -78,6 +78,9 @@ def _handle_approval_reply(
             report.note(f"Kevin approved: {item.consultant} at {item.client}")
     elif word == "cancel":
         if item.status is ItemStatus.WAITING_FOR_APPROVAL:
+            # The invoice exists by now: it was made so Kevin could approve the
+            # real thing (decision 33), so cancelling has to void it.
+            outgoing.cancel_invoices(deps, item, report)
             deps.store.change_status(item.id, ItemStatus.CANCELLED, {"why": "Kevin cancelled"})
             report.note(f"Kevin cancelled: {item.consultant} at {item.client}")
     else:
