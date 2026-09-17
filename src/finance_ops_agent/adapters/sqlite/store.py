@@ -2,10 +2,11 @@
 
 import json
 from collections.abc import Callable
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import UTC, date, datetime
 from pathlib import Path
 
-from sqlalchemy import Engine, create_engine, event, select
+from sqlalchemy import Engine, create_engine, delete, event, select
 from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -43,6 +44,20 @@ from finance_ops_agent.domain.statuses import (
     change_status,
 )
 from finance_ops_agent.ports.store import DuplicateItemError
+
+
+@dataclass
+class Forgotten:
+    """What `fops forget` took out, so the command can say so."""
+
+    item_id: int
+    consultant: str
+    client: str
+    period_start: date
+    period_end: date
+    status: str
+    invoice_numbers: list[str]
+    message_subjects: list[str]
 
 
 def _utcnow() -> datetime:
@@ -535,6 +550,70 @@ class SqliteStore:
                 session.scalars(select(InvoiceRow).where(InvoiceRow.number == number)).first()
                 is not None
             )
+
+    def forget_item(self, item_id: int) -> "Forgotten":
+        """Remove one timesheet item and everything about it, in one go.
+
+        A testing tool, for putting the same timesheet through again. It takes
+        out the item, its timesheets, invoices, payment instructions, reviews,
+        outgoing rows and history, and the stored emails those timesheets came
+        on -- because a message already stored is skipped on redelivery, so
+        leaving them would mean the same email is never read again.
+
+        The stored attachment files are left where they are: they are named by
+        their contents, nothing points at them once the rows are gone, and
+        deleting a file another item shares would be worse than an orphan.
+        """
+        with Session(self._engine) as session, session.begin():
+            item = session.get(ItemRow, item_id)
+            if item is None:
+                raise LookupError(f"there is no item {item_id}")
+            summary = Forgotten(
+                item_id=item_id,
+                consultant=item.consultant,
+                client=item.client,
+                period_start=item.period_start,
+                period_end=item.period_end,
+                status=item.status,
+                invoice_numbers=[],
+                message_subjects=[],
+            )
+
+            shas = list(
+                session.scalars(
+                    select(TimesheetRow.attachment_sha256).where(TimesheetRow.item_id == item_id)
+                )
+            )
+            message_ids: set[int] = set()
+            if shas:
+                message_ids = set(
+                    session.scalars(
+                        select(AttachmentRow.message_id).where(AttachmentRow.sha256.in_(shas))
+                    )
+                )
+            for row in session.scalars(
+                select(MessageRow).where(MessageRow.id.in_(message_ids or {-1}))
+            ):
+                summary.message_subjects.append(row.subject)
+            for invoice in session.scalars(select(InvoiceRow).where(InvoiceRow.item_id == item_id)):
+                summary.invoice_numbers.append(invoice.number)
+
+            for table, column in (
+                (TimesheetRow, TimesheetRow.item_id),
+                (InvoiceRow, InvoiceRow.item_id),
+                (PaymentInstructionRow, PaymentInstructionRow.item_id),
+                (ReviewItemRow, ReviewItemRow.item_id),
+                (OutgoingRow, OutgoingRow.item_id),
+                (AuditLogRow, AuditLogRow.item_id),
+            ):
+                session.execute(delete(table).where(column == item_id))
+            if message_ids:
+                session.execute(
+                    delete(AttachmentRow).where(AttachmentRow.message_id.in_(message_ids))
+                )
+                session.execute(delete(MessageRow).where(MessageRow.id.in_(message_ids)))
+            session.execute(delete(ItemRow).where(ItemRow.id == item_id))
+            return summary
 
     def set_invoice_number(self, external_id: str, number: str) -> None:
         with Session(self._engine) as session, session.begin():

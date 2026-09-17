@@ -142,6 +142,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="the marker kept in the invoice's private note (default: a new one each run)",
     )
 
+    forget = commands.add_parser(
+        "forget",
+        help="remove one timesheet item and the emails it came on, so the same"
+        " timesheet can be put through again (testing; run with no id to list them)",
+    )
+    forget.add_argument("item_id", type=int, nargs="?", default=None)
+    forget.add_argument("--data", type=Path, default=None, help="the data folder")
+    forget.add_argument(
+        "--force",
+        action="store_true",
+        help="forget it even though its invoice reached the client",
+    )
+
     backup_cmd = commands.add_parser("backup", help="zip the data folder")
     backup_cmd.add_argument(
         "--to",
@@ -617,6 +630,66 @@ def _command_qbo_test_invoice(args: argparse.Namespace) -> int:
     )
 
 
+SENT_ALREADY = ("invoice_sent", "client_paid")
+
+
+def _command_forget(args: argparse.Namespace) -> int:
+    """Put a timesheet back to never having arrived.
+
+    For testing: it takes out the item and the emails its timesheets came on,
+    because a message already stored is skipped on redelivery and the same
+    email would never be read again.
+    """
+    from finance_ops_agent.config import Config
+
+    data = args.data if args.data is not None else Config.from_env().data_dir
+    store = _open_store(data)
+    items = store.list_items()
+    if args.item_id is None:
+        if not items:
+            print(f"Nothing to forget in {data}.")
+            return 0
+        print(f"{len(items)} item(s) in {data}. Forget one with `fops forget <id>`:")
+        for item in items:
+            print(
+                f"  {item.id}: {item.consultant} at {item.client},"
+                f" {item.period.start} to {item.period.end} — {item.status.value}"
+            )
+        return 0
+
+    chosen = next((one for one in items if one.id == args.item_id), None)
+    if chosen is None:
+        print(f"There is no item {args.item_id}. Run `fops forget` to list them.")
+        return 1
+    if chosen.status.value in SENT_ALREADY and not args.force:
+        print(
+            f"Item {chosen.id} is {chosen.status.value}: its invoice reached the client."
+            " Forgetting it here changes nothing in QuickBooks or in the client's"
+            " inbox, and the agent would lose its own record of it."
+            " Use --force if that is really what you want."
+        )
+        return 1
+
+    gone = store.forget_item(chosen.id)
+    print(
+        f"Forgot item {gone.item_id}: {gone.consultant} at {gone.client},"
+        f" {gone.period_start} to {gone.period_end} (was {gone.status})."
+    )
+    for subject in gone.message_subjects:
+        print(f'  the email "{subject}" can be read again')
+    for number in gone.invoice_numbers:
+        print(f"  invoice {number} is no longer recorded here")
+    if gone.invoice_numbers:
+        print(
+            "  Those invoices, if they were ever made, are still in the accounting"
+            " system. Remove them there yourself."
+        )
+    if not gone.message_subjects:
+        print("  No stored email was tied to it, so nothing had to be freed up for redelivery.")
+    print("The timesheet's own file is still in the mailbox folder it was moved to.")
+    return 0
+
+
 def _command_backup(args: argparse.Namespace) -> int:
     from finance_ops_agent.application.backup import back_up
     from finance_ops_agent.config import Config, MissingSettingError
@@ -820,6 +893,8 @@ def main(argv: list[str] | None = None) -> int:
         return _command_qbo_connect(args)
     if args.command == "qbo-test-invoice":
         return _command_qbo_test_invoice(args)
+    if args.command == "forget":
+        return _command_forget(args)
     if args.command == "backup":
         return _command_backup(args)
     if args.command == "restore":
