@@ -165,3 +165,106 @@ This was got wrong once and the eval set caught it. Measured against made-up tim
 
 Low hours are still never flagged. A consultant may take leave or work part of a month, and the agent has no business asking about that. If under-reporting is ever worth checking -- "this month looks light, is a timesheet missing?" -- the same working-day count is what it should measure against.
 
+
+## 29. Invoice numbers are Kevin's format, and the agent assigns them in both modes
+
+Kevin's invoices are numbered `<MMDDYY><client code>-<consultant code>`: `083126MT-PS` is August 2026 for Priya Shah at Mastec. The date is the **end of the billing period**, not the day the invoice was made, so a late August invoice still reads `083126` and the number says which month's work it is for.
+
+Decision: **the agent works the number out, in manual mode and in QuickBooks Online alike**, and QuickBooks is told to use it (`DocNumber`). Previously manual mode counted `ICON-<year>-<number>` from its own counter and QuickBooks Online let QuickBooks number the invoice, which meant numbering changed shape on the day Icon switched. Consequences:
+
+- The Clients sheet gains **Invoice code** and the Consultants sheet **Initials** (`engagement-list.md`). `MT` does not follow from "Mastec" by any rule, so a missing or duplicated code is a `LIST_ROW_PROBLEM` for Kevin, never a guess. Initials the agent can take from the name are taken from it; the column is for the names it cannot.
+- Two consultants at one client who share initials both switch to the first initial and the whole last name (`PSHAH`, `PSINGH`). Both change rather than only the newcomer, because a number that depended on who Kevin entered first would be worse than either. It applies only at the client where they clash, and only to invoices not yet sent.
+- QuickBooks Online honours `DocNumber` only when **Custom transaction numbers** is on in the company settings. The agent compares the number that comes back with the one it asked for and voids the invoice when they differ, the same way it voids one whose total disagrees: an invoice under a number Kevin did not choose never reaches a client.
+- One invoice per consultant per client per month (rule 3) makes the number unique on its own. A replacement after a correction covers the same period, so it takes `-2`, and the store is asked which numbers are already spent.
+- The number now belongs to `application/outgoing.py`, not to an adapter, so both modes and the fake produce the same one. `domain/invoice_numbers.py` holds the rules.
+
+This supersedes the invoice-numbering line in `open-questions.md` and the counter in decision 11's manual mode. Invoices already sent keep the numbers they were sent under; the agent never renumbers anything.
+
+## 30. In QuickBooks Online mode the bill rate comes off the consultant's product
+
+Kevin has set QuickBooks Online up so that **each consultant is a product**, with their hourly rate on it, and has customised the invoice template so each line shows period ending date, description, hours, rate and amount.
+
+Decision: **in QuickBooks Online mode the agent bills the rate on the product, not the rate in the engagement list.** One service item for everybody (`QBO_ITEM_NAME`) is gone; the agent looks the consultant's own product up by name and takes `UnitPrice` from it. Consequences:
+
+- `Description` is the consultant's name, because the product is the consultant. `ServiceDate` is the **end of the billing period** -- that is the field Kevin's template labels "period ending".
+- Customers and products are looked up by the name the engagement list spells, exactly. A client or consultant QuickBooks has never heard of is a `QUICKBOOKS_FAILED` naming them; the agent creates neither, and never bills a consultant under another consultant's product, which would bill the wrong rate.
+- A product with no rate on it is refused rather than billed at zero.
+- **The engagement list is still the cross-check.** The agent computes the invoice amount from its own bill rate, as it always did, and the existing "the total QuickBooks returns must equal the agent's to the cent" rule now catches the product's rate and the engagement list's having drifted apart: the invoice is voided and Kevin is told both figures. It has to work this way while both exist, because everything else the agent writes -- the preview, the approval question, the payment instruction, the tracking sheet, the guardrail on an unusual amount -- is built from the engagement list figure, and an invoice priced differently from all of them would make every one of those wrong.
+- Manual mode is unchanged: there is no QuickBooks to ask, so the engagement list prices the invoice.
+
+This amends rule 1 in `CLAUDE.md`, which said the bill rate comes only from the engagement list. The rule it was protecting is intact -- a rate never comes from an email, a timesheet, or the model -- but there are now two systems of record for the bill rate, and the agent refuses to invoice while they disagree.
+
+The direction of travel is to stop keeping the rate in two places: once what the agent needs from the engagement list can be read from QuickBooks Online instead, the bill rate stops being a spreadsheet column and this cross-check goes with it. The **pay rate** cannot follow it there -- QuickBooks holds what Icon charges, not what Icon pays -- so the engagement list does not disappear on the strength of this.
+
+Every QuickBooks call, and every way one can fail, is now logged as a JSON line (`logs.py`): the lookups and what they found, the create with its item id and number, a number QuickBooks assigned itself, a total that disagrees, a void, a retry, and the text of anything QuickBooks refused. Rates and amounts stay out of the log, as they do everywhere else.
+
+## 31. The first real exercise may be Icon's own QuickBooks company, not a sandbox
+
+`integrations/quickbooks-online.md` said sandbox first, and for development it still is: every test in this repository runs against recorded responses, and nothing about that changes.
+
+For the **first live exercise**, though, Icon's own QuickBooks Online company is the better place, and Kevin has asked for it. The sandbox is full of Intuit's sample data, so nothing in it resembles what the agent will meet: the customers are not Icon's clients, the products are not Icon's consultants, and the invoice template is not the one Kevin has customised. A pass there would prove very little. Icon's own company has the real customers, the real per-consultant products with their rates, and the real template -- and Icon is not yet using QuickBooks Online for anything, so there is no live bookkeeping to disturb.
+
+What makes this safe is `fops qbo-test-invoice` (the section above): it exercises the create path with no mailbox, no email and no approval reply, and deletes the invoice afterwards, so the company is left as it was found. Nothing about it can reach a client, because nothing about it sends anything.
+
+Two things still hold, and are why this is a decision rather than a shortcut:
+
+- **Before any run that is not this command**, each client's **Billing email** and **CC email** must be a stand-in address. The moment the mode is `ask_first` and Kevin replies "approve", the billing email goes wherever those two cells point. That is the roadmap's PR 13 box and it is not weakened by this.
+- **Once Icon starts using QuickBooks Online for real**, this stops being true and the sandbox is the place again. This decision is about a window, not a policy.
+
+## 32. A client is found in QuickBooks by its display name or its company name
+
+`fops doctor` reported that QuickBooks had no customer called "Virginia Information Technology Agency", and QuickBooks was right: the customer's **display name** there is a person -- the contact the record was first created from -- and the organisation sits in the **company name** field. QuickBooks fills the display name from whatever was typed in first, so this is the ordinary shape of a customer record for an agency, not a mistake anyone made.
+
+Decision: the name in the engagement list's "QuickBooks customer" column is matched against the **display name first, then the company name**. Neither field has to be changed in QuickBooks, and Kevin does not have to record a person's name in a column that says "client".
+
+Display name is unique in QuickBooks; company name is not. So a company name matching **more than one** customer is refused, naming the candidates, rather than guessed between -- an invoice sent to the wrong customer record is not something the agent should be able to do by picking the first row. The way out of that is to put the display name of the one you mean in the "QuickBooks customer" column, which is what the column was always for.
+
+This widens the lookup rule in decision 30 and does not otherwise change it: the agent still never creates a customer, and still refuses to invoice a client it cannot find.
+
+## 33. The invoice is made before Kevin is asked, not after
+
+Until now, ask first drew its own picture of the invoice -- a PDF rendered from the agent's template, numbered `(assigned on approval)` and attached as `proposed-invoice.pdf` -- and only made the real one once Kevin replied "approve". The reason was that QuickBooks has no draft invoices, so anything made before approval and then cancelled has to be voided rather than removed.
+
+That reasoning has been overtaken. Since decision 30 the **rate comes off the consultant's product in QuickBooks**, and the PDF the client receives is rendered by **Kevin's own customised invoice template**, with period ending, description, hours, rate and amount laid out the way he arranged them. A PDF drawn here shares neither. Kevin would have been approving a picture of an invoice while a different-looking document went to the client, which is the opposite of what asking him is for.
+
+Decision: **the invoice is created in the accounting system before the approval email is written**, and that email carries the real invoice PDF, under its real number. Nothing is sent to the client until Kevin answers.
+
+Consequences:
+
+- **Cancelling now voids.** Kevin replying "cancel" voids the invoice in QuickBooks and marks the agent's record cancelled. The voided invoice stays in the books and its number stays spent, which is what QuickBooks having no drafts costs; the replacement, if one comes, takes the next number along (decision 29). If the voiding itself fails, Kevin is told to void it by hand and the item is cancelled anyway, because he said so.
+- **Making and sending are now separate steps** in `application/outgoing.py`: `prepare_invoice` makes and records it, `approve_item` writes the billing email for one that already exists. Both are idempotent per item, so asking and then approving makes one invoice, and a restart in between makes none.
+- **Dry run is unchanged** and still creates nothing at all, in any accounting mode. It remains the stop button.
+- A guardrail that sends an automatic item to ask first now also makes the invoice first. The guarantee that matters is untouched: nothing reaches a client without Kevin.
+
+This reverses the "never before" rule in `integrations/quickbooks-online.md`, which came from decision 11 when the agent rendered its own invoices and QuickBooks Online was a plan rather than a thing Kevin had set up.
+
+## 34. A cancelled invoice is renamed, so its number comes free
+
+QuickBooks will not let a new invoice take a number that another invoice already holds, and a voided invoice still holds its own. So under decision 33, where the invoice exists before Kevin sees it, cancelling one would have pushed the replacement to `083126MT-PS-2` -- for the same consultant, the same client and the same month. The number is meant to say which month's work it is for, and a correction is not a different month.
+
+Decision: cancelling an invoice **renames it to `083126MT-PS-VOID` and then voids it**, in that order. The real number is free again, and the replacement is `083126MT-PS`.
+
+- **The rename happens first**, while the invoice is still an ordinary one. A voided invoice is not something to count on being editable, and the number cannot come free until something else holds it.
+- **A rename that fails does not stop the void.** An invoice Kevin cancelled must not survive because its number could not be changed; the number stays spent and the replacement takes the next one along, which is untidy rather than wrong.
+- **A second void of the same number** becomes `-VOID2`, and so on; the agent asks its own records which names are taken.
+- **The name is renamed in the agent's records too**, so manual mode behaves the same way and the `-2` logic sees the number as free.
+- **`find_invoice` ignores a voided number.** After a crash the agent asks QuickBooks whether it already made this item's invoice, matching on the item id in the private note -- which a cancelled invoice still carries. One the agent cancelled is not an answer to that question, and without this the replacement would have been the voided invoice.
+
+`-VOID` is the agent's own marker rather than anything QuickBooks defines, which is why `is_voided_number` in `domain/invoice_numbers.py` is the single place that decides what one looks like.
+
+## 35. A mail folder says what the message needs, and is revisited when that changes
+
+The agent files each message it reads into `Agent/Processed`, `Agent/Needs Review` or `Agent/Ignored`. The folder is chosen while the message is being **read**, which is long before the invoice is made: a timesheet that reads cleanly is filed as processed, and then the invoice is created, and only then can QuickBooks refuse it. The email that started it all sits in the processed folder saying nothing is wrong.
+
+Decision: when a review is raised about an item **after** its timesheet was read, the emails that timesheet arrived on are **moved to `Needs Review`**. The folder keeps one meaning -- something about this needs a person -- rather than meaning "the reading went fine" in one place and "the invoice went fine" in another.
+
+This needed `inbox.move` to look beyond the inbox: it searched `INBOX` only, so moving an already-filed message quietly did nothing. It now tries the inbox first, then the agent's own folders, and does nothing if the message is already where it is being sent.
+
+**What was considered and rejected: a folder per item state**, such as `Waiting for approval`, holding the timesheet until its invoice is approved and sent.
+
+- One email can feed several items. A consultant sends a timesheet and their firm's invoice together (decision 24), and an email can carry timesheets for more than one period. If one item is approved and another is still waiting, there is no folder the message belongs in. Mail folders cannot hold per-item state because the relationship is not one to one.
+- Every move is a chance to lose a message, and mirroring state means moving on every transition and back again on a correction. Nothing in the never-twice guarantees depends on where a message sits, and this would have made something depend on it.
+- The agent's mailbox is not Kevin's. He reads his own, where the approval email with the real invoice attached is already waiting. A folder in the agent's mailbox serves whoever is debugging.
+- "What is waiting on approval" is already answered, by `fops status`, the tracking sheet, and the Monday summary.
+
+The folder remains a courtesy for a person looking at the mailbox. The database is the record.

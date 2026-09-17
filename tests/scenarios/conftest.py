@@ -47,6 +47,7 @@ def client_row(row_number: int = 2, **overrides: str) -> RawRow:
         "Names on timesheets": "Acme",
         "Email domains": "acme.example",
         "QuickBooks customer": "",
+        "Invoice code": "AC",
         "Notes": "",
         "Active": "yes",
     }
@@ -57,6 +58,7 @@ def client_row(row_number: int = 2, **overrides: str) -> RawRow:
 def consultant_row(row_number: int = 2, **overrides: str) -> RawRow:
     cells = {
         "Consultant": "Priya Shah",
+        "Initials": "",
         "Other names": "P. Shah",
         "Email": PRIYA,
         "Type": "contractor",

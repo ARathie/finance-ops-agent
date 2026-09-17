@@ -52,12 +52,12 @@ def test_sourcing_it_into_a_shell_produces_no_errors() -> None:
 def test_the_quotes_do_not_become_part_of_the_value() -> None:
     """A quoted value is unquoted by every loader, so the app sees the text."""
     result = subprocess.run(
-        ["bash", "-c", f'set -a; . {EXAMPLE}; set +a; printf "%s" "$QBO_ITEM_NAME"'],
+        ["bash", "-c", f'set -a; . {EXAMPLE}; set +a; printf "%s" "$FOPS_TIMEZONE"'],
         capture_output=True,
         text=True,
         check=False,
     )
-    assert result.stdout == "Consulting Services"
+    assert result.stdout == "America/New_York"
 
 
 def test_it_names_the_key_that_reads_timesheets() -> None:

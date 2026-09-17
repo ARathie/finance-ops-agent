@@ -106,18 +106,48 @@ class ImapInbox:
         return parsed.attachment_content[attachment_id]
 
     def move(self, message_id: str, folder: str) -> None:
+        """File the message, wherever it is now.
+
+        The inbox first, since that is where all but one message will be. Then
+        the agent's own folders, because a message already filed may need
+        moving again -- an invoice that fails after its timesheet read cleanly
+        puts that email back in front of a person (decision 35).
+        """
         client = self._connect(self._account)
         try:
-            client.select_folder(INBOX, readonly=False)
-            uids = self._find(client, message_id)
-            if not uids:
-                return  # already moved by a hand, or never had a real Message-ID
-            target = Folders(client, self._account.folder_prefix).agent_folder(folder)
-            if client.has_capability("MOVE"):
-                client.move(uids, target)
-            else:
-                client.copy(uids, target)
-                client.delete_messages(uids)
-                client.expunge()
+            folders = Folders(client, self._account.folder_prefix)
+            target = folders.agent_folder(folder)
+            for source in (INBOX, *self._agent_folders(folders)):
+                if source == target:
+                    continue  # already filed there; nothing to do
+                try:
+                    client.select_folder(source, readonly=False)
+                except Exception:
+                    continue  # a folder this server does not have
+                uids = self._find(client, message_id)
+                if not uids:
+                    continue
+                if client.has_capability("MOVE"):
+                    client.move(uids, target)
+                else:
+                    client.copy(uids, target)
+                    client.delete_messages(uids)
+                    client.expunge()
+                return
+            # Moved by a hand, already where it belongs, or never had a real
+            # Message-ID. The database is the record either way.
         finally:
             client.logout()
+
+    @staticmethod
+    def _agent_folders(folders: "Folders") -> list[str]:
+        from finance_ops_agent.ports.inbox import (
+            IGNORED_FOLDER,
+            NEEDS_REVIEW_FOLDER,
+            PROCESSED_FOLDER,
+        )
+
+        return [
+            folders.agent_folder(name)
+            for name in (PROCESSED_FOLDER, NEEDS_REVIEW_FOLDER, IGNORED_FOLDER)
+        ]

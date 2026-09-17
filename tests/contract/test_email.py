@@ -337,6 +337,35 @@ class TestReading:
         assert subjects_in(env.server, AGENT) == []
         inbox.move("<never-there@example>", PROCESSED_FOLDER)  # quietly nothing
 
+    def test_a_message_already_filed_can_be_moved_again(self, env: Env) -> None:
+        """A timesheet that read cleanly is filed as processed before the
+        invoice is made, so a failure afterwards has to be able to put that
+        email back in front of a person (decision 35)."""
+        from finance_ops_agent.ports.inbox import NEEDS_REVIEW_FOLDER
+
+        deliver(env.server, timesheet_email())
+        inbox = ImapInbox(env.server.account(), AGENT, None)
+        inbox.new_messages(None)
+        inbox.move("<aug@example>", PROCESSED_FOLDER)
+        assert subjects_in(env.server, AGENT, f"Agent.{PROCESSED_FOLDER}") == ["August timesheet"]
+
+        inbox.move("<aug@example>", NEEDS_REVIEW_FOLDER)
+
+        assert subjects_in(env.server, AGENT, f"Agent.{NEEDS_REVIEW_FOLDER}") == [
+            "August timesheet"
+        ]
+        assert subjects_in(env.server, AGENT, f"Agent.{PROCESSED_FOLDER}") == []
+
+    def test_moving_it_where_it_already_is_changes_nothing(self, env: Env) -> None:
+        deliver(env.server, timesheet_email())
+        inbox = ImapInbox(env.server.account(), AGENT, None)
+        inbox.new_messages(None)
+        inbox.move("<aug@example>", PROCESSED_FOLDER)
+
+        inbox.move("<aug@example>", PROCESSED_FOLDER)
+
+        assert subjects_in(env.server, AGENT, f"Agent.{PROCESSED_FOLDER}") == ["August timesheet"]
+
 
 class TestFolders:
     """Folder names follow the server: its delimiter, and whether everything

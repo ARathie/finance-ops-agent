@@ -34,6 +34,7 @@ from finance_ops_agent.domain.engagements import (
     Vendor,
     parse_workbook,
 )
+from finance_ops_agent.domain.invoice_numbers import codes_for_client
 from finance_ops_agent.domain.items import EngagementSnapshot, Item, TimesheetRecord
 from finance_ops_agent.domain.messages import (
     InboundEmail,
@@ -154,9 +155,32 @@ def _vendor_by_name(workbook: EngagementWorkbook, name: str) -> Vendor | None:
     return None
 
 
-def _build_snapshot(
-    workbook: EngagementWorkbook, rate_row: Engagement
-) -> EngagementSnapshot | None:
+def _consultant_code(workbook: EngagementWorkbook, rate_row: Engagement) -> str:
+    """The consultant's part of the invoice number, for this client.
+
+    Worked out across everyone engaged at the client, because two consultants
+    who share initials there both change to the longer form
+    (domain/invoice_numbers.py). Blank when the name gives nothing to work
+    with, which the caller turns into a review.
+    """
+    peers = {
+        engagement.consultant
+        for engagement in workbook.engagements
+        if checks.names_match(engagement.client, rate_row.client)
+    }
+    overrides: dict[str, str] = {}
+    for name in peers:
+        consultant = _consultant_by_name(workbook, name)
+        if consultant is not None:
+            overrides[consultant.name] = consultant.initials
+    codes = codes_for_client(overrides)
+    for name, code in codes.items():
+        if checks.names_match(name, rate_row.consultant):
+            return code
+    return ""
+
+
+def build_snapshot(workbook: EngagementWorkbook, rate_row: Engagement) -> EngagementSnapshot | None:
     client = _client_by_name(workbook, rate_row.client)
     consultant = _consultant_by_name(workbook, rate_row.consultant)
     if client is None or consultant is None:
@@ -185,6 +209,8 @@ def _build_snapshot(
         role=rate_row.role,
         client_legal_name=client.legal_name,
         quickbooks_customer=client.quickbooks_customer,
+        client_invoice_code=client.invoice_code,
+        consultant_code=_consultant_code(workbook, rate_row),
         client_delivery=client.delivery.value,
         send_automatically=rate_row.send_automatically,
     )
@@ -208,7 +234,7 @@ def _create_expected_items(deps: RunDeps, workbook: EngagementWorkbook, report: 
             rate_row, findings = checks.rate_row_in_force(rows, period)
             if rate_row is None or findings:
                 continue  # the rate problem surfaces when a timesheet arrives
-            snapshot = _build_snapshot(workbook, rate_row)
+            snapshot = build_snapshot(workbook, rate_row)
             if snapshot is None:
                 continue
             deps.store.create_item(
@@ -464,7 +490,7 @@ def _process_timesheet(
     if consultant is not None and client_name is not None and period is not None:
         item = deps.store.find_item(consultant.name, client_name, period)
         if item is None and rate_row is not None:
-            snapshot = _build_snapshot(workbook, rate_row)
+            snapshot = build_snapshot(workbook, rate_row)
             if snapshot is not None:
                 item = deps.store.create_item(
                     consultant.name, client_name, period, ItemStatus.RECEIVED, snapshot

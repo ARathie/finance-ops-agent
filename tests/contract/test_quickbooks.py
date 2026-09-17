@@ -72,10 +72,10 @@ def build(
         now=lambda: NOW,
         sleep=lambda _seconds: None,
     )
-    return QuickBooksOnline(client, "Consulting Services", TODAY), client, store
+    return QuickBooksOnline(client, TODAY), client, store
 
 
-def worked_example_invoice(number: str = "(assigned on approval)") -> Invoice:
+def worked_example_invoice(number: str = "083126AC-PS") -> Invoice:
     return build_invoice(worked_example_item(), number, TODAY)
 
 
@@ -176,7 +176,7 @@ class TestCreateInvoice:
 
         created = accounting.create_invoice(worked_example_invoice(), item_id=1)
 
-        assert created.number == "1042"
+        assert created.number == "083126AC-PS"
         assert created.external_id == "145"
         assert created.pdf.startswith(b"%PDF")
 
@@ -189,6 +189,8 @@ class TestCreateInvoice:
 
         body = next(entry for entry in replay.bodies if isinstance(entry, dict) and "Line" in entry)
         assert body["PrivateNote"] == "fops item 1"
+        # Kevin's number, not QuickBooks' own counter.
+        assert body["DocNumber"] == "083126AC-PS"
         # If QuickBooks also emailed the invoice, the client would get it twice.
         assert body["EmailStatus"] == "NotSet"
         assert body["CustomerRef"] == {"value": "58"}
@@ -214,17 +216,292 @@ class TestCreateInvoice:
         void_body = replay.bodies[-1]
         assert void_body == {"Id": "146", "SyncToken": "0"}
 
-    def test_a_missing_customer_says_what_to_fix(self, tmp_path: Path) -> None:
-        replay = replay_from("missing_customer")
+    def test_an_invoice_quickbooks_numbered_itself_is_voided_and_reported(
+        self, tmp_path: Path
+    ) -> None:
+        """The failure path for Kevin's numbering: QuickBooks only honours
+        DocNumber when custom transaction numbers are on, and an invoice under
+        a number Kevin did not choose never reaches a client."""
+        replay = replay_from("create_own_number")
         accounting, _, _ = build(replay, tmp_path)
-        with pytest.raises(QuickBooksFailed, match="never create customers"):
+
+        with pytest.raises(QuickBooksFailed) as error:
             accounting.create_invoice(worked_example_invoice(), item_id=1)
 
-    def test_a_missing_service_item_says_what_to_fix(self, tmp_path: Path) -> None:
+        message = str(error.value)
+        assert "083126AC-PS" in message  # what was asked for
+        assert "1042" in message  # what QuickBooks used instead
+        assert "Custom transaction numbers" in message  # and what to turn on
+        assert any("operation=void" in url for _, url in replay.calls)
+        assert replay.bodies[-1] == {"Id": "145", "SyncToken": "0"}
+
+    def test_intuits_trace_id_is_kept_and_repeated_back(self, tmp_path: Path) -> None:
+        """Intuit's support team asks for intuit_tid first, so it is captured
+        from every response and put into anything the agent reports."""
+        replay = replay_from("create_mismatch")
+        accounting, client, _ = build(replay, tmp_path)
+
+        with pytest.raises(QuickBooksFailed) as error:
+            accounting.create_invoice(worked_example_invoice(), item_id=1)
+
+        assert client.last_intuit_tid == "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        assert "QuickBooks reference 1-68c9a0f1-2b7d4e8a9c1f3b5d" in str(error.value)
+
+    def test_a_failure_without_a_trace_id_reads_normally(self, tmp_path: Path) -> None:
+        """Not every response carries one; the message must not trail an empty
+        bracket when it does not."""
+        replay = replay_from("missing_item")
+        accounting, client, _ = build(replay, tmp_path)
+
+        with pytest.raises(QuickBooksFailed) as error:
+            accounting.create_invoice(worked_example_invoice(), item_id=1)
+
+        assert client.last_intuit_tid == ""
+        assert "QuickBooks reference" not in str(error.value)
+
+    def test_a_missing_customer_says_what_to_fix(self, tmp_path: Path) -> None:
+        """Neither the display name nor the company name matched."""
+        replay = replay_from("missing_customer")
+        accounting, _, _ = build(replay, tmp_path)
+        with pytest.raises(QuickBooksFailed, match="no customer whose name or company"):
+            accounting.create_invoice(worked_example_invoice(), item_id=1)
+
+    def test_a_product_rate_that_has_drifted_is_voided_and_reported(self, tmp_path: Path) -> None:
+        """The rate is billed from the product now, so the engagement list is
+        what notices when the two stop agreeing. Nothing is sent on a rate the
+        agent cannot vouch for: the invoice is voided and Kevin is told."""
+        replay = replay_from("product_rate_drifted")
+        accounting, _, _ = build(replay, tmp_path)
+
+        with pytest.raises(QuickBooksFailed) as error:
+            accounting.create_invoice(worked_example_invoice(), item_id=1)
+
+        message = str(error.value)
+        assert "$22,620.00" in message  # 156.00 hours at the product's rate
+        assert "$21,840.00" in message  # what the engagement list comes to
+        assert "voided it and sent nothing to the client" in message
+        assert any("operation=void" in url for _, url in replay.calls)
+
+    def test_a_consultant_with_no_product_says_what_to_fix(self, tmp_path: Path) -> None:
+        """Each consultant is a product and the product carries the rate, so a
+        missing one is never worked around: billing them under someone else's
+        product would bill the wrong rate."""
         replay = replay_from("missing_item")
         accounting, _, _ = build(replay, tmp_path)
-        with pytest.raises(QuickBooksFailed, match="QBO_ITEM_NAME"):
+        with pytest.raises(QuickBooksFailed, match="no product called 'Priya Shah'"):
             accounting.create_invoice(worked_example_invoice(), item_id=1)
+
+    def test_the_line_is_priced_from_the_product_and_dated_by_the_period(
+        self, tmp_path: Path
+    ) -> None:
+        """Decision 30: the rate comes off the consultant's product, the
+        description is their name, and the service date is the period end,
+        which is the column Kevin's template labels "period ending"."""
+        replay = replay_from("create_ok")
+        accounting, _, _ = build(replay, tmp_path)
+        accounting.create_invoice(worked_example_invoice(), item_id=1)
+
+        body = next(entry for entry in replay.bodies if isinstance(entry, dict) and "Line" in entry)
+        line = body["Line"][0]
+        assert line["Description"] == "Priya Shah"
+        assert line["SalesItemLineDetail"]["ItemRef"] == {"value": "12"}
+        assert line["SalesItemLineDetail"]["ServiceDate"] == "2026-08-31"
+        assert line["SalesItemLineDetail"]["UnitPrice"] == 140.0  # off the product
+
+
+class TestFindingTheCustomer:
+    """QuickBooks fills a customer's display name from whoever was typed in
+    first, so an agency is often filed under a person with the organisation in
+    the company field (decision 32)."""
+
+    BASE = f"https://sandbox-quickbooks.api.intuit.com/v3/company/{REALM}"
+
+    def _replay(self, by_company: dict[str, object]) -> Replay:
+        from urllib.parse import quote
+
+        name = "Virginia Information Technology Agency"
+        return Replay(
+            {
+                f"GET {self.BASE}/query?query="
+                + quote(f"SELECT Id, DisplayName FROM Customer WHERE DisplayName = '{name}'"): [
+                    {"status": 200, "json": {"QueryResponse": {}}}
+                ],
+                f"GET {self.BASE}/query?query="
+                + quote(
+                    "SELECT Id, DisplayName, CompanyName FROM Customer"
+                    f" WHERE CompanyName = '{name}'"
+                ): [{"status": 200, "json": by_company}],
+            }
+        )
+
+    def test_the_company_name_is_tried_when_the_display_name_is_a_person(
+        self, tmp_path: Path
+    ) -> None:
+        replay = self._replay(
+            {
+                "QueryResponse": {
+                    "Customer": [
+                        {
+                            "Id": "77",
+                            "DisplayName": "Dana Whitfield",
+                            "CompanyName": "Virginia Information Technology Agency",
+                        }
+                    ]
+                }
+            }
+        )
+        accounting, _, _ = build(replay, tmp_path)
+
+        assert accounting.customer_ref("Virginia Information Technology Agency") == "77"
+
+    def test_it_is_looked_up_once_and_remembered(self, tmp_path: Path) -> None:
+        replay = self._replay(
+            {"QueryResponse": {"Customer": [{"Id": "77", "DisplayName": "Dana Whitfield"}]}}
+        )
+        accounting, _, _ = build(replay, tmp_path)
+
+        accounting.customer_ref("Virginia Information Technology Agency")
+        accounting.customer_ref("Virginia Information Technology Agency")
+        assert len(replay.calls) == 2  # the two from the first lookup, none after
+
+    def test_a_company_name_shared_by_two_customers_is_refused(self, tmp_path: Path) -> None:
+        """Display name is unique in QuickBooks and company name is not, so
+        this one has to be a question rather than a guess."""
+        replay = self._replay(
+            {
+                "QueryResponse": {
+                    "Customer": [
+                        {"Id": "77", "DisplayName": "Dana Whitfield"},
+                        {"Id": "78", "DisplayName": "VITA — Accounts Payable"},
+                    ]
+                }
+            }
+        )
+        accounting, _, _ = build(replay, tmp_path)
+
+        with pytest.raises(QuickBooksFailed) as error:
+            accounting.customer_ref("Virginia Information Technology Agency")
+        message = str(error.value)
+        assert "more than one customer" in message
+        assert "Dana Whitfield" in message and "VITA — Accounts Payable" in message
+        assert "will not guess" in message
+
+
+class TestTheDoctorCheck:
+    """A check that says only "missing" is a check that cannot be acted on:
+    spelled differently, two of them, and connected to the wrong company all
+    look the same once the reason is thrown away."""
+
+    def test_it_repeats_the_reason_and_names_the_company(self, tmp_path: Path) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_customers
+
+        replay = replay_from("missing_customer")
+        accounting, _, _ = build(replay, tmp_path)
+
+        check = check_quickbooks_customers(accounting, lambda: ["Acme Corporation"])
+
+        assert check.result is CheckResult.FAIL
+        assert f"the sandbox company {REALM}" in check.detail
+        assert "no customer whose name or company" in check.detail
+        assert "Acme Corporation" in check.detail
+
+    def test_a_pass_says_which_company_it_looked_in(self, tmp_path: Path) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_customers
+
+        replay = replay_from("create_ok")
+        accounting, _, _ = build(replay, tmp_path)
+
+        check = check_quickbooks_customers(accounting, lambda: ["Acme Corporation"])
+
+        assert check.result is CheckResult.PASS
+        assert f"the sandbox company {REALM}" in check.detail
+
+
+class TestCancelling:
+    """Renamed first, then voided: QuickBooks will not give a number back while
+    any invoice still holds it, and a voided one is not something to count on
+    being editable (decision 34)."""
+
+    BASE = f"https://sandbox-quickbooks.api.intuit.com/v3/company/{REALM}"
+
+    def test_the_invoice_is_renamed_before_it_is_voided(self, tmp_path: Path) -> None:
+        replay = replay_from("void_after_renaming")
+        accounting, _, _ = build(replay, tmp_path)
+
+        accounting.cancel_invoice("145", renamed_to="083126AC-PS-VOID")
+
+        methods = [f"{method} {url.split('/company/')[1]}" for method, url in replay.calls]
+        assert methods == [
+            f"GET {REALM}/invoice/145",
+            f"POST {REALM}/invoice",  # the rename, while it is still live
+            f"POST {REALM}/invoice?operation=void",
+        ]
+        rename, void = replay.bodies[0], replay.bodies[1]
+        assert rename == {
+            "Id": "145",
+            "SyncToken": "0",
+            "sparse": True,
+            "DocNumber": "083126AC-PS-VOID",
+        }
+        # Voided with the sync token the rename handed back, not the stale one.
+        assert void == {"Id": "145", "SyncToken": "1"}
+
+    def test_a_rename_that_fails_does_not_stop_the_void(self, tmp_path: Path) -> None:
+        """An invoice Kevin cancelled must not survive because its number could
+        not be changed. The number stays spent, which is untidy, not wrong."""
+        replay = Replay(
+            {
+                f"GET {TestCancelling.BASE}/invoice/145": [
+                    {"status": 200, "json": {"Invoice": {"Id": "145", "SyncToken": "0"}}}
+                ],
+                f"POST {TestCancelling.BASE}/invoice": [
+                    {"status": 400, "json": {"Fault": {"Error": [{"Message": "no"}]}}}
+                ],
+                f"POST {TestCancelling.BASE}/invoice?operation=void": [
+                    {"status": 200, "json": {"Invoice": {"Id": "145"}}}
+                ],
+            }
+        )
+        accounting, _, _ = build(replay, tmp_path)
+
+        accounting.cancel_invoice("145", renamed_to="083126AC-PS-VOID")
+
+        assert any("operation=void" in url for _, url in replay.calls)
+        assert replay.bodies[-1] == {"Id": "145", "SyncToken": "0"}
+
+    def test_a_voided_invoice_is_not_mistaken_for_a_live_one(self, tmp_path: Path) -> None:
+        """After a crash the agent asks QuickBooks whether it already made this
+        item's invoice. One it cancelled is not an answer."""
+        from urllib.parse import quote
+
+        recent = quote(
+            "SELECT Id, DocNumber, TotalAmt, PrivateNote, Balance FROM Invoice"
+            " WHERE TxnDate >= '2026-09-01' ORDERBY TxnDate DESC MAXRESULTS 100"
+        )
+        replay = Replay(
+            {
+                f"GET {TestCancelling.BASE}/query?query={recent}": [
+                    {
+                        "status": 200,
+                        "json": {
+                            "QueryResponse": {
+                                "Invoice": [
+                                    {
+                                        "Id": "145",
+                                        "DocNumber": "083126AC-PS-VOID",
+                                        "TotalAmt": 0,
+                                        "PrivateNote": "fops item 1",
+                                    }
+                                ]
+                            }
+                        },
+                    }
+                ]
+            }
+        )
+        accounting, _, _ = build(replay, tmp_path)
+
+        assert accounting.find_invoice(item_id=1) is None
 
 
 class TestFindAfterACrash:

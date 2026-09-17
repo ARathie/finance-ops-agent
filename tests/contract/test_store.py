@@ -248,3 +248,111 @@ def test_audit_timestamps_are_utc(tmp_path: Path) -> None:
         store = make()
         item_id = create(store)
         assert store.audit_entries(item_id)[0].at == fixed
+
+
+class TestForgetting:
+    """`fops forget`: put a timesheet back to never having arrived, so the same
+    one can be put through again while testing."""
+
+    def sqlite_store(self, tmp_path: Path) -> SqliteStore:
+        return SqliteStore(open_database(tmp_path / "agent.db"), files_dir=tmp_path / "files")
+
+    def an_item_with_everything(self, store: SqliteStore) -> int:
+        item = store.create_item("Priya Shah", "Acme Corp", AUGUST, ItemStatus.RECEIVED, snapshot())
+        sha = store.save_file(b"a timesheet")
+        store.record_message(
+            StoredMessage(
+                message_id="<one@example.com>",
+                in_reply_to="",
+                references=(),
+                from_address="priya@example.com",
+                to_addresses="jay@icon-technologies.com",
+                subject="August timesheet",
+                body_text="attached",
+                received_at=datetime(2026, 9, 1, tzinfo=UTC),
+                kind=MessageKind.TIMESHEET,
+                processed=False,
+                attachments=(
+                    StoredAttachment(
+                        filename="timesheet.pdf",
+                        mime_type="application/pdf",
+                        sha256=sha,
+                        size_bytes=11,
+                    ),
+                ),
+            ),
+            {sha: b"a timesheet"},
+        )
+        store.record_timesheet(
+            TimesheetRecord(
+                item_id=item.id,
+                sha256=sha,
+                reading={},
+                model="claude-opus-5",
+                prompt_version="v3",
+                is_duplicate=False,
+                is_correction=False,
+            )
+        )
+        store.open_review(item.id, "NO_APPROVAL", "no approval on this one")
+        return item.id
+
+    def test_it_takes_the_item_and_its_email_out(self, tmp_path: Path) -> None:
+        store = self.sqlite_store(tmp_path)
+        item_id = self.an_item_with_everything(store)
+
+        gone = store.forget_item(item_id)
+
+        assert gone.consultant == "Priya Shah"
+        assert gone.message_subjects == ["August timesheet"]
+        assert store.list_items() == []
+        assert store.timesheets_for_item(item_id) == []
+        assert store.open_reviews() == []
+        # The point of removing the message: the same email is read again
+        # rather than skipped as one already seen.
+        assert store.unprocessed_messages() == []
+        assert store.record_message(
+            StoredMessage(
+                message_id="<one@example.com>",
+                in_reply_to="",
+                references=(),
+                from_address="priya@example.com",
+                to_addresses="jay@icon-technologies.com",
+                subject="August timesheet",
+                body_text="attached",
+                received_at=datetime(2026, 9, 1, tzinfo=UTC),
+                kind=MessageKind.TIMESHEET,
+                processed=False,
+                attachments=(),
+            ),
+            {},
+        )
+
+    def test_the_same_timesheet_can_be_put_through_again(self, tmp_path: Path) -> None:
+        store = self.sqlite_store(tmp_path)
+        item_id = self.an_item_with_everything(store)
+        store.forget_item(item_id)
+
+        # One item per consultant per client per period (CLAUDE.md rule 3), so
+        # this only works because the first one is really gone.
+        again = store.create_item(
+            "Priya Shah", "Acme Corp", AUGUST, ItemStatus.RECEIVED, snapshot()
+        )
+        assert again.status is ItemStatus.RECEIVED
+        assert store.timesheets_for_item(again.id) == []
+
+    def test_an_item_that_is_not_there(self, tmp_path: Path) -> None:
+        store = self.sqlite_store(tmp_path)
+        with pytest.raises(LookupError, match="no item 99"):
+            store.forget_item(99)
+
+    def test_it_leaves_other_items_alone(self, tmp_path: Path) -> None:
+        store = self.sqlite_store(tmp_path)
+        item_id = self.an_item_with_everything(store)
+        other = store.create_item(
+            "Priya Shah", "Acme Corp", SEPTEMBER, ItemStatus.RECEIVED, snapshot()
+        )
+
+        store.forget_item(item_id)
+
+        assert [one.id for one in store.list_items()] == [other.id]

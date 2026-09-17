@@ -9,6 +9,7 @@ means the agent asks Kevin (who is on CC) rather than guess
 (docs/integrations/email-imap-smtp.md, "Never twice, with SMTP").
 """
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from email.utils import make_msgid
 
@@ -16,7 +17,8 @@ from finance_ops_agent.application.context import Mode, RunDeps, RunReport
 from finance_ops_agent.domain import emails
 from finance_ops_agent.domain.emails import EmailAttachment, OutgoingEmail
 from finance_ops_agent.domain.guardrails import GuardrailCheck, check_guardrails
-from finance_ops_agent.domain.invoices import DRAFT_NUMBER, build_invoice
+from finance_ops_agent.domain.invoice_numbers import invoice_number, voided_number
+from finance_ops_agent.domain.invoices import Invoice, build_invoice
 from finance_ops_agent.domain.items import (
     InvoiceRecord,
     Item,
@@ -27,6 +29,12 @@ from finance_ops_agent.domain.money import Money
 from finance_ops_agent.domain.reading import TimesheetReading
 from finance_ops_agent.domain.review import ReviewCode
 from finance_ops_agent.domain.statuses import ItemStatus
+from finance_ops_agent.ports.accounting import (
+    AccountingFailed,
+    AccountingNeedsReconnect,
+    CreatedInvoice,
+)
+from finance_ops_agent.ports.inbox import NEEDS_REVIEW_FOLDER
 from finance_ops_agent.ports.sender import NotSent, RecipientRefused
 
 MAX_SEND_ATTEMPTS = 3
@@ -107,24 +115,166 @@ def guardrails_for(deps: RunDeps, item: Item) -> GuardrailCheck:
     )
 
 
-def approve_item(deps: RunDeps, item: Item, report: RunReport) -> None:
-    """Create the invoice (idempotently) and write down the billing email.
+MAX_NUMBER_ATTEMPTS = 20
 
-    The item's status advances to invoice_sent only once the billing email is
-    actually sent (see advance_after_sends)."""
+
+def next_invoice_number(deps: RunDeps, item: Item) -> str | None:
+    """Kevin's number for this item: `083126MT-PS` (domain/invoice_numbers.py).
+
+    One invoice per consultant per client per month makes the plain number
+    unique, so the only thing normally standing in its way is a correction:
+    the replacement covers the same period as the invoice it replaces, whose
+    number is spent, so it takes the next one along.
+
+    None means the agent cannot number it and has asked Kevin instead. Nothing
+    is invented: the two letters are the client's own and the initials are the
+    consultant's.
+    """
+    client_code = item.snapshot.client_invoice_code
+    consultant_code = item.snapshot.consultant_code
+    if not client_code or not consultant_code:
+        missing = (
+            f'the Clients sheet has no "Invoice code" for {item.client}'
+            if not client_code
+            else f"I can't work out {item.consultant}'s initials from their name"
+        )
+        deps.store.open_review(
+            item.id,
+            ReviewCode.LIST_ROW_PROBLEM.value,
+            f"I can't number the invoice for {item.consultant} at {item.client}:"
+            f" {missing}. Fill it in on the engagement list and I'll pick this up"
+            " on the next run. Nothing was created or sent.",
+        )
+        return None
+    for attempt in range(1, MAX_NUMBER_ATTEMPTS + 1):
+        candidate = invoice_number(item.period.end, client_code, consultant_code, attempt)
+        if not deps.store.invoice_number_in_use(candidate):
+            return candidate
+    deps.store.open_review(
+        item.id,
+        ReviewCode.LIST_ROW_PROBLEM.value,
+        f"I have already used every invoice number I can make for {item.consultant}"
+        f" at {item.client} for {item.period.start} to {item.period.end}."
+        " Nothing was created or sent.",
+    )
+    return None
+
+
+def refile_for_review(deps: RunDeps, item: Item) -> None:
+    """Put this item's timesheet emails back in front of a person.
+
+    A timesheet that read cleanly is filed as processed while it is read, long
+    before the invoice is made. When something later goes wrong with that
+    invoice, the email that started it is sitting in the processed folder
+    saying nothing is wrong, so it is moved (decision 35). The folder is a
+    courtesy either way -- the database is the record -- but a courtesy that
+    says the wrong thing is worse than none.
+    """
+    for message_id in deps.store.message_ids_for_item(item.id):
+        deps.inbox.move(message_id, NEEDS_REVIEW_FOLDER)
+
+
+def tell_kevin(
+    deps: RunDeps, report: RunReport, code: ReviewCode, about: str, message: str, key: str
+) -> None:
+    """Open the review and write the email that carries it.
+
+    A review row on its own is only a note to the agent: reviews become emails
+    where they are raised, so one raised here has to bring its own.
+    """
+    item_id = None  # these are about the connection, not one timesheet
+    if not deps.store.open_review(item_id, code.value, message):
+        return  # already open from an earlier run; Kevin has been told once
+    report.reviews_opened += 1
+    email = emails.needs_review(deps.settings.admin_email, about, [message])
+    enqueue_email(deps, "review_email", f"review:{key}", item_id, email)
+
+
+def _create_invoice(
+    deps: RunDeps, draft: Invoice, item: Item, report: RunReport
+) -> CreatedInvoice | None:
+    """Ask the accounting system for the invoice, or tell Kevin why not.
+
+    A QuickBooks problem is a question for Kevin, not the end of the run: the
+    other timesheets in this run still get read, still get their emails, and
+    the invoice is made next run once the connection is back. None means it did
+    not happen and a review has been opened.
+    """
+    try:
+        return deps.accounting.create_invoice(draft, item.id)
+    except AccountingNeedsReconnect as error:
+        # Every other item this run would fail the same way, and each one would
+        # mean another go at the token endpoint.
+        report.quickbooks_unavailable = True
+        refile_for_review(deps, item)
+        tell_kevin(
+            deps,
+            report,
+            ReviewCode.QUICKBOOKS_RECONNECT,
+            "QuickBooks",
+            "QuickBooks needs to be reconnected, so I have not made any invoices this"
+            " time and nothing went to a client. Run `fops qbo-connect` and I will pick"
+            f" them up on the next run. QuickBooks said: {error}",
+            "quickbooks-reconnect",
+        )
+        report.note(f"QuickBooks needs reconnecting; no invoice for {item.consultant}")
+        return None
+    except AccountingFailed as error:
+        message = (
+            f"I could not make the invoice for {item.consultant} at {item.client}"
+            f" ({item.period.start} to {item.period.end}) in QuickBooks, so nothing"
+            f" went to the client. I will try again next run. QuickBooks said: {error}"
+        )
+        if deps.store.open_review(item.id, ReviewCode.QUICKBOOKS_FAILED.value, message):
+            report.reviews_opened += 1
+            email = emails.needs_review(
+                deps.settings.admin_email, f"{item.consultant} — {item.client}", [message]
+            )
+            enqueue_email(deps, "review_email", f"review:quickbooks:{item.id}", item.id, email)
+            refile_for_review(deps, item)
+        report.note(f"QuickBooks would not make the invoice for {item.consultant}: {error}")
+        return None
+
+
+@dataclass(frozen=True)
+class PreparedInvoice:
+    """The real invoice, and everything an email about it needs."""
+
+    invoice: Invoice
+    created: CreatedInvoice
+    attachments: tuple[EmailAttachment, ...]
+
+
+def prepare_invoice(deps: RunDeps, item: Item, report: RunReport) -> PreparedInvoice | None:
+    """Make the invoice in the accounting system, and write it down.
+
+    Made before Kevin is asked, not after, so the invoice he approves is the
+    one the client will receive -- the rate comes off the product in
+    QuickBooks and the PDF is rendered by his own invoice template, so a
+    stand-in drawn here would be approving something else (decision 33).
+
+    Idempotent per item: the adapter returns the invoice it already made
+    rather than making a second one, so asking and then approving makes one
+    invoice, and a restart in between makes none. None means it did not happen
+    and Kevin has been told why.
+    """
     replaced = [
         record.number
         for record in deps.store.invoices_for_item(item.id)
         if record.status == "cancelled"
     ]
     replaces = replaced[-1] if replaced else None
-    # create_invoice is idempotent per item: an adapter returns the invoice it
-    # already made rather than making a second one (in QuickBooks that means
-    # recognising the item id in the invoice's private note). So this asks once
-    # and never needs a lookup of its own.
     known = {record.external_id for record in deps.store.invoices_for_item(item.id)}
-    draft = build_invoice(item, DRAFT_NUMBER, deps.clock.today(), replaces)
-    created = deps.accounting.create_invoice(draft, item.id)
+    # The number is the agent's to assign in both modes, so it reads the same
+    # whether Kevin types it into QuickBooks Desktop or QuickBooks Online was
+    # told to use it (docs/decisions.md #27).
+    number = next_invoice_number(deps, item)
+    if number is None:
+        return None  # Kevin has been asked; nothing created, nothing sent
+    draft = build_invoice(item, number, deps.clock.today(), replaces)
+    created = _create_invoice(deps, draft, item, report)
+    if created is None:
+        return None  # Kevin has been told; nothing created, nothing sent
     invoice = build_invoice(item, created.number, deps.clock.today(), replaces)
     pdf_sha = deps.store.save_file(created.pdf)
     if created.external_id not in known:
@@ -154,11 +304,71 @@ def approve_item(deps: RunDeps, item: Item, report: RunReport) -> None:
         )
         if attachment is not None
     )
-    billing = emails.billing_email(deps.settings.admin_email, item, invoice, attachments)
+    return PreparedInvoice(invoice=invoice, created=created, attachments=attachments)
+
+
+def _voided_name_for(deps: RunDeps, number: str) -> str:
+    """`083126MT-PS` becomes `083126MT-PS-VOID`, or -VOID2 if that is taken."""
+    for attempt in range(1, MAX_NUMBER_ATTEMPTS + 1):
+        candidate = voided_number(number, attempt)
+        if not deps.store.invoice_number_in_use(candidate):
+            return candidate
+    return voided_number(number, MAX_NUMBER_ATTEMPTS)
+
+
+def cancel_invoices(deps: RunDeps, item: Item, report: RunReport) -> None:
+    """Void whatever was already made for this item.
+
+    QuickBooks has no draft invoices, so one Kevin cancels cannot be taken back
+    out of the books: it is voided, and its number stays spent. If the voiding
+    itself fails, Kevin is told so he can do it by hand -- the item is still
+    cancelled either way, because he said so.
+    """
+    for record in deps.store.invoices_for_item(item.id):
+        if record.status == "cancelled":
+            continue
+        # Renamed as well as voided, so the number it was using comes free and
+        # the replacement is the right number for the month rather than the
+        # next one along (docs/decisions.md #34).
+        renamed = _voided_name_for(deps, record.number)
+        try:
+            deps.accounting.cancel_invoice(record.external_id, renamed)
+        except AccountingFailed as error:
+            message = (
+                f"Kevin cancelled {item.consultant} at {item.client}, but I could not"
+                f" void invoice {record.number} in QuickBooks. Void it there by hand."
+                f" QuickBooks said: {error}"
+            )
+            if deps.store.open_review(item.id, ReviewCode.QUICKBOOKS_FAILED.value, message):
+                report.reviews_opened += 1
+                email = emails.needs_review(
+                    deps.settings.admin_email, f"{item.consultant} — {item.client}", [message]
+                )
+                enqueue_email(
+                    deps, "review_email", f"review:void:{record.external_id}", item.id, email
+                )
+                refile_for_review(deps, item)
+            report.note(f"could not void invoice {record.number}: {error}")
+            continue
+        deps.store.set_invoice_number(record.external_id, renamed)
+        deps.store.set_invoice_status(record.external_id, "cancelled")
+        report.note(f"voided invoice {record.number}, which is now {renamed}")
+
+
+def approve_item(deps: RunDeps, item: Item, report: RunReport) -> None:
+    """Write down the billing email for an invoice that already exists.
+
+    The item's status advances to invoice_sent only once the billing email is
+    actually sent (see advance_after_sends)."""
+    prepared = prepare_invoice(deps, item, report)
+    if prepared is None:
+        return
+    invoice, created = prepared.invoice, prepared.created
+    billing = emails.billing_email(deps.settings.admin_email, item, invoice, prepared.attachments)
     if item.snapshot.client_delivery == "portal":
         # Kevin uploads it to the client's portal himself; the package goes to him.
         billing = emails.dry_run_preview(
-            deps.settings.admin_email, item, invoice, billing, attachments
+            deps.settings.admin_email, item, invoice, billing, prepared.attachments
         )
     enqueue_email(
         deps,
@@ -219,6 +429,8 @@ def plan_outgoing(deps: RunDeps, report: RunReport) -> None:
         # Only automatic mode can skip asking, and only when every guardrail
         # holds. Anything else is handled as ask first: the invoice still
         # happens, Kevin just sees it first.
+        if report.quickbooks_unavailable:
+            continue  # the connection is down; Kevin already has the review
         guardrails = guardrails_for(deps, item) if mode is Mode.AUTO else None
         if guardrails is not None and guardrails.may_send_automatically:
             approve_item(deps, item, report)
@@ -228,23 +440,21 @@ def plan_outgoing(deps: RunDeps, report: RunReport) -> None:
                     f"asking rather than sending automatically ({item.consultant}"
                     f" at {item.client}): {guardrails.why_not()}"
                 )
-            invoice = build_invoice(item, DRAFT_NUMBER, deps.clock.today())
-            pdf_sha = deps.store.save_file(deps.renderer.invoice_pdf(invoice))
-            attachments = tuple(
-                attachment
-                for attachment in (
-                    EmailAttachment("proposed-invoice.pdf", pdf_sha),
-                    _active_timesheet_attachment(deps, item),
-                )
-                if attachment is not None
-            )
+            # The invoice is made now, before Kevin is asked, so what he
+            # approves is the invoice the client will get: the rate comes off
+            # the product in QuickBooks and the PDF is his own template
+            # (decision 33). Nothing is sent until he answers, and cancelling
+            # voids it.
+            prepared = prepare_invoice(deps, item, report)
+            if prepared is None:
+                continue  # Kevin has been told why; nothing to ask about yet
+            invoice, attachments = prepared.invoice, prepared.attachments
             billing = emails.billing_email(deps.settings.admin_email, item, invoice, attachments)
             request = emails.approve_invoice(
                 deps.settings.admin_email, item, invoice, billing, attachments
             )
             key = (
-                f"approve:{item.id}:{_live_invoice_count(deps, item)}"
-                f":{item.approved_hours.hundredths}"
+                f"approve:{item.id}:{prepared.created.external_id}:{item.approved_hours.hundredths}"
             )
             if enqueue_email(deps, "approval_request", key, item.id, request):
                 report.note(f"asking Kevin to approve: {request.subject}")

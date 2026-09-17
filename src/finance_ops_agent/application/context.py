@@ -73,6 +73,10 @@ class RunReport:
     unknown_senders: int = 0
     emails_sent: int = 0
     invoices_created: int = 0
+    # Set when the accounting system says it needs reconnecting. Nothing else
+    # in the run then asks it anything: the connection is dead for all of them,
+    # and asking again per item would mean a fresh token attempt per item.
+    quickbooks_unavailable: bool = False
     lines: list[str] = field(default_factory=list)
 
     def note(self, line: str) -> None:

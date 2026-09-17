@@ -111,6 +111,50 @@ def build_parser() -> argparse.ArgumentParser:
         help="loopback port for the redirect (must match the Intuit app)",
     )
 
+    test_invoice = commands.add_parser(
+        "qbo-test-invoice",
+        help="create one invoice in QuickBooks to prove the path works, then remove it"
+        " (sends no email, touches no client)",
+    )
+    test_invoice.add_argument("--consultant", required=True)
+    test_invoice.add_argument("--client", required=True, help="as the engagement list names it")
+    test_invoice.add_argument(
+        "--period-end",
+        required=True,
+        type=date.fromisoformat,
+        help="any day in the billing period to invoice, usually its last (2026-08-31)",
+    )
+    test_invoice.add_argument("--hours", required=True, help="approved hours, e.g. 156.00")
+    test_invoice.add_argument(
+        "--cleanup",
+        choices=("delete", "void", "keep"),
+        default="delete",
+        help="delete leaves the company as it was and frees the number (default);"
+        " void leaves the voided record; keep leaves the invoice there",
+    )
+    test_invoice.add_argument(
+        "--pdf", type=Path, default=None, help="where to write the PDF QuickBooks renders"
+    )
+    test_invoice.add_argument(
+        "--item-id",
+        type=int,
+        default=None,
+        help="the marker kept in the invoice's private note (default: a new one each run)",
+    )
+
+    forget = commands.add_parser(
+        "forget",
+        help="remove one timesheet item and the emails it came on, so the same"
+        " timesheet can be put through again (testing; run with no id to list them)",
+    )
+    forget.add_argument("item_id", type=int, nargs="?", default=None)
+    forget.add_argument("--data", type=Path, default=None, help="the data folder")
+    forget.add_argument(
+        "--force",
+        action="store_true",
+        help="forget it even though its invoice reached the client",
+    )
+
     backup_cmd = commands.add_parser("backup", help="zip the data folder")
     backup_cmd.add_argument(
         "--to",
@@ -185,7 +229,7 @@ def _build_fake_deps(fixtures: Path, data: Path, today: date | None, mode: Mode)
         clock=FakeClock(today),
         settings=Settings(mode=mode),
         sender=FakeSender(data / "outbox"),
-        accounting=ManualQuickBooks(store, renderer, today),
+        accounting=ManualQuickBooks(store, renderer),
         renderer=renderer,
         tracking_path=data / "tracking.xlsx",
         render_tracking=tracking_sheet_bytes,
@@ -239,7 +283,7 @@ def _accounting(
 ) -> AccountingSystem:
     """Manual mode until QuickBooks Online is connected (docs/decisions.md #11)."""
     if config.accounting != "quickbooks":
-        return ManualQuickBooks(store, renderer, today)
+        return ManualQuickBooks(store, renderer)
     from finance_ops_agent.adapters.quickbooks.client import QuickBooksClient
     from finance_ops_agent.adapters.quickbooks.online import QuickBooksOnline
     from finance_ops_agent.adapters.quickbooks.tokens import TokenStore
@@ -249,7 +293,7 @@ def _accounting(
     client = QuickBooksClient(
         TokenStore(config.qbo_token_path), settings.client_id, settings.client_secret
     )
-    return QuickBooksOnline(client, settings.item_name, today)
+    return QuickBooksOnline(client, today)
 
 
 def _mail_account(mail: "MailSettings") -> "MailAccount":
@@ -475,6 +519,7 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
         Check,
         CheckResult,
         check_quickbooks_customers,
+        check_quickbooks_products,
         check_quickbooks_tokens,
     )
     from finance_ops_agent.config import MissingSettingError, QuickBooksSettings
@@ -489,7 +534,7 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
     if results[0].result is CheckResult.FAIL:
         return results
     client = QuickBooksClient(store, settings.client_id, settings.client_secret)
-    accounting = QuickBooksOnline(client, settings.item_name, date.today())  # noqa: DTZ011
+    accounting = QuickBooksOnline(client, date.today())  # noqa: DTZ011
 
     def wanted_customers() -> list[str]:
         parsed = parse_workbook(ExcelEngagementList(config.engagement_list).load())
@@ -501,7 +546,12 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
             }
         )
 
+    def wanted_consultants() -> list[str]:
+        parsed = parse_workbook(ExcelEngagementList(config.engagement_list).load())
+        return sorted({consultant.name for consultant in parsed.consultants if consultant.active})
+
     results.append(check_quickbooks_customers(accounting, wanted_customers))
+    results.append(check_quickbooks_products(accounting, wanted_consultants))
     return results
 
 
@@ -554,6 +604,90 @@ def _warn_about_ageing_connections(config: "Config") -> None:
     warning = tokens.refresh_token_warning(utcnow())
     if warning:
         print(f"Warning: {warning}")
+
+
+def _command_qbo_test_invoice(args: argparse.Namespace) -> int:
+    """One invoice into QuickBooks and back out again, with nothing attached."""
+    from finance_ops_agent.cli.qbo_test import run_test_invoice
+    from finance_ops_agent.config import Config
+    from finance_ops_agent.domain.money import Hours
+
+    config = Config.from_env()
+    try:
+        hours = Hours.parse(args.hours)
+    except ValueError as error:
+        print(f"--hours should look like 156.00: {error}")
+        return 1
+    return run_test_invoice(
+        config,
+        consultant=args.consultant,
+        client=args.client,
+        period_end=args.period_end,
+        hours=hours,
+        cleanup=args.cleanup,
+        pdf_path=args.pdf,
+        item_id=args.item_id,
+    )
+
+
+SENT_ALREADY = ("invoice_sent", "client_paid")
+
+
+def _command_forget(args: argparse.Namespace) -> int:
+    """Put a timesheet back to never having arrived.
+
+    For testing: it takes out the item and the emails its timesheets came on,
+    because a message already stored is skipped on redelivery and the same
+    email would never be read again.
+    """
+    from finance_ops_agent.config import Config
+
+    data = args.data if args.data is not None else Config.from_env().data_dir
+    store = _open_store(data)
+    items = store.list_items()
+    if args.item_id is None:
+        if not items:
+            print(f"Nothing to forget in {data}.")
+            return 0
+        print(f"{len(items)} item(s) in {data}. Forget one with `fops forget <id>`:")
+        for item in items:
+            print(
+                f"  {item.id}: {item.consultant} at {item.client},"
+                f" {item.period.start} to {item.period.end} — {item.status.value}"
+            )
+        return 0
+
+    chosen = next((one for one in items if one.id == args.item_id), None)
+    if chosen is None:
+        print(f"There is no item {args.item_id}. Run `fops forget` to list them.")
+        return 1
+    if chosen.status.value in SENT_ALREADY and not args.force:
+        print(
+            f"Item {chosen.id} is {chosen.status.value}: its invoice reached the client."
+            " Forgetting it here changes nothing in QuickBooks or in the client's"
+            " inbox, and the agent would lose its own record of it."
+            " Use --force if that is really what you want."
+        )
+        return 1
+
+    gone = store.forget_item(chosen.id)
+    print(
+        f"Forgot item {gone.item_id}: {gone.consultant} at {gone.client},"
+        f" {gone.period_start} to {gone.period_end} (was {gone.status})."
+    )
+    for subject in gone.message_subjects:
+        print(f'  the email "{subject}" can be read again')
+    for number in gone.invoice_numbers:
+        print(f"  invoice {number} is no longer recorded here")
+    if gone.invoice_numbers:
+        print(
+            "  Those invoices, if they were ever made, are still in the accounting"
+            " system. Remove them there yourself."
+        )
+    if not gone.message_subjects:
+        print("  No stored email was tied to it, so nothing had to be freed up for redelivery.")
+    print("The timesheet's own file is still in the mailbox folder it was moved to.")
+    return 0
 
 
 def _command_backup(args: argparse.Namespace) -> int:
@@ -757,6 +891,10 @@ def main(argv: list[str] | None = None) -> int:
         return _command_run(args)
     if args.command == "qbo-connect":
         return _command_qbo_connect(args)
+    if args.command == "qbo-test-invoice":
+        return _command_qbo_test_invoice(args)
+    if args.command == "forget":
+        return _command_forget(args)
     if args.command == "backup":
         return _command_backup(args)
     if args.command == "restore":

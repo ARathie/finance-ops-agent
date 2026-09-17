@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connecting to QuickBooks — Icon Technologies Billing Agent</title>
+<style>
+  :root { color-scheme: light dark; --ink: #1a1a1a; --paper: #ffffff; --quiet: #5a5a5a; --rule: #e0e0e0; }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink: #e8e8e8; --paper: #161616; --quiet: #a0a0a0; --rule: #333; }
+  }
+  body { background: var(--paper); color: var(--ink); margin: 0;
+         font: 17px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  main { max-width: 42rem; margin: 0 auto; padding: 3rem 16px 5rem; }
+  h1 { font-size: 1.7rem; line-height: 1.25; margin: 0 0 .25rem; }
+  h2 { font-size: 1.15rem; margin: 2.25rem 0 .5rem; }
+  .date { color: var(--quiet); margin: 0 0 2rem; font-size: .95rem; }
+  ul { padding-left: 1.25rem; }
+  li { margin: .4rem 0; }
+  hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5rem 0; }
+  footer { color: var(--quiet); font-size: .95rem; }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Connecting to QuickBooks</h1>
+<p class="date"><a href="index.html">About</a> · <a href="connect.html">Connecting</a> · <a href="disconnect.html">Disconnecting</a> · <a href="eula.html">Licence</a> · <a href="privacy.html">Privacy</a></p>
+<p>Only Icon Technologies connects this agent, and only ever to Icon Technologies' own QuickBooks Online company. There is no sign-up, and no way for anyone else to connect it to theirs.</p>
+
+<h2>How it is done</h2>
+<p>Icon Technologies' administrator runs <code>fops qbo-connect</code> on the server the agent runs on. That opens Intuit's own sign-in page in a browser; the administrator signs in as Icon Technologies and approves the connection. Intuit sends the result back to a one-time listener on the server's own loopback address, and the agent stores the company id and the resulting tokens on that server, readable only by the account the agent runs as.</p>
+
+<p>The same command reconnects it. Connections need renewing if the agent has not run for an extended period, and the agent warns the administrator by email before that happens rather than waiting to fail.</p>
+
+<h2>What it asks for</h2>
+<p>Accounting access, which is what it needs to look up customers and products, create invoices, and read whether an invoice has been paid. Nothing else.</p>
+
+<hr>
+<footer>
+<p>Icon Technologies<br>
+5755 North Point Pkwy, Suite 28<br>
+Alpharetta, GA 30022<br>
+<a href="mailto:kevin@icon-technologies.com">kevin@icon-technologies.com</a></p>
+</footer>
+
+</main>
+</body>
+</html>

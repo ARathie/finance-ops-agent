@@ -6,9 +6,6 @@
         "status": 200,
         "json": {
           "QueryResponse": {}
-        },
-        "headers": {
-          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
         }
       }
     },
@@ -25,9 +22,6 @@
               }
             ]
           }
-        },
-        "headers": {
-          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
         }
       }
     },
@@ -45,9 +39,6 @@
               }
             ]
           }
-        },
-        "headers": {
-          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
         }
       }
     },
@@ -63,9 +54,6 @@
             "SyncToken": "0",
             "PrivateNote": "fops item 1"
           }
-        },
-        "headers": {
-          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
         }
       }
     },
@@ -73,9 +61,30 @@
       "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/invoice/145/pdf",
       "response": {
         "status": 200,
-        "content": "%PDF-1.4 quickbooks invoice",
-        "headers": {
-          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        "content": "%PDF-1.4 quickbooks invoice"
+      }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/invoice/145",
+      "response": {
+        "status": 200,
+        "json": {
+          "Invoice": {
+            "Id": "145",
+            "SyncToken": "0"
+          }
+        }
+      }
+    },
+    {
+      "key": "POST https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/invoice?operation=delete",
+      "response": {
+        "status": 200,
+        "json": {
+          "Invoice": {
+            "Id": "145",
+            "status": "Deleted"
+          }
         }
       }
     }

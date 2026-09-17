@@ -196,20 +196,45 @@ def check_quickbooks_customers(accounting: object, wanted: Callable[[], list[str
 
     def run() -> str:
         names = wanted()
-        missing: list[str] = []
+        problems: list[str] = []
         for customer in names:
             try:
                 accounting.customer_ref(customer)
-            except Exception:
-                missing.append(customer)
-        if missing:
+            except Exception as error:
+                # The reason matters: "spelled differently", "there are two of
+                # them", and "you are connected to the wrong company" all look
+                # the same once it is flattened to "missing".
+                problems.append(f"{customer}: {error}")
+        if problems:
             raise RuntimeError(
-                "QuickBooks has no customer called "
-                + ", ".join(repr(entry) for entry in missing)
-                + '. Add them in QuickBooks, or fix the "QuickBooks customer"'
-                " column in the engagement list."
+                f"I looked in {accounting.company} and could not use"
+                f" {len(problems)} of {len(names)} client name(s). " + " ".join(problems)
             )
-        return f"all {len(names)} client name(s) exist in QuickBooks"
+        return f"all {len(names)} client name(s) exist in {accounting.company}"
+
+    return _run(name, run)
+
+
+def check_quickbooks_products(accounting: object, wanted: Callable[[], list[str]]) -> Check:
+    """Every consultant the agent may invoice for must have their own product
+    in QuickBooks, with their rate on it: that rate is what is billed
+    (docs/decisions.md #30)."""
+    from finance_ops_agent.adapters.quickbooks.online import QuickBooksOnline
+
+    name = "quickbooks products"
+    assert isinstance(accounting, QuickBooksOnline)
+
+    def run() -> str:
+        names = wanted()
+        problems: list[str] = []
+        for consultant in names:
+            try:
+                accounting.product_for(consultant)
+            except Exception as error:
+                problems.append(f"{consultant}: {error}")
+        if problems:
+            raise RuntimeError("QuickBooks cannot price these consultants. " + " ".join(problems))
+        return f"all {len(names)} consultant(s) have a product with a rate"
 
     return _run(name, run)
 

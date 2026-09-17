@@ -22,6 +22,7 @@ def client_row(row_number: int = 2, **overrides: str) -> RawRow:
         "Names on timesheets": "Acme; ACME Corp.",
         "Email domains": "acme.example",
         "QuickBooks customer": "Acme Corporation",
+        "Invoice code": "AC",
         "Notes": "",
         "Active": "yes",
     }
@@ -32,6 +33,7 @@ def client_row(row_number: int = 2, **overrides: str) -> RawRow:
 def consultant_row(row_number: int = 2, **overrides: str) -> RawRow:
     cells = {
         "Consultant": "Priya Shah",
+        "Initials": "",
         "Other names": "P. Shah; Shah, Priya",
         "Email": "priya@example.com",
         "Type": "contractor",
@@ -116,6 +118,62 @@ class TestGoodWorkbook:
         consultant = parsed.consultants[0]
         assert consultant.type is ConsultantType.CONTRACTOR
         assert consultant.emails == ("priya@example.com",)
+
+
+class TestInvoiceCodes:
+    """The two letters every invoice number carries (decision 27). The agent
+    never invents one: MT does not follow from Mastec by any rule."""
+
+    def test_the_code_is_read_and_upper_cased(self) -> None:
+        parsed = parse_workbook(workbook(clients=[client_row(2, **{"Invoice code": "mt"})]))
+        assert parsed.clients[0].invoice_code == "MT"
+
+    def test_an_active_client_without_one_cannot_be_invoiced(self) -> None:
+        parsed = parse_workbook(workbook(clients=[client_row(4, **{"Invoice code": ""})]))
+        assert any("Invoice code" in m for m in problems_on(parsed.problems, "Clients", 4))
+        assert parsed.clients == []
+
+    def test_a_client_no_longer_active_is_left_alone(self) -> None:
+        parsed = parse_workbook(
+            workbook(clients=[client_row(4, **{"Invoice code": "", "Active": "no"})])
+        )
+        assert problems_on(parsed.problems, "Clients", 4) == []
+
+    def test_something_that_is_not_two_letters_is_refused(self) -> None:
+        parsed = parse_workbook(workbook(clients=[client_row(4, **{"Invoice code": "M1"})]))
+        assert any("two letters" in m for m in problems_on(parsed.problems, "Clients", 4))
+
+    def test_two_clients_cannot_share_a_code(self) -> None:
+        """Two clients sharing a code would put two different invoices under
+        one number, so it is caught in the workbook, not at invoicing time."""
+        parsed = parse_workbook(
+            workbook(
+                clients=[
+                    client_row(2, **{"Invoice code": "MT"}),
+                    client_row(3, Client="Mastec North", **{"Invoice code": "MT"}),
+                ]
+            )
+        )
+        assert any("already used by" in m for m in problems_on(parsed.problems, "Clients", 3))
+
+    def test_a_name_the_initials_cannot_come_from_asks_kevin(self) -> None:
+        parsed = parse_workbook(
+            workbook(
+                consultants=[consultant_row(6, Consultant="Prince")],
+                engagements=[engagement_row(2, Consultant="Prince")],
+            )
+        )
+        assert any("Initials" in m for m in problems_on(parsed.problems, "Consultants", 6))
+
+    def test_kevins_own_initials_settle_it(self) -> None:
+        parsed = parse_workbook(
+            workbook(
+                consultants=[consultant_row(6, Consultant="Prince", Initials="PR")],
+                engagements=[engagement_row(2, Consultant="Prince")],
+            )
+        )
+        assert problems_on(parsed.problems, "Consultants", 6) == []
+        assert parsed.consultants[0].initials == "PR"
 
 
 class TestBadRowsFromTheDocs:

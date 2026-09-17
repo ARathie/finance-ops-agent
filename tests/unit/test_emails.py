@@ -51,6 +51,8 @@ def worked_example_item() -> Item:
             engagement_row_number=2,
             role="Senior PeopleSoft Developer",
             client_legal_name="Acme Corporation",
+            client_invoice_code="AC",
+            consultant_code="PS",
         ),
         approved_hours=Hours(15_600),
         invoice_amount=Money(2_184_000),

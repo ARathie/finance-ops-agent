@@ -6,6 +6,9 @@
         "status": 200,
         "json": {
           "QueryResponse": {}
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
         }
       }
     },
@@ -22,11 +25,14 @@
               }
             ]
           }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
         }
       }
     },
     {
-      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20Id%2C%20Name%20FROM%20Item%20WHERE%20Name%20%3D%20%27Consulting%20Services%27",
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20Id%2C%20Name%2C%20UnitPrice%20FROM%20Item%20WHERE%20Name%20%3D%20%27Priya%20Shah%27",
       "response": {
         "status": 200,
         "json": {
@@ -34,10 +40,14 @@
             "Item": [
               {
                 "Id": "12",
-                "Name": "Consulting Services"
+                "Name": "Priya Shah",
+                "UnitPrice": 140.0
               }
             ]
           }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
         }
       }
     },
@@ -48,11 +58,14 @@
         "json": {
           "Invoice": {
             "Id": "146",
-            "DocNumber": "1043",
+            "DocNumber": "083126AC-PS",
             "TotalAmt": 23678.4,
             "SyncToken": "0",
             "PrivateNote": "fops item 1"
           }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
         }
       }
     },
@@ -63,11 +76,14 @@
         "json": {
           "Invoice": {
             "Id": "146",
-            "DocNumber": "1043",
+            "DocNumber": "083126AC-PS",
             "TotalAmt": 23678.4,
             "SyncToken": "0",
             "PrivateNote": "fops item 1"
           }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
         }
       }
     }

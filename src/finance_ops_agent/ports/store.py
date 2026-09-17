@@ -96,6 +96,11 @@ class Store(Protocol):
 
     def timesheets_for_item(self, item_id: int) -> list[TimesheetRecord]: ...
 
+    def message_ids_for_item(self, item_id: int) -> list[str]:
+        """The Message-IDs of the emails this item's timesheets arrived on, so
+        a review raised later can put them back in front of a person."""
+        ...
+
     # Reviews
 
     def open_review(self, item_id: int | None, code: str, message: str) -> bool:
@@ -163,7 +168,18 @@ class Store(Protocol):
 
     def invoices_for_item(self, item_id: int) -> list[InvoiceRecord]: ...
 
+    def invoice_number_in_use(self, number: str) -> bool:
+        """Has this invoice number been given out already? Cancelled invoices
+        still count: their number is spent, and the replacement takes the next
+        one (domain/invoice_numbers.py)."""
+        ...
+
     def set_invoice_status(self, external_id: str, status: str) -> None: ...
+
+    def set_invoice_number(self, external_id: str, number: str) -> None:
+        """Rename an invoice the agent already recorded (a cancelled one, so
+        its number comes free again -- docs/decisions.md #34)."""
+        ...
 
     def record_payment_instruction(self, record: PaymentInstructionRecord) -> bool:
         """Write down the payment instruction; False if one exists already."""

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Icon Technologies Billing Agent</title>
+<style>
+  :root { color-scheme: light dark; --ink: #1a1a1a; --paper: #ffffff; --quiet: #5a5a5a; --rule: #e0e0e0; }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink: #e8e8e8; --paper: #161616; --quiet: #a0a0a0; --rule: #333; }
+  }
+  body { background: var(--paper); color: var(--ink); margin: 0;
+         font: 17px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  main { max-width: 42rem; margin: 0 auto; padding: 3rem 16px 5rem; }
+  h1 { font-size: 1.7rem; line-height: 1.25; margin: 0 0 .25rem; }
+  h2 { font-size: 1.15rem; margin: 2.25rem 0 .5rem; }
+  .date { color: var(--quiet); margin: 0 0 2rem; font-size: .95rem; }
+  ul { padding-left: 1.25rem; }
+  li { margin: .4rem 0; }
+  hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5rem 0; }
+  footer { color: var(--quiet); font-size: .95rem; }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Icon Technologies billing agent</h1>
+<p class="date"><a href="index.html">About</a> · <a href="connect.html">Connecting</a> · <a href="disconnect.html">Disconnecting</a> · <a href="eula.html">Licence</a> · <a href="privacy.html">Privacy</a></p>
+<p>This is internal software built and operated by Icon Technologies for its own billing. It is not a product, it is not offered to anyone else, and there is nothing here to sign in to.</p>
+
+<p>The agent reads timesheets that consultants email to an Icon Technologies mailbox, checks them, prepares the matching client invoice in Icon Technologies' QuickBooks Online company, emails that invoice to the client with Icon Technologies' administrator copied, and tells the administrator what each consultant is owed. It never pays anyone and never moves money.</p>
+
+<p>It runs by itself on a server Icon Technologies controls. It has no web interface, no user accounts, and no public endpoint: it makes outgoing connections only, and the single QuickBooks company it connects to is Icon Technologies' own.</p>
+
+<h2>Why this site exists</h2>
+<p>Intuit asks every application that connects to QuickBooks Online for a public licence agreement, privacy policy, and pages describing connecting and disconnecting, whether or not the application has customers. These pages are those. The <a href="privacy.html">privacy policy</a> is the substantive one: it says what information the agent handles and which services it is shared with.</p>
+
+<h2>Questions</h2>
+<p>Write to <a href="mailto:kevin@icon-technologies.com">kevin@icon-technologies.com</a>.</p>
+
+<hr>
+<footer>
+<p>Icon Technologies<br>
+5755 North Point Pkwy, Suite 28<br>
+Alpharetta, GA 30022<br>
+<a href="mailto:kevin@icon-technologies.com">kevin@icon-technologies.com</a></p>
+</footer>
+
+</main>
+</body>
+</html>

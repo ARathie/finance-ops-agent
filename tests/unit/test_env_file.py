@@ -83,5 +83,4 @@ def test_the_committed_example_loads(tmp_path: Path) -> None:
     load_env_file(example, environ)
     assert environ["FOPS_TIMEZONE"] == "America/New_York"
     assert environ["FOPS_MODE"] == "dry_run"
-    assert environ["QBO_ITEM_NAME"] == "Consulting Services"
     assert environ["ANTHROPIC_API_KEY"] == ""

@@ -6,9 +6,15 @@
         "status": 200,
         "json": {
           "QueryResponse": {}
-        },
-        "headers": {
-          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20Id%2C%20DocNumber%2C%20TotalAmt%2C%20PrivateNote%2C%20Balance%20FROM%20Invoice%20WHERE%20TxnDate%20%3E%3D%20%272026-09-01%27%20ORDERBY%20TxnDate%20DESC%20MAXRESULTS%20100",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {}
         }
       }
     },
@@ -25,9 +31,6 @@
               }
             ]
           }
-        },
-        "headers": {
-          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
         }
       }
     },
@@ -45,9 +48,24 @@
               }
             ]
           }
-        },
-        "headers": {
-          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    },
+    {
+      "key": "POST https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/invoice",
+      "response": {
+        "status": 400,
+        "json": {
+          "Fault": {
+            "Error": [
+              {
+                "Message": "Duplicate Document Number Error",
+                "Detail": "Duplicate Document Number Error : You must specify a different number. This number has already been used.",
+                "code": "6140"
+              }
+            ],
+            "type": "ValidationFault"
+          }
         }
       }
     },
@@ -57,26 +75,20 @@
         "status": 200,
         "json": {
           "Invoice": {
-            "Id": "145",
-            "DocNumber": "083126AC-PS",
+            "Id": "146",
+            "DocNumber": "083126AC-PS-2",
             "TotalAmt": 21840.0,
             "SyncToken": "0",
             "PrivateNote": "fops item 1"
           }
-        },
-        "headers": {
-          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
         }
       }
     },
     {
-      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/invoice/145/pdf",
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/invoice/146/pdf",
       "response": {
         "status": 200,
-        "content": "%PDF-1.4 quickbooks invoice",
-        "headers": {
-          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
-        }
+        "content": "%PDF-1.4 quickbooks invoice"
       }
     }
   ]

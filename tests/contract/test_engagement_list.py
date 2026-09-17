@@ -32,11 +32,13 @@ CLIENT_HEADERS = [
     "Names on timesheets",
     "Email domains",
     "QuickBooks customer",
+    "Invoice code",
     "Notes",
     "Active",
 ]
 CONSULTANT_HEADERS = [
     "Consultant",
+    "Initials",
     "Other names",
     "Email",
     "Type",
@@ -74,11 +76,13 @@ CLIENT_VALUES = [
     "Acme; ACME Corp.",
     "acme.example",
     "Acme Corporation",
+    "AC",
     "",
     "yes",
 ]
 CONSULTANT_VALUES = [
     "Priya Shah",
+    "",
     "P. Shah",
     "priya@example.com",
     "contractor",

@@ -9,7 +9,7 @@ from finance_ops_agent.adapters.fakes.sender import FakeSender, SimulatedCrash
 from finance_ops_agent.application.context import Mode
 from finance_ops_agent.application.run import run_once
 from finance_ops_agent.domain.emails import OutgoingEmail
-from finance_ops_agent.domain.items import OutgoingRecord
+from finance_ops_agent.domain.items import InvoiceRecord, OutgoingRecord
 from finance_ops_agent.domain.money import Money
 from finance_ops_agent.domain.reading import ReplyAnswer, ReplyAnswerKind, ReplyReading
 from finance_ops_agent.domain.statuses import ItemStatus
@@ -157,17 +157,94 @@ class TestAskFirst:
         assert invoices[0].status == "sent"
         assert env.store.payment_instructions_for_item(item.id)
 
-    def test_cancel_stops_it(self, env: ScenarioEnv) -> None:
+    def test_kevin_is_shown_the_real_invoice_not_a_stand_in(self, env: ScenarioEnv) -> None:
+        """Decision 33: the rate comes off the product in QuickBooks and the
+        PDF is Kevin's own invoice template, so a stand-in drawn here would be
+        approving something other than what the client receives."""
+        env.mode = Mode.ASK_FIRST
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        [record] = env.store.invoices_for_item(item.id)
+        assert record.number == "083126AC-PS"
+        assert record.status == "created"
+
+        approval = next(
+            email for email in env.sender.sent_emails() if email.subject.startswith("Approve?")
+        )
+        names = [attachment.filename for attachment in approval.attachments]
+        assert "invoice-083126AC-PS.pdf" in names
+        assert "proposed-invoice.pdf" not in names
+        # Made, but not sent anywhere near a client.
+        assert not any(email.to == ("ap@acme.example",) for email in env.sender.sent_emails())
+
+    def test_approving_does_not_make_a_second_invoice(self, env: ScenarioEnv) -> None:
         env.mode = Mode.ASK_FIRST
         clean_timesheet(env)
         env.run()
         approval = next(s for s in env.sent_subjects() if s.startswith("Approve?"))
+
+        env.reply_from_kevin(approval, "approve")
+        env.run()
+
+        item = env.the_item()
+        assert [r.number for r in env.store.invoices_for_item(item.id)] == ["083126AC-PS"]
+
+    def test_cancel_stops_it_and_voids_the_invoice(self, env: ScenarioEnv) -> None:
+        """The invoice exists by the time Kevin sees it, and QuickBooks has no
+        drafts, so cancelling voids it rather than taking it back."""
+        env.mode = Mode.ASK_FIRST
+        clean_timesheet(env)
+        env.run()
+        approval = next(s for s in env.sent_subjects() if s.startswith("Approve?"))
+        [record] = env.store.invoices_for_item(env.the_item().id)
 
         env.reply_from_kevin(approval, "cancel — she was on leave")
         env.run()
 
         assert env.the_item().status is ItemStatus.CANCELLED
         assert not any(email.to == ("ap@acme.example",) for email in env.sender.sent_emails())
+        assert record.external_id in env.accounting.cancelled
+        assert env.store.invoices_for_item(env.the_item().id)[0].status == "cancelled"
+
+    def test_the_cancelled_invoice_gives_its_number_back(self, env: ScenarioEnv) -> None:
+        """QuickBooks will not reuse a number a voided invoice still holds, so
+        the voided one is renamed and the replacement gets the month's real
+        number rather than the next one along (decision 34)."""
+        env.mode = Mode.ASK_FIRST
+        clean_timesheet(env)
+        env.run()
+        approval = next(s for s in env.sent_subjects() if s.startswith("Approve?"))
+        [first] = env.store.invoices_for_item(env.the_item().id)
+        assert first.number == "083126AC-PS"
+
+        env.reply_from_kevin(approval, "cancel")
+        env.run()
+
+        assert env.accounting.renamed[first.external_id] == "083126AC-PS-VOID"
+        [cancelled] = env.store.invoices_for_item(env.the_item().id)
+        assert cancelled.number == "083126AC-PS-VOID"
+        assert cancelled.status == "cancelled"
+        # Which is the whole point: the name is free again.
+        assert not env.store.invoice_number_in_use("083126AC-PS")
+
+    def test_a_void_that_fails_still_cancels_and_tells_kevin(self, env: ScenarioEnv) -> None:
+        from finance_ops_agent.ports.accounting import AccountingFailed
+
+        env.mode = Mode.ASK_FIRST
+        clean_timesheet(env)
+        env.run()
+        approval = next(s for s in env.sent_subjects() if s.startswith("Approve?"))
+
+        env.accounting.fail_with = AccountingFailed("that invoice is already paid")
+        env.reply_from_kevin(approval, "cancel")
+        env.run()
+
+        assert env.the_item().status is ItemStatus.CANCELLED  # Kevin said so
+        review = next(r for r in env.store.open_reviews() if r.code == "QUICKBOOKS_FAILED")
+        assert "void it there by hand" in review.message.lower()
+        assert "already paid" in review.message
 
     def test_anything_else_gets_a_short_reply_asking_for_one_of_the_two_words(
         self, env: ScenarioEnv
@@ -266,7 +343,14 @@ class TestAutomatic:
         september = next(i for i in env.store.list_items() if i.period.start == date(2026, 9, 1))
         assert env.store.get_item(september.id).status is ItemStatus.WAITING_FOR_APPROVAL
         assert any("25% away from the recent invoices" in line for line in report.lines)
-        assert env.store.invoices_for_item(september.id) == []
+        # The invoice exists, because Kevin is shown the real one (decision 33),
+        # but nothing about September has gone to the client.
+        billing = [
+            record
+            for record in env.store.outgoing_records()
+            if record.kind == "billing_email" and record.item_id == september.id
+        ]
+        assert billing == []
 
 
 def _auto_clean_timesheet(env: ScenarioEnv) -> None:
@@ -326,7 +410,7 @@ class TestNeverTwice:
         env.now = env.deps().clock.now() + timedelta(minutes=11)
         env.run()
         assert "SEND_UNCERTAIN" in {review.code for review in env.store.open_reviews()}
-        question = _question_about(env, "invoice FAKE-1")
+        question = _question_about(env, "invoice 083126AC-PS")
         assert _billing_emails_sent(env.sender) == []
 
         # Kevin never got it and says so: the same email goes out under the same Message-ID.
@@ -357,7 +441,7 @@ class TestNeverTwice:
         assert _billing_record(env).status == "in_flight"
         env.now = env.deps().clock.now() + timedelta(minutes=11)
         env.run()
-        question = _question_about(env, "invoice FAKE-1")
+        question = _question_about(env, "invoice 083126AC-PS")
         assert "SEND_UNCERTAIN" in {review.code for review in env.store.open_reviews()}
 
         # Kevin was on CC and got it.
@@ -365,7 +449,7 @@ class TestNeverTwice:
         env.run()
         assert _billing_record(env).status == "done"
         assert len(_billing_emails_sent(recovered)) == 1, "the billing email went out exactly once"
-        assert not any("invoice FAKE-1" in r.message for r in env.store.open_reviews())
+        assert not any("invoice 083126AC-PS" in r.message for r in env.store.open_reviews())
         assert not any("Needs your review" in s for s in env.sent_subjects()[-1:])
 
     def test_a_copy_in_sent_settles_it_without_asking(self, env: ScenarioEnv) -> None:
@@ -390,7 +474,7 @@ class TestNeverTwice:
         _crash_on_the_billing_email(env, crash_before_send=True)
         env.now = env.deps().clock.now() + timedelta(minutes=11)
         env.run()
-        question = _question_about(env, "invoice FAKE-1")
+        question = _question_about(env, "invoice 083126AC-PS")
 
         env.reply_from_kevin(question, "not sure, let me check")
         env.run()
@@ -530,6 +614,190 @@ class TestReviewReplies:
         assert item.status is ItemStatus.READY
         assert item.approved_hours is not None
         assert str(item.approved_hours) == "150.00"  # the corrected hours
+
+
+class TestInvoiceNumbering:
+    """Kevin's number, end to end: docs/engagement-list.md and decision 27."""
+
+    def test_the_invoice_carries_kevins_number(self, env: ScenarioEnv) -> None:
+        from tests.scenarios.conftest import engagement_row
+
+        env.mode = Mode.AUTO
+        env.workbook.engagements[0] = engagement_row(2, **{"Send automatically": "yes"})
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        invoices = env.store.invoices_for_item(item.id)
+        assert [record.number for record in invoices] == ["083126AC-PS"]
+        # What the client sees on the email is the same number.
+        billing = next(e for e in env.sender.sent_emails() if e.to == ("ap@acme.example",))
+        assert "083126AC-PS" in billing.subject
+        assert any(a.filename == "invoice-083126AC-PS.pdf" for a in billing.attachments)
+
+    def test_a_replacement_takes_the_next_number_along(self, env: ScenarioEnv) -> None:
+        """A correction covers the same period, so the plain number is spent."""
+        from finance_ops_agent.application import outgoing
+
+        clean_timesheet(env)
+        env.run()
+        item = env.the_item()
+        env.store.record_invoice(
+            InvoiceRecord(
+                id=0,
+                item_id=item.id,
+                number="083126AC-PS",
+                external_id="ext-1",
+                amount_cents=2_184_000,
+                issue_date=env.today,
+                due_date=env.today,
+                pdf_sha256=None,
+                status="cancelled",
+                replaces_number=None,
+            )
+        )
+
+        assert outgoing.next_invoice_number(env.deps(), item) == "083126AC-PS-2"
+
+    def test_a_client_with_no_code_is_asked_about_rather_than_guessed_at(
+        self, env: ScenarioEnv
+    ) -> None:
+        """The failure path: an item whose engagement row never gave a code
+        (one stored before Kevin filled the column in) is never invoiced under
+        a made-up number."""
+        from dataclasses import replace as dc_replace
+
+        from finance_ops_agent.application import outgoing
+
+        clean_timesheet(env)
+        env.run()
+        item = env.the_item()
+        without_code = dc_replace(
+            item, snapshot=item.snapshot.model_copy(update={"client_invoice_code": ""})
+        )
+
+        assert outgoing.next_invoice_number(env.deps(), without_code) is None
+        review = env.store.open_reviews()[-1]
+        assert review.code == "LIST_ROW_PROBLEM"
+        assert "Invoice code" in review.message
+        assert "Nothing was created or sent." in review.message
+
+    def test_a_consultant_whose_initials_are_unknown_is_asked_about(self, env: ScenarioEnv) -> None:
+        from dataclasses import replace as dc_replace
+
+        from finance_ops_agent.application import outgoing
+
+        clean_timesheet(env)
+        env.run()
+        item = env.the_item()
+        without_initials = dc_replace(
+            item, snapshot=item.snapshot.model_copy(update={"consultant_code": ""})
+        )
+
+        assert outgoing.next_invoice_number(env.deps(), without_initials) is None
+        assert "initials" in env.store.open_reviews()[-1].message
+
+
+class TestWhenQuickBooksIsUnhappy:
+    """A QuickBooks problem is a question for Kevin, not the end of the run
+    (docs/timesheet-checks.md: QUICKBOOKS_FAILED and QUICKBOOKS_RECONNECT)."""
+
+    def _auto(self, env: ScenarioEnv) -> None:
+        from tests.scenarios.conftest import engagement_row
+
+        env.mode = Mode.AUTO
+        env.workbook.engagements[0] = engagement_row(2, **{"Send automatically": "yes"})
+        clean_timesheet(env)
+
+    def test_a_refusal_becomes_a_review_and_nothing_reaches_the_client(
+        self, env: ScenarioEnv
+    ) -> None:
+        from finance_ops_agent.ports.accounting import AccountingFailed
+
+        self._auto(env)
+        env.accounting.fail_with = AccountingFailed("Business Validation Error: no such account")
+        report = env.run()
+
+        review = next(r for r in env.store.open_reviews() if r.code == "QUICKBOOKS_FAILED")
+        assert "Priya Shah" in review.message
+        assert "no such account" in review.message  # what QuickBooks actually said
+        assert "nothing went to the client" in review.message
+        # No invoice, no billing email, and the item is still waiting to be one.
+        assert env.store.invoices_for_item(env.the_item().id) == []
+        assert [e for e in env.sender.sent_emails() if e.to == ("ap@acme.example",)] == []
+        assert env.the_item().status is not ItemStatus.INVOICE_SENT
+        assert report.invoices_created == 0
+
+    def test_a_clean_timesheet_is_filed_as_processed(self, env: ScenarioEnv) -> None:
+        from finance_ops_agent.ports.inbox import PROCESSED_FOLDER
+
+        self._auto(env)
+        env.run()
+
+        [message_id] = env.store.message_ids_for_item(env.the_item().id)
+        assert env.mailbox.folders[message_id] == PROCESSED_FOLDER
+
+    def test_the_timesheet_email_goes_back_in_front_of_a_person(self, env: ScenarioEnv) -> None:
+        """A timesheet that reads cleanly is filed as processed while it is
+        read, long before the invoice is made. When the invoice then fails,
+        that email would be sitting in the processed folder saying nothing is
+        wrong, so it is moved (decision 35)."""
+        from finance_ops_agent.ports.accounting import AccountingFailed
+        from finance_ops_agent.ports.inbox import NEEDS_REVIEW_FOLDER
+
+        self._auto(env)
+        env.accounting.fail_with = AccountingFailed("Duplicate Document Number Error")
+        env.run()
+
+        item = env.the_item()
+        [message_id] = env.store.message_ids_for_item(item.id)
+        assert env.mailbox.folders[message_id] == NEEDS_REVIEW_FOLDER
+        assert any(r.code == "QUICKBOOKS_FAILED" for r in env.store.open_reviews())
+
+    def test_a_dead_connection_is_asked_about_once_not_once_per_item(
+        self, env: ScenarioEnv
+    ) -> None:
+        """Asking again per item would mean another go at the token endpoint
+        each time, which is exactly what Intuit asks apps not to do."""
+        from finance_ops_agent.ports.accounting import AccountingNeedsReconnect
+
+        self._auto(env)
+        env.accounting.fail_with = AccountingNeedsReconnect("the refresh token has expired")
+        report = env.run()
+
+        assert report.quickbooks_unavailable
+        assert env.accounting.create_attempts == 1
+        review = next(r for r in env.store.open_reviews() if r.code == "QUICKBOOKS_RECONNECT")
+        assert "fops qbo-connect" in review.message
+        assert env.store.invoices_for_item(env.the_item().id) == []
+
+    def test_the_rest_of_the_run_still_happens(self, env: ScenarioEnv) -> None:
+        """The timesheet was still read and Kevin still hears about it. The
+        payment instruction waits for the invoice, as it does in every mode
+        that makes one: it is enqueued alongside it."""
+        from finance_ops_agent.ports.accounting import AccountingNeedsReconnect
+
+        self._auto(env)
+        env.accounting.fail_with = AccountingNeedsReconnect("the refresh token has expired")
+        env.run()
+
+        assert any(s.startswith("Timesheet received") for s in env.sent_subjects())
+        assert any(s.startswith("Needs your review") for s in env.sent_subjects())
+        assert not any(s.startswith("Payment due") for s in env.sent_subjects())
+
+    def test_it_recovers_on_the_next_run(self, env: ScenarioEnv) -> None:
+        from finance_ops_agent.ports.accounting import AccountingNeedsReconnect
+
+        self._auto(env)
+        env.accounting.fail_with = AccountingNeedsReconnect("the refresh token has expired")
+        env.run()
+
+        env.accounting.fail_with = None  # Kevin ran fops qbo-connect
+        env.run()
+
+        item = env.the_item()
+        assert item.status is ItemStatus.INVOICE_SENT
+        assert [r.number for r in env.store.invoices_for_item(item.id)] == ["083126AC-PS"]
 
 
 class TestMondaySummary:

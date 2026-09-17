@@ -42,7 +42,7 @@ An item starts as `waiting_for_timesheet` (the period ended and nothing has arri
 | | `cancelled` | Kevin cancels it. |
 | `waiting_for_approval` | `invoice_sent` | Kevin replies "approve". |
 | | `needs_review` | Sending failed after Kevin approved, or a corrected timesheet arrived. |
-| | `cancelled` | Kevin replies "cancel". |
+| | `cancelled` | Kevin replies "cancel". The invoice exists by then -- he was shown the real one (decision 33) -- so it is voided in QuickBooks and its number stays spent. |
 | `invoice_sent` | `client_paid` | QuickBooks Online shows it paid, or Kevin says so. |
 | | `needs_review` | A corrected timesheet arrived after the invoice went out. |
 | `client_paid`, `ignored`, `cancelled` | — | Final. Nothing changes these. |

@@ -7,7 +7,9 @@ as today.
 """
 
 from finance_ops_agent.application.context import RunDeps, RunReport
+from finance_ops_agent.domain.review import ReviewCode
 from finance_ops_agent.domain.statuses import ItemStatus
+from finance_ops_agent.ports.accounting import AccountingFailed, AccountingNeedsReconnect
 
 LAST_PAID_CHECK_KEY = "last_paid_check"
 
@@ -26,7 +28,28 @@ def check_paid_invoices(deps: RunDeps, report: RunReport, force: bool = False) -
     if not unpaid:
         deps.store.set_state(LAST_PAID_CHECK_KEY, today)
         return
-    paid = deps.accounting.paid_status(list(unpaid))
+    try:
+        paid = deps.accounting.paid_status(list(unpaid))
+    except AccountingFailed as error:
+        # Not knowing whether a client has paid is worth telling Kevin about,
+        # but it is not worth stopping the run for, and the day is deliberately
+        # not marked done so the next run asks again.
+        reconnect = isinstance(error, AccountingNeedsReconnect)
+        if reconnect:
+            report.quickbooks_unavailable = True
+        code = ReviewCode.QUICKBOOKS_RECONNECT if reconnect else ReviewCode.QUICKBOOKS_FAILED
+        opened = deps.store.open_review(
+            None,
+            code.value,
+            "I could not ask QuickBooks which invoices have been paid, so the"
+            " tracking sheet may be behind. Nothing else is affected."
+            + (" Run `fops qbo-connect` to reconnect." if reconnect else "")
+            + f" QuickBooks said: {error}",
+        )
+        if opened:
+            report.reviews_opened += 1
+        report.note(f"could not check paid invoices: {error}")
+        return
     for external_id, is_paid in paid.items():
         if not is_paid:
             continue

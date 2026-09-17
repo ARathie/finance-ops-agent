@@ -197,7 +197,21 @@ grep '"what": "review opened"' data/fops.log            # everything the agent a
 
 ## Backups
 
-`fops backup` writes `data/backups/fops-backup-YYYY-MM-DD.zip` containing everything the agent cannot rebuild: the database, the stored timesheets and invoice PDFs, the QuickBooks tokens, and the mailbox position. It checkpoints the database first, so the copy is complete rather than missing the last few minutes of work.
+## The agent's mail folders
+
+`Agent/Processed`, `Agent/Needs Review` and `Agent/Ignored` say what the agent made of each message: read and used, could not use, set aside. They are a courtesy for a person looking at the mailbox -- the database is the record -- and they do not track where an invoice has got to. A timesheet read cleanly is filed as processed before its invoice is made.
+
+When something goes wrong afterwards, though, the email is moved back to `Needs Review` (decision 35), so a message in the processed folder never means "the invoice went out". To see where an invoice has got to, use `fops status`, the tracking sheet, or the Monday summary.
+
+## Putting a timesheet through again (testing)
+
+`fops forget` lists the timesheet items the agent is holding, with their ids. `fops forget <id>` takes one out along with everything about it -- its timesheets, invoices, payment instructions, reviews, outgoing rows and history -- **and the stored emails its timesheets came on**, because a message the agent has already stored is skipped on redelivery, so leaving them would mean the same email is never read again.
+
+It is a testing tool. It refuses an item whose invoice actually reached the client (`--force` overrides), because forgetting it here changes nothing in QuickBooks or in the client's inbox and only loses the agent's own record. Invoices already made in the accounting system are named on the way out and have to be removed there by hand.
+
+Two things it does not do. The timesheet file itself is still in whichever mailbox folder the agent moved it to (`INBOX.Agent.Processed`), so move it back to the inbox or forward a fresh copy to send it through again. And the stored attachment files under `data/` stay where they are: they are named by their contents, nothing points at them once the rows are gone, and deleting one another item shares would be worse than leaving an orphan.
+
+Take a backup first. `fops backup` writes `data/backups/fops-backup-YYYY-MM-DD.zip` containing everything the agent cannot rebuild: the database, the stored timesheets and invoice PDFs, the QuickBooks tokens, and the mailbox position. It checkpoints the database first, so the copy is complete rather than missing the last few minutes of work.
 
 - In stage 2, `fops serve` runs the backup nightly and uploads it to the bucket in `FOPS_BACKUP_TARGET`; daily backups are kept 90 days and the first of each month forever (financial records). In stage 1, copy the zip somewhere off the Mac; if that is OneDrive or SharePoint, turn **Files On Demand off** for that folder, or the "backup" is a placeholder that points at the machine you are backing up.
 - **Try a restore now and then**, say once a quarter, on a scratch machine. `fops restore <zip>` unpacks into an empty data folder and refuses to overwrite one that is not empty (`--force` if you mean it). A backup nobody has restored is not a backup.
