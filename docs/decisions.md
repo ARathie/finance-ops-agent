@@ -237,3 +237,17 @@ Consequences:
 - A guardrail that sends an automatic item to ask first now also makes the invoice first. The guarantee that matters is untouched: nothing reaches a client without Kevin.
 
 This reverses the "never before" rule in `integrations/quickbooks-online.md`, which came from decision 11 when the agent rendered its own invoices and QuickBooks Online was a plan rather than a thing Kevin had set up.
+
+## 34. A cancelled invoice is renamed, so its number comes free
+
+QuickBooks will not let a new invoice take a number that another invoice already holds, and a voided invoice still holds its own. So under decision 33, where the invoice exists before Kevin sees it, cancelling one would have pushed the replacement to `083126MT-PS-2` -- for the same consultant, the same client and the same month. The number is meant to say which month's work it is for, and a correction is not a different month.
+
+Decision: cancelling an invoice **renames it to `083126MT-PS-VOID` and then voids it**, in that order. The real number is free again, and the replacement is `083126MT-PS`.
+
+- **The rename happens first**, while the invoice is still an ordinary one. A voided invoice is not something to count on being editable, and the number cannot come free until something else holds it.
+- **A rename that fails does not stop the void.** An invoice Kevin cancelled must not survive because its number could not be changed; the number stays spent and the replacement takes the next one along, which is untidy rather than wrong.
+- **A second void of the same number** becomes `-VOID2`, and so on; the agent asks its own records which names are taken.
+- **The name is renamed in the agent's records too**, so manual mode behaves the same way and the `-2` logic sees the number as free.
+- **`find_invoice` ignores a voided number.** After a crash the agent asks QuickBooks whether it already made this item's invoice, matching on the item id in the private note -- which a cancelled invoice still carries. One the agent cancelled is not an answer to that question, and without this the replacement would have been the voided invoice.
+
+`-VOID` is the agent's own marker rather than anything QuickBooks defines, which is why `is_voided_number` in `domain/invoice_numbers.py` is the single place that decides what one looks like.

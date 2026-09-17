@@ -17,7 +17,7 @@ from finance_ops_agent.application.context import Mode, RunDeps, RunReport
 from finance_ops_agent.domain import emails
 from finance_ops_agent.domain.emails import EmailAttachment, OutgoingEmail
 from finance_ops_agent.domain.guardrails import GuardrailCheck, check_guardrails
-from finance_ops_agent.domain.invoice_numbers import invoice_number
+from finance_ops_agent.domain.invoice_numbers import invoice_number, voided_number
 from finance_ops_agent.domain.invoices import Invoice, build_invoice
 from finance_ops_agent.domain.items import (
     InvoiceRecord,
@@ -290,6 +290,15 @@ def prepare_invoice(deps: RunDeps, item: Item, report: RunReport) -> PreparedInv
     return PreparedInvoice(invoice=invoice, created=created, attachments=attachments)
 
 
+def _voided_name_for(deps: RunDeps, number: str) -> str:
+    """`083126MT-PS` becomes `083126MT-PS-VOID`, or -VOID2 if that is taken."""
+    for attempt in range(1, MAX_NUMBER_ATTEMPTS + 1):
+        candidate = voided_number(number, attempt)
+        if not deps.store.invoice_number_in_use(candidate):
+            return candidate
+    return voided_number(number, MAX_NUMBER_ATTEMPTS)
+
+
 def cancel_invoices(deps: RunDeps, item: Item, report: RunReport) -> None:
     """Void whatever was already made for this item.
 
@@ -301,8 +310,12 @@ def cancel_invoices(deps: RunDeps, item: Item, report: RunReport) -> None:
     for record in deps.store.invoices_for_item(item.id):
         if record.status == "cancelled":
             continue
+        # Renamed as well as voided, so the number it was using comes free and
+        # the replacement is the right number for the month rather than the
+        # next one along (docs/decisions.md #34).
+        renamed = _voided_name_for(deps, record.number)
         try:
-            deps.accounting.cancel_invoice(record.external_id)
+            deps.accounting.cancel_invoice(record.external_id, renamed)
         except AccountingFailed as error:
             message = (
                 f"Kevin cancelled {item.consultant} at {item.client}, but I could not"
@@ -319,8 +332,9 @@ def cancel_invoices(deps: RunDeps, item: Item, report: RunReport) -> None:
                 )
             report.note(f"could not void invoice {record.number}: {error}")
             continue
+        deps.store.set_invoice_number(record.external_id, renamed)
         deps.store.set_invoice_status(record.external_id, "cancelled")
-        report.note(f"voided invoice {record.number}")
+        report.note(f"voided invoice {record.number}, which is now {renamed}")
 
 
 def approve_item(deps: RunDeps, item: Item, report: RunReport) -> None:

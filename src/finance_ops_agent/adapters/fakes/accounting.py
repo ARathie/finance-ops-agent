@@ -13,6 +13,7 @@ class FakeAccounting:
     def __init__(self) -> None:
         self.invoices: dict[int, CreatedInvoice] = {}
         self.cancelled: list[str] = []
+        self.renamed: dict[str, str] = {}
         self.paid: set[str] = set()
         self.asked: list[str] = []
         # Tests set these to make the accounting system misbehave the way a
@@ -41,10 +42,12 @@ class FakeAccounting:
             return None
         return created
 
-    def cancel_invoice(self, external_id: str) -> None:
+    def cancel_invoice(self, external_id: str, renamed_to: str | None = None) -> None:
         if self.fail_with is not None:
             raise self.fail_with
         self.cancelled.append(external_id)
+        if renamed_to is not None:
+            self.renamed[external_id] = renamed_to
 
     def paid_status(self, external_ids: list[str]) -> dict[str, bool]:
         if self.fail_with is not None:

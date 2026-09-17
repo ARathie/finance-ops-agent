@@ -1,0 +1,43 @@
+{
+  "exchanges": [
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/invoice/145",
+      "response": {
+        "status": 200,
+        "json": {
+          "Invoice": {
+            "Id": "145",
+            "SyncToken": "0",
+            "DocNumber": "083126AC-PS"
+          }
+        }
+      }
+    },
+    {
+      "key": "POST https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/invoice",
+      "response": {
+        "status": 200,
+        "json": {
+          "Invoice": {
+            "Id": "145",
+            "SyncToken": "1",
+            "DocNumber": "083126AC-PS-VOID"
+          }
+        }
+      }
+    },
+    {
+      "key": "POST https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/invoice?operation=void",
+      "response": {
+        "status": 200,
+        "json": {
+          "Invoice": {
+            "Id": "145",
+            "SyncToken": "2",
+            "DocNumber": "083126AC-PS-VOID"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -171,6 +171,11 @@ class Store(Protocol):
 
     def set_invoice_status(self, external_id: str, status: str) -> None: ...
 
+    def set_invoice_number(self, external_id: str, number: str) -> None:
+        """Rename an invoice the agent already recorded (a cancelled one, so
+        its number comes free again -- docs/decisions.md #34)."""
+        ...
+
     def record_payment_instruction(self, record: PaymentInstructionRecord) -> bool:
         """Write down the payment instruction; False if one exists already."""
         ...

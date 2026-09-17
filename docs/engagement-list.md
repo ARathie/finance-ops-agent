@@ -84,7 +84,7 @@ Every invoice number is `<MMDDYY><client code>-<consultant code>`, so August's i
 - **The consultant code** is their initials: `PS` for Priya Shah. Fill in **Initials** on their row only when the agent should not work it out from the name; a name it cannot take initials from (a single word, say) is a question for Kevin rather than a guess.
 - **When two consultants at the same client have the same initials**, both of them get the first initial and the whole last name instead: Priya Shah becomes `PSHAH` and Paul Singh `PSINGH`. It happens only where the clash is, so Priya Shah is still `PS` at every other client, and only from the next invoice onwards -- invoices already sent keep the number they were sent under.
 
-One invoice per consultant per client per month means that number is unique by itself. The one exception is a correction: a replacement invoice covers the same period as the one it replaces, so it takes the next number along, `083126MT-PS-2`.
+One invoice per consultant per client per month means that number is unique by itself. A correction keeps it: the cancelled invoice is renamed `083126MT-PS-VOID`, which hands the number back, so the replacement is `083126MT-PS` again. Only if that renaming cannot be done does the replacement take the next number along, `083126MT-PS-2`.
 
 ## Standing in for a real address while testing
 

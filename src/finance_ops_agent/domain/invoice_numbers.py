@@ -26,6 +26,7 @@ from collections.abc import Mapping
 from datetime import date
 
 MAX_LENGTH = 21  # QuickBooks Online's limit for DocNumber
+VOID_MARKER = "-VOID"
 CLIENT_CODE_LENGTH = 2
 
 
@@ -78,6 +79,26 @@ def codes_for_client(consultants: Mapping[str, str]) -> dict[str, str]:
             continue
         resolved[name] = with_last_name(name) or code
     return resolved
+
+
+def voided_number(number: str, attempt: int = 1) -> str:
+    """What a cancelled invoice is renamed to, so its number comes free.
+
+    QuickBooks will not let a second invoice take a number another invoice
+    already has, even a voided one. Renaming the voided invoice to
+    `083126MT-PS-VOID` before voiding it hands the real number back, so the
+    replacement is `083126MT-PS` again rather than `083126MT-PS-2` -- the
+    number says which month's work it is for, and a correction should not
+    change that.
+    """
+    suffix = VOID_MARKER if attempt <= 1 else f"{VOID_MARKER}{attempt}"
+    return f"{number[: MAX_LENGTH - len(suffix)]}{suffix}"
+
+
+def is_voided_number(number: str) -> bool:
+    """Ours, and already cancelled: never to be mistaken for a live invoice."""
+    base, _, tail = number.rpartition("-")
+    return bool(base) and tail.startswith("VOID")
 
 
 def invoice_number(

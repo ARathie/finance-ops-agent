@@ -536,6 +536,13 @@ class SqliteStore:
                 is not None
             )
 
+    def set_invoice_number(self, external_id: str, number: str) -> None:
+        with Session(self._engine) as session, session.begin():
+            for row in session.scalars(
+                select(InvoiceRow).where(InvoiceRow.external_id == external_id)
+            ):
+                row.number = number
+
     def set_invoice_status(self, external_id: str, status: str) -> None:
         with Session(self._engine) as session, session.begin():
             for row in session.scalars(

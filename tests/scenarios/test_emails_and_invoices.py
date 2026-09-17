@@ -208,6 +208,27 @@ class TestAskFirst:
         assert record.external_id in env.accounting.cancelled
         assert env.store.invoices_for_item(env.the_item().id)[0].status == "cancelled"
 
+    def test_the_cancelled_invoice_gives_its_number_back(self, env: ScenarioEnv) -> None:
+        """QuickBooks will not reuse a number a voided invoice still holds, so
+        the voided one is renamed and the replacement gets the month's real
+        number rather than the next one along (decision 34)."""
+        env.mode = Mode.ASK_FIRST
+        clean_timesheet(env)
+        env.run()
+        approval = next(s for s in env.sent_subjects() if s.startswith("Approve?"))
+        [first] = env.store.invoices_for_item(env.the_item().id)
+        assert first.number == "083126AC-PS"
+
+        env.reply_from_kevin(approval, "cancel")
+        env.run()
+
+        assert env.accounting.renamed[first.external_id] == "083126AC-PS-VOID"
+        [cancelled] = env.store.invoices_for_item(env.the_item().id)
+        assert cancelled.number == "083126AC-PS-VOID"
+        assert cancelled.status == "cancelled"
+        # Which is the whole point: the name is free again.
+        assert not env.store.invoice_number_in_use("083126AC-PS")
+
     def test_a_void_that_fails_still_cancels_and_tells_kevin(self, env: ScenarioEnv) -> None:
         from finance_ops_agent.ports.accounting import AccountingFailed
 

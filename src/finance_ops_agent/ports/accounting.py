@@ -49,6 +49,13 @@ class AccountingSystem(Protocol):
 
     def find_invoice(self, item_id: int) -> CreatedInvoice | None: ...
 
-    def cancel_invoice(self, external_id: str) -> None: ...
+    def cancel_invoice(self, external_id: str, renamed_to: str | None = None) -> None:
+        """Cancel it, renaming it first where the accounting system can.
+
+        `renamed_to` is what the cancelled invoice should be called instead, so
+        its real number comes free for the replacement (docs/decisions.md #34).
+        QuickBooks will not reuse a number a voided invoice still holds.
+        """
+        ...
 
     def paid_status(self, external_ids: list[str]) -> dict[str, bool]: ...

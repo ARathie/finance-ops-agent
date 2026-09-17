@@ -269,6 +269,12 @@ class FakeStore:
     def invoice_number_in_use(self, number: str) -> bool:
         return any(record.number == number for record in self._invoices)
 
+    def set_invoice_number(self, external_id: str, number: str) -> None:
+        self._invoices = [
+            replace(record, number=number) if record.external_id == external_id else record
+            for record in self._invoices
+        ]
+
     def set_invoice_status(self, external_id: str, status: str) -> None:
         self._invoices = [
             replace(record, status=status) if record.external_id == external_id else record

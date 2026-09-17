@@ -417,6 +417,93 @@ class TestTheDoctorCheck:
         assert f"the sandbox company {REALM}" in check.detail
 
 
+class TestCancelling:
+    """Renamed first, then voided: QuickBooks will not give a number back while
+    any invoice still holds it, and a voided one is not something to count on
+    being editable (decision 34)."""
+
+    BASE = f"https://sandbox-quickbooks.api.intuit.com/v3/company/{REALM}"
+
+    def test_the_invoice_is_renamed_before_it_is_voided(self, tmp_path: Path) -> None:
+        replay = replay_from("void_after_renaming")
+        accounting, _, _ = build(replay, tmp_path)
+
+        accounting.cancel_invoice("145", renamed_to="083126AC-PS-VOID")
+
+        methods = [f"{method} {url.split('/company/')[1]}" for method, url in replay.calls]
+        assert methods == [
+            f"GET {REALM}/invoice/145",
+            f"POST {REALM}/invoice",  # the rename, while it is still live
+            f"POST {REALM}/invoice?operation=void",
+        ]
+        rename, void = replay.bodies[0], replay.bodies[1]
+        assert rename == {
+            "Id": "145",
+            "SyncToken": "0",
+            "sparse": True,
+            "DocNumber": "083126AC-PS-VOID",
+        }
+        # Voided with the sync token the rename handed back, not the stale one.
+        assert void == {"Id": "145", "SyncToken": "1"}
+
+    def test_a_rename_that_fails_does_not_stop_the_void(self, tmp_path: Path) -> None:
+        """An invoice Kevin cancelled must not survive because its number could
+        not be changed. The number stays spent, which is untidy, not wrong."""
+        replay = Replay(
+            {
+                f"GET {TestCancelling.BASE}/invoice/145": [
+                    {"status": 200, "json": {"Invoice": {"Id": "145", "SyncToken": "0"}}}
+                ],
+                f"POST {TestCancelling.BASE}/invoice": [
+                    {"status": 400, "json": {"Fault": {"Error": [{"Message": "no"}]}}}
+                ],
+                f"POST {TestCancelling.BASE}/invoice?operation=void": [
+                    {"status": 200, "json": {"Invoice": {"Id": "145"}}}
+                ],
+            }
+        )
+        accounting, _, _ = build(replay, tmp_path)
+
+        accounting.cancel_invoice("145", renamed_to="083126AC-PS-VOID")
+
+        assert any("operation=void" in url for _, url in replay.calls)
+        assert replay.bodies[-1] == {"Id": "145", "SyncToken": "0"}
+
+    def test_a_voided_invoice_is_not_mistaken_for_a_live_one(self, tmp_path: Path) -> None:
+        """After a crash the agent asks QuickBooks whether it already made this
+        item's invoice. One it cancelled is not an answer."""
+        from urllib.parse import quote
+
+        recent = quote(
+            "SELECT Id, DocNumber, TotalAmt, PrivateNote, Balance FROM Invoice"
+            " WHERE TxnDate >= '2026-09-01' ORDERBY TxnDate DESC MAXRESULTS 100"
+        )
+        replay = Replay(
+            {
+                f"GET {TestCancelling.BASE}/query?query={recent}": [
+                    {
+                        "status": 200,
+                        "json": {
+                            "QueryResponse": {
+                                "Invoice": [
+                                    {
+                                        "Id": "145",
+                                        "DocNumber": "083126AC-PS-VOID",
+                                        "TotalAmt": 0,
+                                        "PrivateNote": "fops item 1",
+                                    }
+                                ]
+                            }
+                        },
+                    }
+                ]
+            }
+        )
+        accounting, _, _ = build(replay, tmp_path)
+
+        assert accounting.find_invoice(item_id=1) is None
+
+
 class TestFindAfterACrash:
     """The crash question: did I already create this invoice?"""
 

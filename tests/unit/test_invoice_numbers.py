@@ -12,6 +12,8 @@ from finance_ops_agent.domain.invoice_numbers import (
     codes_for_client,
     initials,
     invoice_number,
+    is_voided_number,
+    voided_number,
     with_last_name,
 )
 
@@ -84,3 +86,26 @@ class TestTheNumber:
 
     def test_even_a_replacement_of_a_long_one_fits(self) -> None:
         assert len(invoice_number(AUG_END, "MT", "PPAPADOPOULOS", attempt=2)) <= MAX_LENGTH
+
+
+class TestACancelledNumber:
+    """QuickBooks will not reuse a number a voided invoice still holds, so the
+    voided one is renamed and the real number comes free (decision 34)."""
+
+    def test_the_voided_invoice_says_so(self) -> None:
+        assert voided_number("083126AC-PS") == "083126AC-PS-VOID"
+
+    def test_a_second_void_of_the_same_number(self) -> None:
+        assert voided_number("083126AC-PS", 2) == "083126AC-PS-VOID2"
+
+    def test_it_still_fits_what_quickbooks_allows(self) -> None:
+        longest = invoice_number(AUG_END, "MT", "PPAPADOPOULOSOPOULOS")
+        assert len(voided_number(longest)) <= MAX_LENGTH
+        assert len(voided_number(longest, 9)) <= MAX_LENGTH
+
+    def test_a_voided_number_is_recognised_and_a_live_one_is_not(self) -> None:
+        assert is_voided_number("083126AC-PS-VOID")
+        assert is_voided_number("083126AC-PS-VOID2")
+        assert not is_voided_number("083126AC-PS")
+        assert not is_voided_number("083126AC-PS-2")
+        assert not is_voided_number("")

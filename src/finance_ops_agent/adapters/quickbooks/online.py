@@ -32,6 +32,7 @@ from finance_ops_agent.adapters.quickbooks.client import (
     QuickBooksFailed,
     with_trace,
 )
+from finance_ops_agent.domain.invoice_numbers import is_voided_number
 from finance_ops_agent.domain.invoices import Invoice
 from finance_ops_agent.domain.money import Money, invoice_amount
 from finance_ops_agent.ports.accounting import CreatedInvoice
@@ -267,6 +268,8 @@ class QuickBooksOnline:
             stored = str(row.get("PrivateNote") or "")
             if item_id_from_note(stored) != item_id_from_note(note):
                 continue
+            if is_voided_number(str(row.get("DocNumber") or "")):
+                continue  # cancelled, and renamed to say so; not this item's invoice
             quickbooks_id = str(row["Id"])
             return CreatedInvoice(
                 number=str(row.get("DocNumber") or quickbooks_id),
@@ -275,10 +278,43 @@ class QuickBooksOnline:
             )
         return None
 
-    def cancel_invoice(self, external_id: str) -> None:
+    def cancel_invoice(self, external_id: str, renamed_to: str | None = None) -> None:
+        """Rename it, then void it.
+
+        In that order: QuickBooks will not give a number back while any
+        invoice, voided or not, still holds it, and a voided invoice is not
+        something to count on being editable. So the rename happens while the
+        invoice is still an ordinary one (decision 34). A rename that fails is
+        reported but does not stop the void -- an invoice Kevin cancelled must
+        not survive because its number could not be changed.
+        """
         raw = self._client.get(self.company_url(f"/invoice/{external_id}"))
         invoice = raw.get("Invoice", raw)
-        self._void(external_id, str(invoice.get("SyncToken", "0")))
+        sync_token = str(invoice.get("SyncToken", "0"))
+        if renamed_to is not None and str(invoice.get("DocNumber") or "") != renamed_to:
+            sync_token = self._rename(external_id, sync_token, renamed_to)
+        self._void(external_id, sync_token)
+
+    def _rename(self, quickbooks_id: str, sync_token: str, number: str) -> str:
+        """Set DocNumber on an invoice, returning the sync token to void with."""
+        logs.log("renaming a quickbooks invoice", quickbooks_id=quickbooks_id, number=number)
+        try:
+            raw = self._client.post(
+                self.company_url("/invoice"),
+                json={
+                    "Id": quickbooks_id,
+                    "SyncToken": sync_token,
+                    "sparse": True,
+                    "DocNumber": number,
+                },
+            )
+        except QuickBooksFailed as error:
+            # The number stays spent and the replacement takes the next one
+            # along, which is untidy rather than wrong.
+            logs.log("could not rename the invoice", quickbooks_id=quickbooks_id, said=str(error))
+            return sync_token
+        renamed = raw.get("Invoice", raw)
+        return str(renamed.get("SyncToken", sync_token))
 
     def paid_status(self, external_ids: list[str]) -> dict[str, bool]:
         """Balance == 0 means paid. Partial payments are not paid."""

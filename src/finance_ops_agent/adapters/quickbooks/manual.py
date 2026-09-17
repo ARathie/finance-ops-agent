@@ -39,7 +39,9 @@ class ManualQuickBooks:
         pdf = self._store.load_file(record.pdf_sha256) if record.pdf_sha256 else b""
         return CreatedInvoice(number=record.number, external_id=record.external_id, pdf=pdf)
 
-    def cancel_invoice(self, external_id: str) -> None:
+    def cancel_invoice(self, external_id: str, renamed_to: str | None = None) -> None:
+        # Nothing to rename: in manual mode the number lives only in the
+        # agent's own records, and the application renames it there.
         self._store.set_invoice_status(external_id, "cancelled")
 
     def paid_status(self, external_ids: list[str]) -> dict[str, bool]:
