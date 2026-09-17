@@ -728,6 +728,32 @@ class TestWhenQuickBooksIsUnhappy:
         assert env.the_item().status is not ItemStatus.INVOICE_SENT
         assert report.invoices_created == 0
 
+    def test_a_clean_timesheet_is_filed_as_processed(self, env: ScenarioEnv) -> None:
+        from finance_ops_agent.ports.inbox import PROCESSED_FOLDER
+
+        self._auto(env)
+        env.run()
+
+        [message_id] = env.store.message_ids_for_item(env.the_item().id)
+        assert env.mailbox.folders[message_id] == PROCESSED_FOLDER
+
+    def test_the_timesheet_email_goes_back_in_front_of_a_person(self, env: ScenarioEnv) -> None:
+        """A timesheet that reads cleanly is filed as processed while it is
+        read, long before the invoice is made. When the invoice then fails,
+        that email would be sitting in the processed folder saying nothing is
+        wrong, so it is moved (decision 35)."""
+        from finance_ops_agent.ports.accounting import AccountingFailed
+        from finance_ops_agent.ports.inbox import NEEDS_REVIEW_FOLDER
+
+        self._auto(env)
+        env.accounting.fail_with = AccountingFailed("Duplicate Document Number Error")
+        env.run()
+
+        item = env.the_item()
+        [message_id] = env.store.message_ids_for_item(item.id)
+        assert env.mailbox.folders[message_id] == NEEDS_REVIEW_FOLDER
+        assert any(r.code == "QUICKBOOKS_FAILED" for r in env.store.open_reviews())
+
     def test_a_dead_connection_is_asked_about_once_not_once_per_item(
         self, env: ScenarioEnv
     ) -> None:

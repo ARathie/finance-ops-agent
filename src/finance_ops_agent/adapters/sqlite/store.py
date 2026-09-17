@@ -331,6 +331,23 @@ class SqliteStore:
                 )
             )
 
+    def message_ids_for_item(self, item_id: int) -> list[str]:
+        with Session(self._engine) as session:
+            shas = list(
+                session.scalars(
+                    select(TimesheetRow.attachment_sha256).where(TimesheetRow.item_id == item_id)
+                )
+            )
+            if not shas:
+                return []
+            message_rows = select(AttachmentRow.message_id).where(AttachmentRow.sha256.in_(shas))
+            return [
+                str(found)
+                for found in session.scalars(
+                    select(MessageRow.message_id).where(MessageRow.id.in_(message_rows))
+                )
+            ]
+
     def timesheets_for_item(self, item_id: int) -> list[TimesheetRecord]:
         with Session(self._engine) as session:
             rows = session.scalars(

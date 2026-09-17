@@ -170,6 +170,14 @@ class FakeStore:
     def record_timesheet(self, record: TimesheetRecord) -> None:
         self._timesheets.append(record)
 
+    def message_ids_for_item(self, item_id: int) -> list[str]:
+        shas = {record.sha256 for record in self.timesheets_for_item(item_id)}
+        return [
+            message.message_id
+            for message in self._messages.values()
+            if any(attachment.sha256 in shas for attachment in message.attachments)
+        ]
+
     def timesheets_for_item(self, item_id: int) -> list[TimesheetRecord]:
         return [record for record in self._timesheets if record.item_id == item_id]
 

@@ -96,6 +96,11 @@ class Store(Protocol):
 
     def timesheets_for_item(self, item_id: int) -> list[TimesheetRecord]: ...
 
+    def message_ids_for_item(self, item_id: int) -> list[str]:
+        """The Message-IDs of the emails this item's timesheets arrived on, so
+        a review raised later can put them back in front of a person."""
+        ...
+
     # Reviews
 
     def open_review(self, item_id: int | None, code: str, message: str) -> bool:

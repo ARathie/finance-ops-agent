@@ -197,6 +197,12 @@ grep '"what": "review opened"' data/fops.log            # everything the agent a
 
 ## Backups
 
+## The agent's mail folders
+
+`Agent/Processed`, `Agent/Needs Review` and `Agent/Ignored` say what the agent made of each message: read and used, could not use, set aside. They are a courtesy for a person looking at the mailbox -- the database is the record -- and they do not track where an invoice has got to. A timesheet read cleanly is filed as processed before its invoice is made.
+
+When something goes wrong afterwards, though, the email is moved back to `Needs Review` (decision 35), so a message in the processed folder never means "the invoice went out". To see where an invoice has got to, use `fops status`, the tracking sheet, or the Monday summary.
+
 ## Putting a timesheet through again (testing)
 
 `fops forget` lists the timesheet items the agent is holding, with their ids. `fops forget <id>` takes one out along with everything about it -- its timesheets, invoices, payment instructions, reviews, outgoing rows and history -- **and the stored emails its timesheets came on**, because a message the agent has already stored is skipped on redelivery, so leaving them would mean the same email is never read again.

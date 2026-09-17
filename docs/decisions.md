@@ -251,3 +251,20 @@ Decision: cancelling an invoice **renames it to `083126MT-PS-VOID` and then void
 - **`find_invoice` ignores a voided number.** After a crash the agent asks QuickBooks whether it already made this item's invoice, matching on the item id in the private note -- which a cancelled invoice still carries. One the agent cancelled is not an answer to that question, and without this the replacement would have been the voided invoice.
 
 `-VOID` is the agent's own marker rather than anything QuickBooks defines, which is why `is_voided_number` in `domain/invoice_numbers.py` is the single place that decides what one looks like.
+
+## 35. A mail folder says what the message needs, and is revisited when that changes
+
+The agent files each message it reads into `Agent/Processed`, `Agent/Needs Review` or `Agent/Ignored`. The folder is chosen while the message is being **read**, which is long before the invoice is made: a timesheet that reads cleanly is filed as processed, and then the invoice is created, and only then can QuickBooks refuse it. The email that started it all sits in the processed folder saying nothing is wrong.
+
+Decision: when a review is raised about an item **after** its timesheet was read, the emails that timesheet arrived on are **moved to `Needs Review`**. The folder keeps one meaning -- something about this needs a person -- rather than meaning "the reading went fine" in one place and "the invoice went fine" in another.
+
+This needed `inbox.move` to look beyond the inbox: it searched `INBOX` only, so moving an already-filed message quietly did nothing. It now tries the inbox first, then the agent's own folders, and does nothing if the message is already where it is being sent.
+
+**What was considered and rejected: a folder per item state**, such as `Waiting for approval`, holding the timesheet until its invoice is approved and sent.
+
+- One email can feed several items. A consultant sends a timesheet and their firm's invoice together (decision 24), and an email can carry timesheets for more than one period. If one item is approved and another is still waiting, there is no folder the message belongs in. Mail folders cannot hold per-item state because the relationship is not one to one.
+- Every move is a chance to lose a message, and mirroring state means moving on every transition and back again on a correction. Nothing in the never-twice guarantees depends on where a message sits, and this would have made something depend on it.
+- The agent's mailbox is not Kevin's. He reads his own, where the approval email with the real invoice attached is already waiting. A folder in the agent's mailbox serves whoever is debugging.
+- "What is waiting on approval" is already answered, by `fops status`, the tracking sheet, and the Monday summary.
+
+The folder remains a courtesy for a person looking at the mailbox. The database is the record.

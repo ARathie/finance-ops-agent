@@ -34,6 +34,7 @@ from finance_ops_agent.ports.accounting import (
     AccountingNeedsReconnect,
     CreatedInvoice,
 )
+from finance_ops_agent.ports.inbox import NEEDS_REVIEW_FOLDER
 from finance_ops_agent.ports.sender import NotSent, RecipientRefused
 
 MAX_SEND_ATTEMPTS = 3
@@ -159,6 +160,20 @@ def next_invoice_number(deps: RunDeps, item: Item) -> str | None:
     return None
 
 
+def refile_for_review(deps: RunDeps, item: Item) -> None:
+    """Put this item's timesheet emails back in front of a person.
+
+    A timesheet that read cleanly is filed as processed while it is read, long
+    before the invoice is made. When something later goes wrong with that
+    invoice, the email that started it is sitting in the processed folder
+    saying nothing is wrong, so it is moved (decision 35). The folder is a
+    courtesy either way -- the database is the record -- but a courtesy that
+    says the wrong thing is worse than none.
+    """
+    for message_id in deps.store.message_ids_for_item(item.id):
+        deps.inbox.move(message_id, NEEDS_REVIEW_FOLDER)
+
+
 def tell_kevin(
     deps: RunDeps, report: RunReport, code: ReviewCode, about: str, message: str, key: str
 ) -> None:
@@ -191,6 +206,7 @@ def _create_invoice(
         # Every other item this run would fail the same way, and each one would
         # mean another go at the token endpoint.
         report.quickbooks_unavailable = True
+        refile_for_review(deps, item)
         tell_kevin(
             deps,
             report,
@@ -215,6 +231,7 @@ def _create_invoice(
                 deps.settings.admin_email, f"{item.consultant} — {item.client}", [message]
             )
             enqueue_email(deps, "review_email", f"review:quickbooks:{item.id}", item.id, email)
+            refile_for_review(deps, item)
         report.note(f"QuickBooks would not make the invoice for {item.consultant}: {error}")
         return None
 
@@ -330,6 +347,7 @@ def cancel_invoices(deps: RunDeps, item: Item, report: RunReport) -> None:
                 enqueue_email(
                     deps, "review_email", f"review:void:{record.external_id}", item.id, email
                 )
+                refile_for_review(deps, item)
             report.note(f"could not void invoice {record.number}: {error}")
             continue
         deps.store.set_invoice_number(record.external_id, renamed)
