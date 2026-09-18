@@ -22,6 +22,7 @@ Three rules from docs/integrations/quickbooks-online.md carry the weight:
   that was asked for, and an invoice QuickBooks numbered itself is voided.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
@@ -59,9 +60,25 @@ def item_id_from_note(note: str) -> int | None:
         return None
 
 
+def _escape(value: str) -> str:
+    """QuickBooks' query language wants an apostrophe backslash-escaped."""
+    return value.replace("'", "\\'")
+
+
 def _cents(amount: Any) -> int:
     """QuickBooks sends money as a JSON number; compare in whole cents only."""
     return round(float(amount) * 100)
+
+
+def client_names(invoice: Invoice) -> list[str]:
+    """The names this client might be filed under in QuickBooks, in the order
+    worth trying: the engagement list's own short name, then the QuickBooks
+    customer name, then the legal name."""
+    seen: list[str] = []
+    for name in (invoice.client_name, invoice.quickbooks_customer, invoice.client_legal_name):
+        if name and name not in seen:
+            seen.append(name)
+    return seen
 
 
 @dataclass(frozen=True)
@@ -78,7 +95,7 @@ class QuickBooksOnline:
         self._client = client
         self._today = today  # from the Clock port, never the system clock
         self._customers: dict[str, str] = {}
-        self._products: dict[str, Product] = {}
+        self._products: dict[tuple[str, tuple[str, ...]], Product] = {}
 
     @property
     def company(self) -> str:
@@ -106,7 +123,7 @@ class QuickBooksOnline:
         """
         if quickbooks_customer in self._customers:
             return self._customers[quickbooks_customer]
-        escaped = quickbooks_customer.replace("'", "\\'")
+        escaped = _escape(quickbooks_customer)
         matched_on = "DisplayName"
         rows = self._client.query(
             f"SELECT Id, DisplayName FROM Customer WHERE DisplayName = '{escaped}'"
@@ -144,26 +161,72 @@ class QuickBooksOnline:
         self._customers[quickbooks_customer] = reference
         return reference
 
-    def product_for(self, consultant: str) -> Product:
-        """The consultant's own product, which is where the rate lives now.
+    def product_for(self, consultant: str, clients: Sequence[str] = ()) -> Product:
+        """The product for this consultant at this client, and its rate.
 
-        Looked up by the consultant's name exactly as the engagement list
-        spells it (decision 30). The agent never creates products, and never
-        falls back to another one: billing a consultant under someone else's
-        product would bill the wrong rate.
+        An engagement, not a person: a consultant working at two clients has
+        two rates, and one product cannot hold both. QuickBooks categories give
+        that a home -- the product sits under a category named for the client,
+        and its `FullyQualifiedName` is `MasTec:Sridhar Doraiswamy`, which
+        QuickBooks maintains itself and lets us filter on (decision 36).
+
+        `clients` is the names that client might be filed under, tried in turn:
+        the engagement list's short name first, then the QuickBooks customer
+        name, then the legal name. Each is an exact match; the first that finds
+        a product wins, and the log says which.
+
+        A product not yet under a category is still used, but only when exactly
+        one product has that name -- a bridge while the categories are being
+        filled in. Two products sharing a name and no category to tell them
+        apart is refused, never guessed between: that is the wrong rate.
         """
-        if consultant in self._products:
-            return self._products[consultant]
-        escaped = consultant.replace("'", "\\'")
-        rows = self._client.query(f"SELECT Id, Name, UnitPrice FROM Item WHERE Name = '{escaped}'")
+        key = (consultant, tuple(clients))
+        if key in self._products:
+            return self._products[key]
+        tried: list[str] = []
+        for client in clients:
+            if not client:
+                continue
+            path = f"{client}:{consultant}"
+            tried.append(path)
+            rows = self._client.query(
+                "SELECT Id, Name, UnitPrice, FullyQualifiedName FROM Item"
+                f" WHERE FullyQualifiedName = '{_escape(path)}'"
+            )
+            if rows:
+                return self._remember(key, consultant, rows[0], path)
+
+        # No category yet: allow it while exactly one product answers to the name.
+        rows = self._client.query(
+            f"SELECT Id, Name, UnitPrice, FullyQualifiedName FROM Item"
+            f" WHERE Name = '{_escape(consultant)}'"
+        )
+        if len(rows) > 1:
+            names = ", ".join(
+                sorted(str(row.get("FullyQualifiedName") or row["Id"]) for row in rows)
+            )
+            logs.log("quickbooks product is ambiguous", consultant=consultant)
+            raise QuickBooksFailed(
+                f"QuickBooks has more than one product called {consultant!r} and none of"
+                f" them is under a category I recognise: {names}. I looked for"
+                f" {' or '.join(tried) or 'a category'}. Put the product under a category"
+                " named for the client, so I can tell which rate to bill."
+            )
         if not rows:
             logs.log("quickbooks product not found", consultant=consultant)
             raise QuickBooksFailed(
-                f"QuickBooks has no product called {consultant!r}. Every consultant"
-                " needs their own product, with their rate on it, and its name has to"
-                " match the Consultants sheet exactly. I never create products myself."
+                f"QuickBooks has no product for {consultant!r}. I looked for"
+                f" {' or '.join(tried) or 'a category'}, and for a product called"
+                f" {consultant!r} on its own. Every engagement needs a product, under a"
+                " category named for the client, with the rate on it. I never create"
+                " products myself."
             )
-        if rows[0].get("UnitPrice") is None:
+        return self._remember(key, consultant, rows[0], "")
+
+    def _remember(
+        self, key: tuple[str, tuple[str, ...]], consultant: str, row: dict[str, Any], path: str
+    ) -> Product:
+        if row.get("UnitPrice") is None:
             logs.log("quickbooks product has no rate", consultant=consultant)
             raise QuickBooksFailed(
                 f"The QuickBooks product for {consultant!r} has no rate on it, and the"
@@ -171,12 +234,17 @@ class QuickBooksOnline:
                 " product in QuickBooks."
             )
         product = Product(
-            ref=str(rows[0]["Id"]),
-            name=str(rows[0].get("Name") or consultant),
-            unit_price_cents=_cents(rows[0]["UnitPrice"]),
+            ref=str(row["Id"]),
+            name=str(row.get("FullyQualifiedName") or row.get("Name") or consultant),
+            unit_price_cents=_cents(row["UnitPrice"]),
         )
-        logs.log("quickbooks product found", consultant=consultant, quickbooks_id=product.ref)
-        self._products[consultant] = product
+        logs.log(
+            "quickbooks product found",
+            consultant=consultant,
+            quickbooks_id=product.ref,
+            matched_on=path or "the name alone, with no category",
+        )
+        self._products[key] = product
         return product
 
     # --- the AccountingSystem port ---
@@ -373,7 +441,7 @@ class QuickBooksOnline:
         # The rate comes off the consultant's product in QuickBooks, not off
         # the engagement list (decision 30). The total that comes back is
         # checked against the engagement list, which is what notices drift.
-        product = self.product_for(invoice.consultant)
+        product = self.product_for(invoice.consultant, client_names(invoice))
         rate = product.unit_price_cents / 100
         line_total = invoice_amount(invoice.approved_hours, Money(product.unit_price_cents))
         return {

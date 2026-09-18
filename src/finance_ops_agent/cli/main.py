@@ -546,12 +546,26 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
             }
         )
 
-    def wanted_consultants() -> list[str]:
+    def wanted_engagements() -> list[tuple[str, list[str]]]:
+        """One product per engagement, so the check is per pairing too: a
+        consultant at two clients has two rates (decision 36)."""
         parsed = parse_workbook(ExcelEngagementList(config.engagement_list).load())
-        return sorted({consultant.name for consultant in parsed.consultants if consultant.active})
+        by_client = {client_row.name: client_row for client_row in parsed.clients}
+        pairs: dict[tuple[str, str], list[str]] = {}
+        for engagement in parsed.engagements:
+            if not engagement.active:
+                continue
+            client_row = by_client.get(engagement.client)
+            candidates = [engagement.client]
+            if client_row is not None:
+                candidates += [client_row.quickbooks_customer, client_row.legal_name]
+            pairs[(engagement.consultant, engagement.client)] = [
+                name for name in dict.fromkeys(candidates) if name
+            ]
+        return [(consultant, clients) for (consultant, _), clients in sorted(pairs.items())]
 
     results.append(check_quickbooks_customers(accounting, wanted_customers))
-    results.append(check_quickbooks_products(accounting, wanted_consultants))
+    results.append(check_quickbooks_products(accounting, wanted_engagements))
     return results
 
 

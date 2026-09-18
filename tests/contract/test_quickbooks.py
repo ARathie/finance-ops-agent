@@ -288,8 +288,12 @@ class TestCreateInvoice:
         product would bill the wrong rate."""
         replay = replay_from("missing_item")
         accounting, _, _ = build(replay, tmp_path)
-        with pytest.raises(QuickBooksFailed, match="no product called 'Priya Shah'"):
+        with pytest.raises(QuickBooksFailed) as error:
             accounting.create_invoice(worked_example_invoice(), item_id=1)
+        message = str(error.value)
+        assert "no product for 'Priya Shah'" in message
+        assert "Acme Corp:Priya Shah" in message  # every path it tried is named
+        assert "never create products myself" in message
 
     def test_the_line_is_priced_from_the_product_and_dated_by_the_period(
         self, tmp_path: Path
@@ -304,7 +308,7 @@ class TestCreateInvoice:
         body = next(entry for entry in replay.bodies if isinstance(entry, dict) and "Line" in entry)
         line = body["Line"][0]
         assert line["Description"] == "Priya Shah"
-        assert line["SalesItemLineDetail"]["ItemRef"] == {"value": "12"}
+        assert line["SalesItemLineDetail"]["ItemRef"] == {"value": "12"}  # Acme Corp:Priya Shah
         assert line["SalesItemLineDetail"]["ServiceDate"] == "2026-08-31"
         assert line["SalesItemLineDetail"]["UnitPrice"] == 140.0  # off the product
 
@@ -415,6 +419,141 @@ class TestTheDoctorCheck:
 
         assert check.result is CheckResult.PASS
         assert f"the sandbox company {REALM}" in check.detail
+
+
+class TestFindingTheProduct:
+    """A product is an engagement, not a person: a consultant at two clients
+    has two rates and one product cannot hold both. The category gives that a
+    home, and QuickBooks maintains the path (decision 36)."""
+
+    BASE = f"https://sandbox-quickbooks.api.intuit.com/v3/company/{REALM}"
+
+    def _replay(self, answers: dict[str, object]) -> Replay:
+        from urllib.parse import quote
+
+        def key(statement: str) -> str:
+            return f"GET {self.BASE}/query?query=" + quote(statement)
+
+        empty: dict[str, object] = {"QueryResponse": {}}
+        script: dict[str, list[dict[str, object]]] = {}
+        for where, answer in (
+            ("FullyQualifiedName = 'MasTec:Sridhar Doraiswamy'", answers.get("by_path", empty)),
+            (
+                "FullyQualifiedName = 'MasTec Inc:Sridhar Doraiswamy'",
+                answers.get("by_legal", empty),
+            ),
+            ("Name = 'Sridhar Doraiswamy'", answers.get("by_name", empty)),
+        ):
+            statement = "SELECT Id, Name, UnitPrice, FullyQualifiedName FROM Item WHERE " + where
+            script[key(statement)] = [{"status": 200, "json": answer}]
+        return Replay(script)
+
+    def _item(self, item_id: str, path: str, rate: float = 140.0) -> dict[str, object]:
+        return {
+            "QueryResponse": {
+                "Item": [
+                    {
+                        "Id": item_id,
+                        "Name": "Sridhar Doraiswamy",
+                        "UnitPrice": rate,
+                        "FullyQualifiedName": path,
+                    }
+                ]
+            }
+        }
+
+    def test_the_category_path_is_what_it_looks_for(self, tmp_path: Path) -> None:
+        replay = self._replay({"by_path": self._item("21", "MasTec:Sridhar Doraiswamy")})
+        accounting, _, _ = build(replay, tmp_path)
+
+        product = accounting.product_for("Sridhar Doraiswamy", ["MasTec", "MasTec Inc"])
+
+        assert product.ref == "21"
+        assert product.unit_price_cents == 14_000
+        assert len(replay.calls) == 1  # the first path answered; nothing else was asked
+
+    def test_the_next_name_is_tried_when_the_first_finds_nothing(self, tmp_path: Path) -> None:
+        """Kevin may have named the category for the client as QuickBooks knows
+        it rather than as the engagement list does."""
+        replay = self._replay({"by_legal": self._item("22", "MasTec Inc:Sridhar Doraiswamy")})
+        accounting, _, _ = build(replay, tmp_path)
+
+        product = accounting.product_for("Sridhar Doraiswamy", ["MasTec", "MasTec Inc"])
+
+        assert product.ref == "22"
+
+    def test_a_product_with_no_category_yet_still_works(self, tmp_path: Path) -> None:
+        """The bridge while the categories are being filled in: one product of
+        that name and no ambiguity about which rate it carries."""
+        replay = self._replay({"by_name": self._item("23", "Sridhar Doraiswamy")})
+        accounting, _, _ = build(replay, tmp_path)
+
+        product = accounting.product_for("Sridhar Doraiswamy", ["MasTec", "MasTec Inc"])
+
+        assert product.ref == "23"
+
+    def test_two_products_of_that_name_and_no_category_is_refused(self, tmp_path: Path) -> None:
+        """This is the case that would have billed the wrong rate."""
+        replay = self._replay(
+            {
+                "by_name": {
+                    "QueryResponse": {
+                        "Item": [
+                            {
+                                "Id": "24",
+                                "Name": "Sridhar Doraiswamy",
+                                "UnitPrice": 140.0,
+                                "FullyQualifiedName": "Northwind:Sridhar Doraiswamy",
+                            },
+                            {
+                                "Id": "25",
+                                "Name": "Sridhar Doraiswamy",
+                                "UnitPrice": 120.0,
+                                "FullyQualifiedName": "Harbour Point:Sridhar Doraiswamy",
+                            },
+                        ]
+                    }
+                }
+            }
+        )
+        accounting, _, _ = build(replay, tmp_path)
+
+        with pytest.raises(QuickBooksFailed) as error:
+            accounting.product_for("Sridhar Doraiswamy", ["MasTec", "MasTec Inc"])
+
+        message = str(error.value)
+        assert "more than one product" in message
+        assert "Northwind:Sridhar Doraiswamy" in message
+        assert "Harbour Point:Sridhar Doraiswamy" in message
+        assert "MasTec:Sridhar Doraiswamy" in message  # what it was looking for
+
+    def test_the_same_consultant_at_two_clients_gets_two_rates(self, tmp_path: Path) -> None:
+        """The whole point: one product per consultant could only hold one."""
+        from urllib.parse import quote
+
+        def key(client: str) -> str:
+            return f"GET {self.BASE}/query?query=" + quote(
+                "SELECT Id, Name, UnitPrice, FullyQualifiedName FROM Item"
+                f" WHERE FullyQualifiedName = '{client}:Sridhar Doraiswamy'"
+            )
+
+        replay = Replay(
+            {
+                key("MasTec"): [
+                    {"status": 200, "json": self._item("21", "MasTec:Sridhar Doraiswamy", 140.0)}
+                ],
+                key("iStream"): [
+                    {"status": 200, "json": self._item("31", "iStream:Sridhar Doraiswamy", 120.0)}
+                ],
+            }
+        )
+        accounting, _, _ = build(replay, tmp_path)
+
+        at_mastec = accounting.product_for("Sridhar Doraiswamy", ["MasTec"])
+        at_istream = accounting.product_for("Sridhar Doraiswamy", ["iStream"])
+
+        assert at_mastec.unit_price_cents == 14_000
+        assert at_istream.unit_price_cents == 12_000
 
 
 class TestCancelling:

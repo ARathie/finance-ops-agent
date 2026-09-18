@@ -215,10 +215,12 @@ def check_quickbooks_customers(accounting: object, wanted: Callable[[], list[str
     return _run(name, run)
 
 
-def check_quickbooks_products(accounting: object, wanted: Callable[[], list[str]]) -> Check:
-    """Every consultant the agent may invoice for must have their own product
-    in QuickBooks, with their rate on it: that rate is what is billed
-    (docs/decisions.md #30)."""
+def check_quickbooks_products(
+    accounting: object, wanted: Callable[[], list[tuple[str, list[str]]]]
+) -> Check:
+    """Every engagement the agent may invoice must have a product in
+    QuickBooks, under a category named for the client, with the rate on it:
+    that rate is what is billed (docs/decisions.md #30 and #36)."""
     from finance_ops_agent.adapters.quickbooks.online import QuickBooksOnline
 
     name = "quickbooks products"
@@ -227,9 +229,9 @@ def check_quickbooks_products(accounting: object, wanted: Callable[[], list[str]
     def run() -> str:
         names = wanted()
         problems: list[str] = []
-        for consultant in names:
+        for consultant, clients in names:
             try:
-                accounting.product_for(consultant)
+                accounting.product_for(consultant, clients)
             except Exception as error:
                 problems.append(f"{consultant}: {error}")
         if problems:

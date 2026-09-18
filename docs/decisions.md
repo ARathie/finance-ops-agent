@@ -268,3 +268,22 @@ This needed `inbox.move` to look beyond the inbox: it searched `INBOX` only, so 
 - "What is waiting on approval" is already answered, by `fops status`, the tracking sheet, and the Monday summary.
 
 The folder remains a courtesy for a person looking at the mailbox. The database is the record.
+
+## 36. A product is an engagement, not a person
+
+Decision 30 made each consultant a product in QuickBooks, with their rate on it. That only works while a consultant has one rate. Icon's engagement list is explicitly one row per consultant **per client**, so a consultant working at two clients has two bill rates, and one product cannot hold both: the agent would have billed one of them at the other's rate, and its own total check would have voided the invoice with "the product's rate and the engagement list have stopped agreeing". None of Icon's current engagements repeats a consultant, so it had not bitten.
+
+Decision: **a product is an engagement.** It sits under a QuickBooks **category named for the client**, so its `FullyQualifiedName` is `MasTec:Sridhar Doraiswamy`, and that is what the agent looks it up by.
+
+Why the category rather than the name or the SKU:
+
+- QuickBooks enforces uniqueness on an item's name, so two products could not both be called `Sridhar Doraiswamy`. Under different categories they can, because the qualified path is the identity.
+- `FullyQualifiedName` is **read-only, system-defined, filterable and sortable**. QuickBooks maintains it, so it cannot drift out of step with the hierarchy the way a hand-typed key does, and the lookup stays one exact query.
+- `Sku` was the other candidate. It is not returned at all without a `minorversion` parameter, which the agent does not send, its uniqueness is not enforced, and it would still not have allowed two products of the same name.
+- In the QuickBooks interface the products end up grouped by client, which is how Kevin reads them anyway.
+
+The client is looked up under the names it might be filed under, in turn: the engagement list's short name, then the "QuickBooks customer" name, then the legal name. Each is an exact match, the first that finds a product wins, and the log says which matched -- the same shape as the customer lookup in decision 32.
+
+**A product not yet under a category is still used**, but only while exactly one product answers to that name: a bridge for filling the categories in. Two products sharing a name with no category to tell them apart is refused and both are named, because that is precisely the case that would bill the wrong rate.
+
+`fops doctor` checks **per engagement** now, not per consultant, for the same reason.
