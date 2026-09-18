@@ -26,7 +26,7 @@
       }
     },
     {
-      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20Id%2C%20Name%2C%20UnitPrice%2C%20FullyQualifiedName%20FROM%20Item%20WHERE%20FullyQualifiedName%20%3D%20%27Acme%20Corp%3APriya%20Shah%27",
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20Id%2C%20Name%2C%20UnitPrice%2C%20FullyQualifiedName%2C%20PurchaseCost%2C%20PrefVendorRef%20FROM%20Item%20WHERE%20FullyQualifiedName%20%3D%20%27Acme%20Corp%3APriya%20Shah%27",
       "response": {
         "status": 200,
         "json": {

@@ -39,6 +39,9 @@ from finance_ops_agent.domain.money import Money, invoice_amount
 from finance_ops_agent.ports.accounting import CreatedInvoice
 
 PRIVATE_NOTE_PREFIX = "fops item"
+# The purchase side is read but not used yet (decision 37): what Icon pays and
+# who it pays, so QuickBooks and the engagement list can be compared.
+PRODUCT_FIELDS = "Id, Name, UnitPrice, FullyQualifiedName, PurchaseCost, PrefVendorRef"
 
 
 def private_note(item_id: int, replaces: str | None = None) -> str:
@@ -83,11 +86,22 @@ def client_names(invoice: Invoice) -> list[str]:
 
 @dataclass(frozen=True)
 class Product:
-    """A consultant's product in QuickBooks, and the rate on it."""
+    """One engagement's product in QuickBooks: the two sides of its rate.
+
+    The sales side (`unit_price_cents`) is what the client is billed, and is
+    what the agent invoices from (decision 30). The purchase side
+    (`purchase_cost_cents`) is what Icon pays for those hours, and the
+    preferred vendor is who it pays -- both read, neither used yet, so that
+    what QuickBooks holds can be compared with the engagement list before
+    anything depends on it (decision 37). `None` means QuickBooks has nothing
+    there, which is different from nothing being owed.
+    """
 
     ref: str
     name: str
     unit_price_cents: int
+    purchase_cost_cents: int | None = None
+    vendor: str = ""
 
 
 class QuickBooksOnline:
@@ -190,16 +204,14 @@ class QuickBooksOnline:
             path = f"{client}:{consultant}"
             tried.append(path)
             rows = self._client.query(
-                "SELECT Id, Name, UnitPrice, FullyQualifiedName FROM Item"
-                f" WHERE FullyQualifiedName = '{_escape(path)}'"
+                f"SELECT {PRODUCT_FIELDS} FROM Item WHERE FullyQualifiedName = '{_escape(path)}'"
             )
             if rows:
                 return self._remember(key, consultant, rows[0], path)
 
         # No category yet: allow it while exactly one product answers to the name.
         rows = self._client.query(
-            f"SELECT Id, Name, UnitPrice, FullyQualifiedName FROM Item"
-            f" WHERE Name = '{_escape(consultant)}'"
+            f"SELECT {PRODUCT_FIELDS} FROM Item WHERE Name = '{_escape(consultant)}'"
         )
         if len(rows) > 1:
             names = ", ".join(
@@ -233,10 +245,14 @@ class QuickBooksOnline:
                 " rate on the product is what I bill. Put their hourly rate on the"
                 " product in QuickBooks."
             )
+        cost = row.get("PurchaseCost")
+        vendor = row.get("PrefVendorRef") or {}
         product = Product(
             ref=str(row["Id"]),
             name=str(row.get("FullyQualifiedName") or row.get("Name") or consultant),
             unit_price_cents=_cents(row["UnitPrice"]),
+            purchase_cost_cents=None if cost is None else _cents(cost),
+            vendor=str(vendor.get("name") or "") if isinstance(vendor, dict) else "",
         )
         logs.log(
             "quickbooks product found",

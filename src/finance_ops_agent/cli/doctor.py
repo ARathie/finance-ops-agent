@@ -20,6 +20,7 @@ from finance_ops_agent.adapters.email.client import (
     open_smtp,
 )
 from finance_ops_agent.adapters.email.inbox import INBOX
+from finance_ops_agent.domain.money import Money
 
 
 class CheckResult(StrEnum):
@@ -39,11 +40,19 @@ class Check:
         return f"{mark[self.result]} {self.name}: {self.detail}"
 
 
+# Long enough for a check that names one line per engagement, since silently
+# dropping the last few would hide exactly what someone needs to fix.
+MAX_DETAIL = 4000
+
+
 def _run(name: str, check: Callable[[], str]) -> Check:
     try:
         return Check(name, CheckResult.PASS, check())
     except Exception as error:  # a doctor reports, it never crashes
-        return Check(name, CheckResult.FAIL, str(error)[:300])
+        said = str(error)
+        if len(said) > MAX_DETAIL:
+            said = said[:MAX_DETAIL] + " …and more, cut short here"
+        return Check(name, CheckResult.FAIL, said)
 
 
 def check_mailbox_is_the_agents(account: MailAccount, agent_mailbox: str) -> Check:
@@ -215,8 +224,21 @@ def check_quickbooks_customers(accounting: object, wanted: Callable[[], list[str
     return _run(name, run)
 
 
+@dataclass(frozen=True)
+class ExpectedProduct:
+    """One engagement, as the engagement list has it, for checking against
+    what QuickBooks holds."""
+
+    consultant: str
+    client: str
+    clients: list[str]  # the names that client might be filed under
+    bill_rate_cents: int
+    pay_rate_cents: int
+    payee: str
+
+
 def check_quickbooks_products(
-    accounting: object, wanted: Callable[[], list[tuple[str, list[str]]]]
+    accounting: object, wanted: Callable[[], list[ExpectedProduct]]
 ) -> Check:
     """Every engagement the agent may invoice must have a product in
     QuickBooks, under a category named for the client, with the rate on it:
@@ -229,14 +251,83 @@ def check_quickbooks_products(
     def run() -> str:
         names = wanted()
         problems: list[str] = []
-        for consultant, clients in names:
+        for expected in names:
             try:
-                accounting.product_for(consultant, clients)
+                product = accounting.product_for(expected.consultant, expected.clients)
             except Exception as error:
-                problems.append(f"{consultant}: {error}")
+                problems.append(f"{expected.consultant}: {error}")
+                continue
+            # A bill rate that disagrees is not a warning: the invoice would be
+            # made, found to disagree, and voided (decision 30).
+            if product.unit_price_cents != expected.bill_rate_cents:
+                problems.append(
+                    f"{expected.consultant} at {expected.client}:"
+                    f" {product.name} bills ${Money(product.unit_price_cents)} an hour"
+                    f" and the engagement list says ${Money(expected.bill_rate_cents)}."
+                )
         if problems:
             raise RuntimeError("QuickBooks cannot price these consultants. " + " ".join(problems))
         return f"all {len(names)} consultant(s) have a product with a rate"
+
+    return _run(name, run)
+
+
+def check_quickbooks_pay(accounting: object, wanted: Callable[[], list[ExpectedProduct]]) -> Check:
+    """Does the purchase side of each product agree with the engagement list?
+
+    What Icon pays, and who it pays, are still taken from the engagement list.
+    This check reads what QuickBooks holds beside them, so the two can be made
+    to agree before anything is moved across (docs/decisions.md #37). A product
+    with nothing on its purchase side is not a disagreement -- it is one that
+    has not been filled in.
+    """
+    from finance_ops_agent.adapters.quickbooks.online import QuickBooksOnline
+
+    name = "quickbooks pay rates"
+    assert isinstance(accounting, QuickBooksOnline)
+
+    def run() -> str:
+        expected_all = wanted()
+        differences: list[str] = []
+        empty = 0
+        checked = 0
+        for expected in expected_all:
+            try:
+                product = accounting.product_for(expected.consultant, expected.clients)
+            except Exception:
+                continue  # the products check reports this one
+            if product.purchase_cost_cents is None and not product.vendor:
+                empty += 1
+                continue
+            checked += 1
+            if (
+                product.purchase_cost_cents is not None
+                and product.purchase_cost_cents != expected.pay_rate_cents
+            ):
+                differences.append(
+                    f"{expected.consultant} at {expected.client}: QuickBooks pays"
+                    f" ${Money(product.purchase_cost_cents)} an hour and the engagement"
+                    f" list says ${Money(expected.pay_rate_cents)}."
+                )
+            if product.vendor and product.vendor != expected.payee:
+                differences.append(
+                    f"{expected.consultant} at {expected.client}: QuickBooks pays"
+                    f" {product.vendor} and the engagement list says {expected.payee}."
+                )
+        if differences:
+            raise RuntimeError(
+                "QuickBooks and the engagement list do not agree about what Icon pays."
+                " Nothing is paid from QuickBooks yet, so no payment instruction is"
+                " wrong today, but these have to agree before anything moves across. "
+                + " ".join(differences)
+            )
+        if not checked:
+            return (
+                f"nothing to compare yet: none of {empty} engagement(s) has a rate or a"
+                " vendor on the purchase side of its product"
+            )
+        note = f"all {checked} engagement(s) with a purchase side agree with the engagement list"
+        return note if not empty else f"{note}; {empty} not filled in yet"
 
     return _run(name, run)
 

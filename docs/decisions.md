@@ -287,3 +287,17 @@ The client is looked up under the names it might be filed under, in turn: the en
 **A product not yet under a category is still used**, but only while exactly one product answers to that name: a bridge for filling the categories in. Two products sharing a name with no category to tell them apart is refused and both are named, because that is precisely the case that would bill the wrong rate.
 
 `fops doctor` checks **per engagement** now, not per consultant, for the same reason.
+
+## 37. The purchase side is read before it is trusted
+
+QuickBooks holds both sides of an engagement's product: `UnitPrice`, what the client is billed, and `PurchaseCost`, what Icon pays for those hours, with a preferred vendor saying who it pays. The bill rate moved to QuickBooks in decision 30. The pay rate is the obvious next thing to move, and moving it blind would be a poor trade: the pay rate feeds the payment instruction Kevin acts on, and unlike the bill rate nothing about it is checked against an invoice afterwards.
+
+Decision: the agent **reads** the purchase side and **does not use it yet**. `fops doctor` gains a **quickbooks pay rates** check that compares what QuickBooks holds with what the engagement list says, so the two can be made to agree before anything depends on either.
+
+- A product with nothing on its purchase side is **not a disagreement**; it has not been filled in, and the check says how many are in that state rather than failing.
+- A purchase cost or a preferred vendor that **differs** is a failure, naming both figures. Nothing is paid from QuickBooks today, so no payment instruction is wrong because of it -- but they have to agree before the pay rate moves, and a difference found now is a difference nobody has to debug later.
+- The **bill rate** is now compared too, in the products check, and a difference there is a failure for a harder reason: the invoice would be created, found to disagree, and voided (decision 30). That was only discoverable by watching an invoice fail.
+
+`fops doctor` truncated a failing check's detail at 300 characters, which was fine while every failure was one line. These checks name one line per engagement, so the limit is now generous enough to show them all and says when it has cut something short: a check that silently drops the entries someone needs is worse than one that says nothing.
+
+The step this sets up is moving the pay rate and the payee across, which needs more than a lookup: the amount owed is worked out when a timesheet is read and stored on the item, and that happens in the application layer from the engagement list alone, with no accounting system in reach. That is a change of shape, not a change of source, and it waits until the two agree.

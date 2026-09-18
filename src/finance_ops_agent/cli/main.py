@@ -518,7 +518,9 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
     from finance_ops_agent.cli.doctor import (
         Check,
         CheckResult,
+        ExpectedProduct,
         check_quickbooks_customers,
+        check_quickbooks_pay,
         check_quickbooks_products,
         check_quickbooks_tokens,
     )
@@ -546,26 +548,37 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
             }
         )
 
-    def wanted_engagements() -> list[tuple[str, list[str]]]:
-        """One product per engagement, so the check is per pairing too: a
+    def wanted_engagements() -> list[ExpectedProduct]:
+        """One product per engagement, so the checks are per pairing too: a
         consultant at two clients has two rates (decision 36)."""
+        from finance_ops_agent.application.run import build_snapshot
+
         parsed = parse_workbook(ExcelEngagementList(config.engagement_list).load())
         by_client = {client_row.name: client_row for client_row in parsed.clients}
-        pairs: dict[tuple[str, str], list[str]] = {}
+        wanted: dict[tuple[str, str], ExpectedProduct] = {}
         for engagement in parsed.engagements:
             if not engagement.active:
                 continue
+            snapshot = build_snapshot(parsed, engagement)
+            if snapshot is None:
+                continue  # an incomplete row; the engagement list check says so
             client_row = by_client.get(engagement.client)
             candidates = [engagement.client]
             if client_row is not None:
                 candidates += [client_row.quickbooks_customer, client_row.legal_name]
-            pairs[(engagement.consultant, engagement.client)] = [
-                name for name in dict.fromkeys(candidates) if name
-            ]
-        return [(consultant, clients) for (consultant, _), clients in sorted(pairs.items())]
+            wanted[(engagement.consultant, engagement.client)] = ExpectedProduct(
+                consultant=engagement.consultant,
+                client=engagement.client,
+                clients=[name for name in dict.fromkeys(candidates) if name],
+                bill_rate_cents=snapshot.bill_rate_cents,
+                pay_rate_cents=snapshot.pay_rate_cents,
+                payee=snapshot.payee,
+            )
+        return [wanted[key] for key in sorted(wanted)]
 
     results.append(check_quickbooks_customers(accounting, wanted_customers))
     results.append(check_quickbooks_products(accounting, wanted_engagements))
+    results.append(check_quickbooks_pay(accounting, wanted_engagements))
     return results
 
 

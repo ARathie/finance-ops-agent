@@ -18,6 +18,7 @@ from finance_ops_agent.adapters.quickbooks.client import (
     QuickBooksReconnect,
 )
 from finance_ops_agent.adapters.quickbooks.online import (
+    PRODUCT_FIELDS,
     QuickBooksOnline,
     item_id_from_note,
     private_note,
@@ -27,6 +28,7 @@ from finance_ops_agent.adapters.quickbooks.tokens import (
     Tokens,
     TokenStore,
 )
+from finance_ops_agent.cli.doctor import ExpectedProduct
 from finance_ops_agent.domain.invoices import Invoice, build_invoice
 from finance_ops_agent.domain.money import Money
 from tests.contract.http_replay import Replay
@@ -444,7 +446,7 @@ class TestFindingTheProduct:
             ),
             ("Name = 'Sridhar Doraiswamy'", answers.get("by_name", empty)),
         ):
-            statement = "SELECT Id, Name, UnitPrice, FullyQualifiedName FROM Item WHERE " + where
+            statement = f"SELECT {PRODUCT_FIELDS} FROM Item WHERE " + where
             script[key(statement)] = [{"status": 200, "json": answer}]
         return Replay(script)
 
@@ -527,13 +529,48 @@ class TestFindingTheProduct:
         assert "Harbour Point:Sridhar Doraiswamy" in message
         assert "MasTec:Sridhar Doraiswamy" in message  # what it was looking for
 
+    def test_the_purchase_side_is_read_too(self, tmp_path: Path) -> None:
+        """What Icon pays and who it pays, read but not used yet (decision 37),
+        so QuickBooks and the engagement list can be compared."""
+        answer: dict[str, object] = {
+            "QueryResponse": {
+                "Item": [
+                    {
+                        "Id": "21",
+                        "Name": "Sridhar Doraiswamy",
+                        "UnitPrice": 140.0,
+                        "FullyQualifiedName": "MasTec:Sridhar Doraiswamy",
+                        "PurchaseCost": 100.0,
+                        "PrefVendorRef": {"value": "9", "name": "Blue Peak Consulting LLC"},
+                    }
+                ]
+            }
+        }
+        replay = self._replay({"by_path": answer})
+        accounting, _, _ = build(replay, tmp_path)
+
+        product = accounting.product_for("Sridhar Doraiswamy", ["MasTec"])
+
+        assert product.purchase_cost_cents == 10_000
+        assert product.vendor == "Blue Peak Consulting LLC"
+
+    def test_a_product_with_nothing_on_its_purchase_side(self, tmp_path: Path) -> None:
+        """Not filled in is not the same as nothing owed."""
+        replay = self._replay({"by_path": self._item("21", "MasTec:Sridhar Doraiswamy")})
+        accounting, _, _ = build(replay, tmp_path)
+
+        product = accounting.product_for("Sridhar Doraiswamy", ["MasTec"])
+
+        assert product.purchase_cost_cents is None
+        assert product.vendor == ""
+
     def test_the_same_consultant_at_two_clients_gets_two_rates(self, tmp_path: Path) -> None:
         """The whole point: one product per consultant could only hold one."""
         from urllib.parse import quote
 
         def key(client: str) -> str:
             return f"GET {self.BASE}/query?query=" + quote(
-                "SELECT Id, Name, UnitPrice, FullyQualifiedName FROM Item"
+                f"SELECT {PRODUCT_FIELDS} FROM Item"
                 f" WHERE FullyQualifiedName = '{client}:Sridhar Doraiswamy'"
             )
 
@@ -554,6 +591,107 @@ class TestFindingTheProduct:
 
         assert at_mastec.unit_price_cents == 14_000
         assert at_istream.unit_price_cents == 12_000
+
+
+class TestThePayRatesCheck:
+    """`fops doctor` compares the purchase side with the engagement list, so
+    the two can be made to agree before anything moves across (decision 37)."""
+
+    BASE = TestFindingTheProduct.BASE
+
+    def _expected(
+        self, pay_cents: int = 10_000, payee: str = "Blue Peak Consulting LLC"
+    ) -> list["ExpectedProduct"]:
+        from finance_ops_agent.cli.doctor import ExpectedProduct
+
+        return [
+            ExpectedProduct(
+                consultant="Sridhar Doraiswamy",
+                client="MasTec",
+                clients=["MasTec"],
+                bill_rate_cents=14_000,
+                pay_rate_cents=pay_cents,
+                payee=payee,
+            )
+        ]
+
+    def _replay(self, purchase: dict[str, object]) -> Replay:
+        from urllib.parse import quote
+
+        item: dict[str, object] = {
+            "Id": "21",
+            "Name": "Sridhar Doraiswamy",
+            "UnitPrice": 140.0,
+            "FullyQualifiedName": "MasTec:Sridhar Doraiswamy",
+        }
+        item.update(purchase)
+        statement = (
+            f"SELECT {PRODUCT_FIELDS} FROM Item"
+            " WHERE FullyQualifiedName = 'MasTec:Sridhar Doraiswamy'"
+        )
+        return Replay(
+            {
+                f"GET {self.BASE}/query?query=" + quote(statement): [
+                    {"status": 200, "json": {"QueryResponse": {"Item": [item]}}}
+                ]
+            }
+        )
+
+    def test_agreement_passes(self, tmp_path: Path) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_pay
+
+        replay = self._replay(
+            {
+                "PurchaseCost": 100.0,
+                "PrefVendorRef": {"value": "9", "name": "Blue Peak Consulting LLC"},
+            }
+        )
+        accounting, _, _ = build(replay, tmp_path)
+
+        check = check_quickbooks_pay(accounting, self._expected)
+
+        assert check.result is CheckResult.PASS
+        assert "agree with the engagement list" in check.detail
+
+    def test_a_pay_rate_that_disagrees_is_named_with_both_figures(self, tmp_path: Path) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_pay
+
+        replay = self._replay({"PurchaseCost": 110.0})
+        accounting, _, _ = build(replay, tmp_path)
+
+        check = check_quickbooks_pay(accounting, self._expected)
+
+        assert check.result is CheckResult.FAIL
+        assert "$110.00" in check.detail  # what QuickBooks holds
+        assert "$100.00" in check.detail  # what the engagement list says
+        assert "no payment instruction is wrong today" in check.detail
+
+    def test_a_different_payee_is_named(self, tmp_path: Path) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_pay
+
+        replay = self._replay(
+            {"PurchaseCost": 100.0, "PrefVendorRef": {"value": "9", "name": "Someone Else Ltd"}}
+        )
+        accounting, _, _ = build(replay, tmp_path)
+
+        check = check_quickbooks_pay(accounting, self._expected)
+
+        assert check.result is CheckResult.FAIL
+        assert "Someone Else Ltd" in check.detail
+        assert "Blue Peak Consulting LLC" in check.detail
+
+    def test_nothing_filled_in_is_not_a_disagreement(self, tmp_path: Path) -> None:
+        """A product whose purchase side is empty has not been filled in; it
+        does not disagree with anything."""
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_pay
+
+        replay = self._replay({})
+        accounting, _, _ = build(replay, tmp_path)
+
+        check = check_quickbooks_pay(accounting, self._expected)
+
+        assert check.result is CheckResult.PASS
+        assert "nothing to compare yet" in check.detail
 
 
 class TestCancelling:
