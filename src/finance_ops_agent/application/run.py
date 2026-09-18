@@ -42,10 +42,16 @@ from finance_ops_agent.domain.messages import (
     StoredAttachment,
     StoredMessage,
 )
+from finance_ops_agent.domain.money import Money
 from finance_ops_agent.domain.periods import BillingPeriod, billing_periods
 from finance_ops_agent.domain.reading import ReadingHints, TimesheetReading
 from finance_ops_agent.domain.review import ReviewCode
 from finance_ops_agent.domain.statuses import ItemStatus
+from finance_ops_agent.ports.accounting import (
+    AccountingFailed,
+    AccountingSystem,
+    EngagementRates,
+)
 from finance_ops_agent.ports.inbox import IGNORED_FOLDER, NEEDS_REVIEW_FOLDER, PROCESSED_FOLDER
 from finance_ops_agent.ports.reader import CantReadAttachmentError
 
@@ -180,7 +186,18 @@ def _consultant_code(workbook: EngagementWorkbook, rate_row: Engagement) -> str:
     return ""
 
 
-def build_snapshot(workbook: EngagementWorkbook, rate_row: Engagement) -> EngagementSnapshot | None:
+def build_snapshot(
+    workbook: EngagementWorkbook,
+    rate_row: Engagement,
+    accounting: AccountingSystem | None = None,
+) -> EngagementSnapshot | None:
+    """The engagement row as the item will remember it.
+
+    What Icon pays, and who it pays, come from the engagement's product in the
+    accounting system where it has them, and from the engagement list where it
+    does not (docs/decisions.md #38). The engagement list stays the
+    cross-check: a disagreement is recorded on the snapshot so the caller can
+    ask Kevin, and QuickBooks' figure is the one used meanwhile."""
     client = _client_by_name(workbook, rate_row.client)
     consultant = _consultant_by_name(workbook, rate_row.consultant)
     if client is None or consultant is None:
@@ -196,9 +213,30 @@ def build_snapshot(workbook: EngagementWorkbook, rate_row: Engagement) -> Engage
             consultant.paid_by,
             (consultant.pay_timing_days),
         )
+    pay_rate_cents = rate_row.pay_rate.cents
+    disagreement = ""
+    rates = _rates_from_accounting(accounting, rate_row, client)
+    if rates is not None and rates.pay_rate_cents is not None:
+        if rates.pay_rate_cents != pay_rate_cents:
+            disagreement = (
+                f"QuickBooks pays {rate_row.consultant} at {rate_row.client}"
+                f" ${Money(rates.pay_rate_cents)} an hour and the engagement list says"
+                f" ${Money(pay_rate_cents)}. I am using QuickBooks' figure, which is"
+                " where the rate lives now. Make them agree."
+            )
+        pay_rate_cents = rates.pay_rate_cents
+    if rates is not None and rates.payee and rates.payee != payee:
+        if disagreement:
+            disagreement += " "
+        disagreement += (
+            f"QuickBooks pays {rates.payee} for {rate_row.consultant} at"
+            f" {rate_row.client} and the engagement list says {payee}. I am using"
+            " QuickBooks' answer. Make them agree."
+        )
+        payee = rates.payee
     return EngagementSnapshot(
         bill_rate_cents=rate_row.bill_rate.cents,
-        pay_rate_cents=rate_row.pay_rate.cents,
+        pay_rate_cents=pay_rate_cents,
         payment_terms_days=client.payment_terms_days,
         pay_timing_days=pay_timing,
         billing_emails=list(client.billing_emails),
@@ -213,7 +251,64 @@ def build_snapshot(workbook: EngagementWorkbook, rate_row: Engagement) -> Engage
         consultant_code=_consultant_code(workbook, rate_row),
         client_delivery=client.delivery.value,
         send_automatically=rate_row.send_automatically,
+        pay_disagreement=disagreement,
     )
+
+
+def _rates_from_accounting(
+    accounting: "AccountingSystem | None", rate_row: Engagement, client: Client
+) -> "EngagementRates | None":
+    """Ask the accounting system, and carry on without it when it cannot say.
+
+    An accounting system that is down must not stop timesheets being read: the
+    engagement list still has a rate, and the invoice is made on a later run
+    anyway (decision 38).
+    """
+    if accounting is None:
+        return None
+    names = [
+        name
+        for name in dict.fromkeys([rate_row.client, client.quickbooks_customer, client.legal_name])
+        if name
+    ]
+    try:
+        return accounting.engagement_rates(rate_row.consultant, names)
+    except AccountingFailed as error:
+        logs.log(
+            "could not ask the accounting system about the rates",
+            consultant=rate_row.consultant,
+            client=rate_row.client,
+            said=str(error)[:200],
+        )
+        return None
+
+
+def _ask_about_the_pay_rate(deps: RunDeps, item: Item, report: RunReport) -> None:
+    """QuickBooks and the engagement list disagree about what Icon pays.
+
+    QuickBooks' figure is the one used, because that is where the rate lives
+    now (decision 38), but Kevin is the one who pays and he is told before he
+    does.
+
+    Like every other review, this one **pauses the item** until he answers, so
+    the client's invoice waits on a disagreement that does not affect it. That
+    is the cost of having one mechanism rather than two, and it is meant to be
+    rare: `fops doctor` compares the two before any timesheet arrives, so the
+    disagreements are found when someone is looking at the engagement list
+    rather than when an invoice is due.
+    """
+    if not item.snapshot.pay_disagreement:
+        return
+    if deps.store.open_review(
+        item.id, ReviewCode.LIST_ROW_PROBLEM.value, item.snapshot.pay_disagreement
+    ):
+        report.reviews_opened += 1
+        email = emails.needs_review(
+            deps.settings.admin_email,
+            f"{item.consultant} — {item.client}",
+            [item.snapshot.pay_disagreement],
+        )
+        outgoing_steps.enqueue_email(deps, "review_email", f"review:pay:{item.id}", item.id, email)
 
 
 def _create_expected_items(deps: RunDeps, workbook: EngagementWorkbook, report: RunReport) -> None:
@@ -234,12 +329,13 @@ def _create_expected_items(deps: RunDeps, workbook: EngagementWorkbook, report: 
             rate_row, findings = checks.rate_row_in_force(rows, period)
             if rate_row is None or findings:
                 continue  # the rate problem surfaces when a timesheet arrives
-            snapshot = build_snapshot(workbook, rate_row)
+            snapshot = build_snapshot(workbook, rate_row, deps.accounting)
             if snapshot is None:
                 continue
-            deps.store.create_item(
+            waiting = deps.store.create_item(
                 consultant, client, period, ItemStatus.WAITING_FOR_TIMESHEET, snapshot
             )
+            _ask_about_the_pay_rate(deps, waiting, report)
             report.expected_items_created += 1
             report.note(
                 f"waiting for a timesheet: {consultant} at {client}, {period.start} to {period.end}"
@@ -490,11 +586,12 @@ def _process_timesheet(
     if consultant is not None and client_name is not None and period is not None:
         item = deps.store.find_item(consultant.name, client_name, period)
         if item is None and rate_row is not None:
-            snapshot = build_snapshot(workbook, rate_row)
+            snapshot = build_snapshot(workbook, rate_row, deps.accounting)
             if snapshot is not None:
                 item = deps.store.create_item(
                     consultant.name, client_name, period, ItemStatus.RECEIVED, snapshot
                 )
+                _ask_about_the_pay_rate(deps, item, report)
         if item is not None and item.status is ItemStatus.WAITING_FOR_TIMESHEET:
             item = deps.store.change_status(item.id, ItemStatus.RECEIVED, {})
         if item is not None:

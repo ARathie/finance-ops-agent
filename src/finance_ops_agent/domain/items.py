@@ -36,6 +36,9 @@ class EngagementSnapshot(BaseModel):
     consultant_code: str = ""  # the consultant's part of it (PS, or PSHAH when shared)
     client_delivery: str = "email"  # email, or portal (Kevin uploads it himself)
     send_automatically: bool = False  # the engagement row's "Send automatically" column
+    # Set when QuickBooks and the engagement list disagree about what Icon pays
+    # or who it pays; QuickBooks' answer is the one used (docs/decisions.md #38).
+    pay_disagreement: str = ""
 
 
 @dataclass(frozen=True)

@@ -5,8 +5,10 @@ out (docs/decisions.md #27) and keeps its own external id, which is the thing
 the accounting system knows the invoice by.
 """
 
+from collections.abc import Sequence
+
 from finance_ops_agent.domain.invoices import Invoice
-from finance_ops_agent.ports.accounting import CreatedInvoice
+from finance_ops_agent.ports.accounting import CreatedInvoice, EngagementRates
 
 
 class FakeAccounting:
@@ -19,6 +21,9 @@ class FakeAccounting:
         # Tests set these to make the accounting system misbehave the way a
         # real one does: a refusal, or a connection that needs renewing.
         self.fail_with: Exception | None = None
+        # Keyed by (consultant, client); tests set what the accounting system
+        # says an engagement is billed and paid at.
+        self.rates: dict[tuple[str, str], EngagementRates] = {}
         self.create_attempts = 0
         self._counter = 0
 
@@ -35,6 +40,15 @@ class FakeAccounting:
         )
         self.invoices[item_id] = created
         return created
+
+    def engagement_rates(self, consultant: str, clients: Sequence[str]) -> EngagementRates | None:
+        if self.fail_with is not None:
+            raise self.fail_with
+        for client in clients:
+            found = self.rates.get((consultant, client))
+            if found is not None:
+                return found
+        return None
 
     def find_invoice(self, item_id: int) -> CreatedInvoice | None:
         created = self.invoices.get(item_id)

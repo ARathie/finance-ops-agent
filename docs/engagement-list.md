@@ -99,7 +99,7 @@ Two places **not** to put a stand-in address:
 
 ## Rules the agent follows
 
-- Rates, billing contacts, payment terms, and pay timing come only from this workbook.
+- Billing contacts, payment terms, and pay timing come only from this workbook. **Rates no longer do**: in QuickBooks Online mode both of them live on the engagement's product -- what the client is charged and what Icon pays -- and this workbook's rate columns are the cross-check (decisions 30 and 38). Where QuickBooks has no pay rate on a product, this workbook's is used.
 - For a timesheet, the agent uses the Engagements row for that consultant and client whose "Rates from" date is the latest one on or before the first day of the billing period. If the rate changes in the middle of a period, the agent asks Kevin rather than splitting the invoice.
 - There must be exactly one active engagement for a consultant and client on any given date. Two rows with the same consultant, client, and "Rates from" date are an error.
 - Billing periods: `monthly` = calendar month; `twice a month` = 1st to 15th and 16th to month end; `every two weeks` = 14-day periods counted from "First period start"; `weekly` = 7-day periods counted from "First period start". The first and last period of an engagement are cut short at the start and end dates.

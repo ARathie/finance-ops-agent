@@ -301,3 +301,17 @@ Decision: the agent **reads** the purchase side and **does not use it yet**. `fo
 `fops doctor` truncated a failing check's detail at 300 characters, which was fine while every failure was one line. These checks name one line per engagement, so the limit is now generous enough to show them all and says when it has cut something short: a check that silently drops the entries someone needs is worse than one that says nothing.
 
 The step this sets up is moving the pay rate and the payee across, which needs more than a lookup: the amount owed is worked out when a timesheet is read and stored on the item, and that happens in the application layer from the engagement list alone, with no accounting system in reach. That is a change of shape, not a change of source, and it waits until the two agree.
+
+## 38. What Icon pays comes from the product's purchase side
+
+Decision 37 read the purchase side without using it, so the two sources could be compared first. `fops doctor` now reports they agree for every one of Icon's engagements, so the move can be made.
+
+Decision: **the pay rate and the payee come from the engagement's product in QuickBooks** -- `PurchaseCost` and the preferred vendor -- in the same way the bill rate has since decision 30. The engagement list stays the cross-check.
+
+- **Where QuickBooks has nothing on the purchase side, the engagement list is used.** An empty purchase side is one that has not been filled in, not a statement that nothing is owed. This is what lets the categories and costs be filled in at Kevin's pace.
+- **A disagreement uses QuickBooks' figure and tells Kevin**, because that is where the rate lives now and he is the one who pays. The review **pauses the item** as every review does, which means the client's invoice waits on a disagreement that has nothing to do with it. That is the price of one mechanism rather than two, and `fops doctor` is what keeps it rare: it compares the two before any timesheet arrives, so a difference is found while someone is looking at the engagement list rather than when an invoice is due.
+- **An accounting system that cannot answer does not stop the run.** The engagement list still has a rate, the timesheet is still read, and the invoice happens on a later run anyway. A QuickBooks outage must not stop the agent reading mail.
+
+This is a change of shape, not only of source: the amount owed is worked out when a timesheet is read, so the accounting system is now consulted while an item is being created, in `application/run.py`. That is the first time the accounting port is asked anything outside invoicing, which is why `AccountingSystem` gained `engagement_rates` rather than the application reaching for an adapter.
+
+What still comes from the engagement list about paying: **how** Icon pays (bank transfer, payroll, check) and **when** (the pay timing days). Both have plausible homes on a QuickBooks vendor record, and neither is worth moving until the rest of the residue moves with it.

@@ -36,7 +36,7 @@ from finance_ops_agent.adapters.quickbooks.client import (
 from finance_ops_agent.domain.invoice_numbers import is_voided_number
 from finance_ops_agent.domain.invoices import Invoice
 from finance_ops_agent.domain.money import Money, invoice_amount
-from finance_ops_agent.ports.accounting import CreatedInvoice
+from finance_ops_agent.ports.accounting import CreatedInvoice, EngagementRates
 
 PRIVATE_NOTE_PREFIX = "fops item"
 # The whole entity, not a field list. QuickBooks' query language refuses
@@ -341,6 +341,15 @@ class QuickBooksOnline:
             number=given_number,
             external_id=quickbooks_id,
             pdf=self.invoice_pdf(quickbooks_id),
+        )
+
+    def engagement_rates(self, consultant: str, clients: Sequence[str]) -> EngagementRates | None:
+        """Both sides of the engagement's product (decision 38)."""
+        product = self.product_for(consultant, clients)
+        return EngagementRates(
+            bill_rate_cents=product.unit_price_cents,
+            pay_rate_cents=product.purchase_cost_cents,
+            payee=product.vendor,
         )
 
     def find_invoice(self, item_id: int) -> CreatedInvoice | None:

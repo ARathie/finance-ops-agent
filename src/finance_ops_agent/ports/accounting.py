@@ -6,6 +6,7 @@ that is the item id kept in the invoice's private note), so a restart never
 creates a second one.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -31,6 +32,20 @@ class AccountingNeedsReconnect(AccountingFailed):
 
 
 @dataclass(frozen=True)
+class EngagementRates:
+    """What the accounting system holds about one engagement's two rates.
+
+    `pay_rate_cents` is None where nothing has been put on the product's
+    purchase side, which is not the same as nothing being owed: the caller
+    keeps what the engagement list says (docs/decisions.md #38).
+    """
+
+    bill_rate_cents: int
+    pay_rate_cents: int | None
+    payee: str
+
+
+@dataclass(frozen=True)
 class CreatedInvoice:
     number: str
     external_id: str
@@ -48,6 +63,12 @@ class AccountingSystem(Protocol):
         ...
 
     def find_invoice(self, item_id: int) -> CreatedInvoice | None: ...
+
+    def engagement_rates(self, consultant: str, clients: Sequence[str]) -> EngagementRates | None:
+        """What this engagement is billed and paid at, or None where the
+        accounting system has nothing to say. Manual mode always says None:
+        there is nothing to ask."""
+        ...
 
     def cancel_invoice(self, external_id: str, renamed_to: str | None = None) -> None:
         """Cancel it, renaming it first where the accounting system can.

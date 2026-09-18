@@ -13,8 +13,9 @@ from finance_ops_agent.domain.items import InvoiceRecord, OutgoingRecord
 from finance_ops_agent.domain.money import Money
 from finance_ops_agent.domain.reading import ReplyAnswer, ReplyAnswerKind, ReplyReading
 from finance_ops_agent.domain.statuses import ItemStatus
+from finance_ops_agent.ports.accounting import EngagementRates
 from finance_ops_agent.ports.sender import NotSent, RecipientRefused
-from tests.scenarios.conftest import PRIYA, ScenarioEnv, reading
+from tests.scenarios.conftest import PRIYA, ScenarioEnv, engagement_row, reading
 
 AUG_START, AUG_END = date(2026, 8, 1), date(2026, 8, 31)
 
@@ -798,6 +799,92 @@ class TestWhenQuickBooksIsUnhappy:
         item = env.the_item()
         assert item.status is ItemStatus.INVOICE_SENT
         assert [r.number for r in env.store.invoices_for_item(item.id)] == ["083126AC-PS"]
+
+
+class TestWhatIconPays:
+    """What Icon pays, and who it pays, come from the engagement's product in
+    QuickBooks where it has them (decision 38). The engagement list stays the
+    cross-check."""
+
+    def _rates(self, pay_cents: int | None, payee: str = "") -> "EngagementRates":
+        from finance_ops_agent.ports.accounting import EngagementRates
+
+        return EngagementRates(bill_rate_cents=14_000, pay_rate_cents=pay_cents, payee=payee)
+
+    def test_the_pay_rate_comes_off_the_product(self, env: ScenarioEnv) -> None:
+        """The engagement list says 100.00; QuickBooks says 110.00 and wins."""
+        env.accounting.rates[("Priya Shah", "Acme Corp")] = self._rates(11_000)
+        env.workbook.engagements[0] = engagement_row(2, **{"Pay rate": "110.00"})
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        assert item.snapshot.pay_rate_cents == 11_000
+        assert item.amount_owed == Money(1_716_000)  # 156.00 hours at 110.00
+
+    def test_the_engagement_list_is_used_where_quickbooks_has_nothing(
+        self, env: ScenarioEnv
+    ) -> None:
+        """An empty purchase side has not been filled in; it does not mean
+        nothing is owed."""
+        env.accounting.rates[("Priya Shah", "Acme Corp")] = self._rates(None)
+        clean_timesheet(env)
+        env.run()
+
+        assert env.the_item().snapshot.pay_rate_cents == 10_000  # the workbook's
+
+    def test_a_disagreement_is_used_told_to_kevin_and_pauses_the_item(
+        self, env: ScenarioEnv
+    ) -> None:
+        """QuickBooks' figure is the one used, Kevin hears about it before he
+        pays, and the item waits for his answer as it does on any review --
+        which means the client's invoice waits on a disagreement that does not
+        affect it. `fops doctor` is what stops that being common."""
+        env.accounting.rates[("Priya Shah", "Acme Corp")] = self._rates(11_000)
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        assert item.snapshot.pay_rate_cents == 11_000
+        review = next(r for r in env.store.open_reviews() if "QuickBooks pays" in r.message)
+        assert "$110.00" in review.message  # QuickBooks
+        assert "$100.00" in review.message  # the engagement list
+        assert any(s.startswith("Needs your review") for s in env.sent_subjects())
+        assert item.status is not ItemStatus.READY  # waiting on his answer
+
+    def test_agreement_says_nothing(self, env: ScenarioEnv) -> None:
+        env.accounting.rates[("Priya Shah", "Acme Corp")] = self._rates(10_000)
+        clean_timesheet(env)
+        env.run()
+
+        assert env.the_item().snapshot.pay_disagreement == ""
+        assert not any("QuickBooks pays" in r.message for r in env.store.open_reviews())
+
+    def test_a_different_payee_is_used_and_told(self, env: ScenarioEnv) -> None:
+        env.accounting.rates[("Priya Shah", "Acme Corp")] = self._rates(
+            10_000, "Blue Peak Consulting LLC"
+        )
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        assert item.snapshot.payee == "Blue Peak Consulting LLC"
+        assert any("Blue Peak Consulting LLC" in r.message for r in env.store.open_reviews())
+
+    def test_an_accounting_system_that_cannot_answer_does_not_stop_the_run(
+        self, env: ScenarioEnv
+    ) -> None:
+        """A timesheet is still read and the engagement list still has a rate;
+        the invoice is made on a later run anyway."""
+        from finance_ops_agent.ports.accounting import AccountingFailed
+
+        env.accounting.fail_with = AccountingFailed("service unavailable")
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        assert item.status is ItemStatus.READY
+        assert item.snapshot.pay_rate_cents == 10_000  # the workbook's
 
 
 class TestMondaySummary:
