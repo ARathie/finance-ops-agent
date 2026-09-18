@@ -509,7 +509,7 @@ def check_quickbooks_contacts(
                     f" list has {', '.join(party.emails)}."
                 )
             if held.payment_terms_days is None:
-                empty.append(f"{party.name} (no payment terms)")
+                empty.append(f"{party.name} ({held.terms_note or 'no payment terms'})")
             elif held.payment_terms_days != party.payment_terms_days:
                 differences.append(
                     f"QuickBooks gives {party.name} {held.payment_terms_days} day(s) to"

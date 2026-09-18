@@ -404,7 +404,8 @@ The addresses a timesheet may arrive from, and the terms that set a due date, ar
 
 Decision: **`fops doctor` reads both records and compares them with the engagement list, and nothing uses QuickBooks' answer yet.** This is the shape decision 37 used before the pay rate moved, for the same reason: a difference found here is found while someone is looking at the engagement list, not when an invoice is due or a timesheet is refused.
 
-- **A blank field in QuickBooks is not a disagreement.** It has not been filled in, and the check says which so Kevin knows what is left rather than being told he is wrong.
+- **A blank field in QuickBooks is not a disagreement.** It has not been filled in, and the check says which so Kevin knows what is left rather than being told he is wrong -- including *why* there are no terms, because "nobody chose one for this customer" and "the term chosen has no due-days" need different fixes, and a company can have Net 30 in its Terms list and on every invoice by default without any record carrying it.
+- **An engagement whose product names no vendor is listed with nothing to look up**, not skipped. Skipped, a company with no purchase sides filled in read exactly like one that agreed about everything.
 - **A payee is looked up by the id on its product's purchase side, never by name.** A vendor filed under a spelling nobody expected is still the one compared.
 - **A client's record is found the same way the invoice finds it** -- display name, then company name -- so the record compared can never be a different customer from the one billed.
 - **Several addresses on the list against one in QuickBooks is agreement if any of them match.** The list holds every address a client sends invoices to; QuickBooks holds one.

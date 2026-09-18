@@ -84,6 +84,9 @@ class AccountingParty:
     name: str
     email: str
     payment_terms_days: int | None
+    # Why there are no terms, where there are none. "The company has no such
+    # term" and "this record does not name one" need different fixes.
+    terms_note: str = ""
 
 
 @dataclass(frozen=True)

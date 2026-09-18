@@ -1187,7 +1187,32 @@ class TestReadingContactsAndTerms:
         held = accounting.payee("8")
         assert held is not None
         assert held.email == ""
-        assert held.payment_terms_days is None  # the term exists but has no days
+        assert held.payment_terms_days is None
+
+    def test_a_record_naming_no_term_says_so(self, tmp_path: Path) -> None:
+        """A company can have Net 30 in its Terms list and on every invoice by
+        default without any record carrying it. That needs a different fix from
+        a term with no days, so it is not reported as the same thing."""
+        accounting, _, _ = build(replay_from("contacts"), tmp_path)
+        held = accounting.payee("8")
+        assert held is not None
+        assert held.terms_note == "no terms on the record itself"
+
+    def test_a_term_with_no_days_names_the_term(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(replay_from("contacts"), tmp_path)
+        held = accounting.payee("9")
+        assert held is not None
+        assert held.payment_terms_days is None
+        assert "Due on receipt" in held.terms_note
+
+    def test_the_terms_are_asked_for_whole(self, tmp_path: Path) -> None:
+        """A field list is one more thing that has to stay in step with what
+        QuickBooks' query language accepts, which it refused once already for
+        PrefVendorRef."""
+        replay = replay_from("contacts")
+        accounting, _, _ = build(replay, tmp_path)
+        accounting.payee("7")
+        assert any("SELECT%20%2A%20FROM%20Term" in url for url in replay.urls())
 
     def test_a_vendor_that_is_not_there(self, tmp_path: Path) -> None:
         accounting, _, _ = build(replay_from("contacts"), tmp_path)

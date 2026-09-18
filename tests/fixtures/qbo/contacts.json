@@ -1,7 +1,7 @@
 {
   "exchanges": [
     {
-      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20Id%2C%20Name%2C%20DueDays%20FROM%20Term",
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20%2A%20FROM%20Term",
       "response": {
         "status": 200,
         "json": {
@@ -109,7 +109,26 @@
             "Vendor": [
               {
                 "Id": "8",
-                "DisplayName": "Dana Cruz",
+                "DisplayName": "Dana Cruz"
+              }
+            ]
+          }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20%2A%20FROM%20Vendor%20WHERE%20Id%20%3D%20%279%27",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {
+            "Vendor": [
+              {
+                "Id": "9",
+                "DisplayName": "Sam Okafor",
                 "TermRef": {
                   "value": "9",
                   "name": "Due on receipt"

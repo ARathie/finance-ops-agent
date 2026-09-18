@@ -404,23 +404,39 @@ class QuickBooksOnline:
         """
         if self._terms is None:
             self._terms = {}
-            for row in self._client.query("SELECT Id, Name, DueDays FROM Term"):
+            # The whole entity, for the reason PRODUCT_FIELDS gives: a field
+            # list is one more thing that has to stay in step with what
+            # QuickBooks' query language happens to accept.
+            for row in self._client.query("SELECT * FROM Term"):
                 days = row.get("DueDays")
                 if days is not None:
                     self._terms[str(row["Id"])] = int(days)
+            logs.log("quickbooks terms read", count=len(self._terms))
         return self._terms
 
     def _party(self, row: dict[str, Any], terms_field: str) -> AccountingParty:
         email = row.get("PrimaryEmailAddr") or {}
         term = row.get(terms_field) or {}
         days: int | None = None
-        if isinstance(term, dict) and term.get("value"):
-            days = self._term_days().get(str(term["value"]))
+        note = ""
+        reference = str(term.get("value") or "") if isinstance(term, dict) else ""
+        if not reference:
+            # The company can have Net 30 in its Terms list and put it on every
+            # invoice by default without any customer or vendor carrying it.
+            # "The list has none" and "this record has none" need different
+            # fixes, so they are not reported as the same thing.
+            note = "no terms on the record itself"
+        else:
+            days = self._term_days().get(reference)
+            if days is None:
+                named = str(term.get("name") or reference) if isinstance(term, dict) else reference
+                note = f"the term {named!r} has no number of days on it"
         return AccountingParty(
             ref=str(row["Id"]),
             name=str(row.get("DisplayName") or row.get("CompanyName") or ""),
             email=str(email.get("Address") or "") if isinstance(email, dict) else "",
             payment_terms_days=days,
+            terms_note=note,
         )
 
     def customer(self, name: str) -> AccountingParty | None:

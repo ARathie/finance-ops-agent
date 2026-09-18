@@ -219,9 +219,15 @@ nothing now and is what lets them move later.
 - **On each vendor** — the one named on a product's purchase side: their email,
   and the terms that say how long Icon has to pay them.
 
-Terms are their own list in QuickBooks (**Settings → All lists → Terms**), and a
-customer or vendor points at one. If a term has no number of days on it, the
-agent reads it as "not filled in" rather than as a number.
+Terms are their own list in QuickBooks (**Settings → All lists → Terms**), and
+a customer or vendor has to *point at one* — having Net 30 in the list, or
+picking it on each invoice, is not the same thing. Set it on the record itself:
+**Customer → Edit → Payments → Terms**, and **Vendor → Edit → Terms**.
+
+The check tells the two apart, because they need different fixes: *"no terms on
+the record itself"* means nobody chose one for that customer or vendor, and
+*"the term 'Due on receipt' has no number of days on it"* means the term was
+chosen but QuickBooks has no due-days on it to work a date out from.
 
 A blank field is not a disagreement — it's one you haven't got to. The check
 says which, so the line is a to-do list rather than a complaint:
