@@ -9,7 +9,7 @@ creates a customer and it never creates a product.** If one is missing it stops
 and says so rather than inventing something to invoice against.
 
 After any change here, run `fops doctor`. It checks every item below except the
-first, and names the client, consultant or setting that is wrong. Each section
+first and the last, and names the client, consultant or setting that is wrong. Each section
 ends with the line doctor prints when that part is not right, so a failure can
 be read straight back to the thing to fix.
 
@@ -162,22 +162,47 @@ rate or a vendor on the purchase side of its product
 
 ## 4. Ending an engagement
 
-**Today the engagement list is the on/off switch**, not QuickBooks: mark the
-engagement's row inactive there when a consultant stops working for a client.
+**Make the product inactive.** That is the switch: the agent asks QuickBooks
+which products are live and stops expecting timesheets for the ones that are
+not. You do not have to edit the engagement list to stop it.
 
-Do not make the product inactive while that row is still active. Doctor checks
-every engagement the list says is live, and an inactive product is one it can no
-longer find — so you would get the "no product for…" failure above for an
-engagement that has simply finished. Mark the row inactive first, then the
-product if you want it out of the way.
+Ending an engagement means "expect no more timesheets" and nothing else. It
+erases nothing already invoiced, it does not touch an invoice waiting to be
+sent, and a late timesheet for a period that already happened is still handled.
 
-Making QuickBooks the switch — a product or customer marked inactive meaning
-"expect no more timesheets for this" — is agreed and not built yet. This section
-changes when it is.
+Leave the row on the engagement list where it is. The agent still reads the
+billing schedule and the start date off it, and QuickBooks holds neither — so a
+product with no row behind it is an engagement the agent cannot put a date to,
+and it asks you rather than guessing:
 
-Either way, ending an engagement means "expect no more timesheets". It erases
-nothing already invoiced, and a late timesheet for a period that already
-happened is still handled.
+```
+FAIL quickbooks engagements: 1 engagement(s) in the production company
+9130357849073846 have no row on the engagement list, so I cannot tell how often
+to expect a timesheet or when the period ends: Sam Okafor at MasTec.
+```
+
+The other way round is reported too, because it is usually a mistake rather
+than an ending — a product made inactive by accident, or a category renamed:
+
+```
+FAIL quickbooks engagements: The engagement list still calls 1 engagement(s)
+active and the production company 9130357849073846 has no live product for
+them, so I will expect no new periods: Sam Okafor at MasTec. Make the product
+active again, or mark the row inactive if the engagement has finished.
+```
+
+Marking the row inactive as well is what settles that one — it is not required,
+but it is what stops the agent mentioning it every time you run doctor.
+
+**A company with no categories at all** is read as "not set up yet", not as
+"every engagement has ended", so an empty QuickBooks never silently stops the
+billing:
+
+```
+ok   quickbooks engagements: the production company 9130357849073846 lists no
+products under a category, so the engagement list decides which engagements are
+live, as it did before
+```
 
 ---
 

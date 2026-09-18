@@ -8,7 +8,11 @@ the accounting system knows the invoice by.
 from collections.abc import Sequence
 
 from finance_ops_agent.domain.invoices import Invoice
-from finance_ops_agent.ports.accounting import CreatedInvoice, EngagementRates
+from finance_ops_agent.ports.accounting import (
+    AccountingEngagement,
+    CreatedInvoice,
+    EngagementRates,
+)
 
 
 class FakeAccounting:
@@ -24,6 +28,10 @@ class FakeAccounting:
         # Keyed by (consultant, client); tests set what the accounting system
         # says an engagement is billed and paid at.
         self.rates: dict[tuple[str, str], EngagementRates] = {}
+        # Which engagements the accounting system says are live. Empty is what
+        # every existing test wants: "nothing to say", so the engagement list
+        # decides as it always has (docs/decisions.md #42).
+        self.live: list[AccountingEngagement] = []
         self.create_attempts = 0
         self._counter = 0
 
@@ -40,6 +48,11 @@ class FakeAccounting:
         )
         self.invoices[item_id] = created
         return created
+
+    def engagements(self) -> list[AccountingEngagement]:
+        if self.fail_with is not None:
+            raise self.fail_with
+        return list(self.live)
 
     def engagement_rates(self, consultant: str, clients: Sequence[str]) -> EngagementRates | None:
         if self.fail_with is not None:

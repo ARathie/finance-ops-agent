@@ -559,12 +559,13 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
         CheckResult,
         ExpectedProduct,
         check_quickbooks_customers,
+        check_quickbooks_engagements,
         check_quickbooks_pay,
         check_quickbooks_products,
         check_quickbooks_tokens,
     )
     from finance_ops_agent.config import MissingSettingError, QuickBooksSettings
-    from finance_ops_agent.domain.engagements import parse_workbook
+    from finance_ops_agent.domain.engagements import EngagementWorkbook, parse_workbook
 
     try:
         settings = QuickBooksSettings.from_env()
@@ -577,8 +578,11 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
     client = QuickBooksClient(store, settings.client_id, settings.client_secret)
     accounting = QuickBooksOnline(client, date.today())  # noqa: DTZ011
 
+    def parsed_list() -> EngagementWorkbook:
+        return parse_workbook(_engagement_list(config, _open_store(config.data_dir)).load())
+
     def wanted_customers() -> list[str]:
-        parsed = parse_workbook(_engagement_list(config, _open_store(config.data_dir)).load())
+        parsed = parsed_list()
         return sorted(
             {
                 client_row.quickbooks_customer or client_row.legal_name
@@ -592,7 +596,7 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
         consultant at two clients has two rates (decision 36)."""
         from finance_ops_agent.application.run import build_snapshot
 
-        parsed = parse_workbook(_engagement_list(config, _open_store(config.data_dir)).load())
+        parsed = parsed_list()
         by_client = {client_row.name: client_row for client_row in parsed.clients}
         wanted: dict[tuple[str, str], ExpectedProduct] = {}
         for engagement in parsed.engagements:
@@ -616,6 +620,7 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
         return [wanted[key] for key in sorted(wanted)]
 
     results.append(check_quickbooks_customers(accounting, wanted_customers))
+    results.append(check_quickbooks_engagements(accounting, parsed_list))
     results.append(check_quickbooks_products(accounting, wanted_engagements))
     results.append(check_quickbooks_pay(accounting, wanted_engagements))
     return results

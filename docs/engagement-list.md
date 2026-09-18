@@ -75,7 +75,7 @@ One row per consultant working for one client. When a rate changes, add a new ro
 | Pay rate | Dollars per hour Icon pays the consultant or vendor | 100.00 |
 | Rates from | The date these rates apply from; use the start date for the first row | 2026-02-01 |
 | Send automatically | `yes` lets the agent send clean invoices without asking when it is in automatic mode; `no` always asks | no |
-| Active | `yes` or `no` | yes |
+| Active | `yes` or `no`; **in QuickBooks Online mode the product's own active/inactive decides this**, and this column only stops doctor mentioning an engagement that has finished | yes |
 
 ## How an invoice is numbered
 
@@ -102,8 +102,9 @@ Two places **not** to put a stand-in address:
 ## Rules the agent follows
 
 - Billing contacts, payment terms, and pay timing come only from this workbook. **Rates no longer do**: in QuickBooks Online mode both of them live on the engagement's product -- what the client is charged and what Icon pays -- and this workbook's rate columns are the cross-check (decisions 30 and 38). Where QuickBooks has no pay rate on a product, this workbook's is used.
+- **Which engagements are live comes from QuickBooks Online, not from this sheet** (decision 42). The agent lists the active products under a category and expects timesheets for those; making a product inactive is how an engagement ends. What this sheet still decides is *when* to bill -- the billing schedule, the start date, and the first period -- which QuickBooks does not hold. So a product with no row here is a review naming it, and a row with no live product means no new periods are expected. When QuickBooks has nothing to say (manual mode, or no categories set up yet), this sheet's "Active" column decides on its own, as it always did.
 - For a timesheet, the agent uses the Engagements row for that consultant and client whose "Rates from" date is the latest one on or before the first day of the billing period. If the rate changes in the middle of a period, the agent asks Kevin rather than splitting the invoice.
-- There must be exactly one active engagement for a consultant and client on any given date. Two rows with the same consultant, client, and "Rates from" date are an error.
+- There must be exactly one live engagement for a consultant and client on any given date. Two rows with the same consultant, client, and "Rates from" date are an error.
 - Billing periods: `monthly` = calendar month; `twice a month` = 1st to 15th and 16th to month end; `every two weeks` = 14-day periods counted from "First period start"; `weekly` = 7-day periods counted from "First period start". The first and last period of an engagement are cut short at the start and end dates.
 - The agent never edits this file. If a row is incomplete or contradictory (missing rate, unknown client name, `vendor` type without a vendor company, no billing email for a client delivered by email, no invoice code for an active client, a pay rate higher than the bill rate), the agent emails Kevin a review item naming the sheet and row, and leaves any affected timesheets waiting.
 - Money in this sheet is entered in dollars with cents (140.00). The agent works in whole cents internally so totals never drift.

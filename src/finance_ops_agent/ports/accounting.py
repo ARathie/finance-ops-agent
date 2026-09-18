@@ -47,6 +47,29 @@ class EngagementRates:
 
 
 @dataclass(frozen=True)
+class AccountingEngagement:
+    """One engagement the accounting system holds, as it holds it.
+
+    In QuickBooks that is an active product under a category: the product is
+    the consultant and the category is the client (docs/decisions.md #36).
+    Enumerating them is what lets the accounting system say which engagements
+    are live, rather than the engagement list's own `Active` column
+    (docs/decisions.md #42).
+
+    `bill_rate_cents` is None where the product has no rate on it. That is an
+    engagement that cannot be invoiced, and it is listed rather than dropped:
+    one that quietly vanished would look exactly like one that had finished.
+    """
+
+    ref: str  # the accounting system's id, stable across renames
+    consultant: str
+    client: str
+    bill_rate_cents: int | None
+    pay_rate_cents: int | None
+    payee: str
+
+
+@dataclass(frozen=True)
 class CreatedInvoice:
     number: str
     external_id: str
@@ -69,6 +92,17 @@ class AccountingSystem(Protocol):
         """What this engagement is billed and paid at, or None where the
         accounting system has nothing to say. Manual mode always says None:
         there is nothing to ask."""
+        ...
+
+    def engagements(self) -> list[AccountingEngagement]:
+        """Every engagement the accounting system knows is live.
+
+        Empty means "nothing to say", not "nothing is live": manual mode has
+        no accounting system to enumerate, and a company whose products have
+        not been filled in yet answers the same way. The caller keeps to the
+        engagement list in both cases rather than concluding that Icon has
+        stopped working.
+        """
         ...
 
     def cancel_invoice(self, external_id: str, renamed_to: str | None = None) -> None:

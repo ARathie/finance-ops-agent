@@ -9,6 +9,7 @@ credentials, no real company.
 import json
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from urllib.parse import unquote
 
 import pytest
 
@@ -19,6 +20,7 @@ from finance_ops_agent.adapters.quickbooks.client import (
 )
 from finance_ops_agent.adapters.quickbooks.online import (
     PRODUCT_FIELDS,
+    PRODUCT_PAGE,
     QuickBooksOnline,
     item_id_from_note,
     private_note,
@@ -29,6 +31,7 @@ from finance_ops_agent.adapters.quickbooks.tokens import (
     TokenStore,
 )
 from finance_ops_agent.cli.doctor import ExpectedProduct
+from finance_ops_agent.domain.engagements import EngagementWorkbook, RawWorkbook
 from finance_ops_agent.domain.invoices import Invoice, build_invoice
 from finance_ops_agent.domain.money import Money
 from tests.contract.http_replay import Replay
@@ -935,7 +938,7 @@ class TestCrashDuringAWholeRun:
 
         # Run 1: nothing there yet, so it creates - then dies before the
         # billing email. Run 2: the private note is found, so it must not create.
-        replay = replay_from("create_ok", "find_existing")
+        replay = replay_from("create_ok", "find_existing", "engagements")
         accounting, _, _ = build(replay, tmp_path)
         env = _auto_env(tmp_path, accounting)
 
@@ -990,3 +993,169 @@ def _auto_env(tmp_path: Path, accounting: QuickBooksOnline) -> "ScenarioEnv":
         scripted_reading=reading(date(2026, 8, 1), date(2026, 8, 31)),
     )
     return env
+
+
+_ITEM_LISTING_URL = "https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20%2A%20FROM%20Item%20WHERE%20Active%20%3D%20true%20STARTPOSITION%201%20MAXRESULTS%201000"
+
+
+class TestListingTheEngagements:
+    """`engagements()` is the question the other way round from `product_for`:
+    not "what is this engagement billed at?" but "which engagements are
+    there?" -- which is what lets QuickBooks say one has finished."""
+
+    def test_only_products_under_a_category_are_engagements(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(replay_from("engagements"), tmp_path)
+        listed = accounting.engagements()
+        assert [(one.consultant, one.client) for one in listed] == [
+            ("Priya Shah", "Acme Corp"),
+            ("Dana Cruz", "Acme Corp"),
+        ]
+
+    def test_a_category_is_not_an_engagement(self, tmp_path: Path) -> None:
+        """A category is itself an Item in QuickBooks, so the listing holds
+        both the engagements and the clients they sit under."""
+        accounting, _, _ = build(replay_from("engagements"), tmp_path)
+        assert "Acme Corp" not in [one.consultant for one in accounting.engagements()]
+
+    def test_it_asks_only_for_live_products(self, tmp_path: Path) -> None:
+        """An inactive product coming back would read as a live engagement."""
+        replay = replay_from("engagements")
+        accounting, _, _ = build(replay, tmp_path)
+        accounting.engagements()
+        asked = " ".join(unquote(url) for url in replay.urls())
+        assert "FROM Item WHERE Active = true" in asked
+
+    def test_both_rates_and_the_payee_come_back(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(replay_from("engagements"), tmp_path)
+        priya = accounting.engagements()[0]
+        assert priya.ref == "42"
+        assert priya.bill_rate_cents == 14000
+        assert priya.pay_rate_cents == 10000
+        assert priya.payee == "Priya Shah"
+
+    def test_a_product_with_no_rate_is_listed_rather_than_dropped(self, tmp_path: Path) -> None:
+        """One that quietly vanished would look exactly like one that had
+        finished, and the agent would stop expecting timesheets for it."""
+        accounting, _, _ = build(replay_from("engagements_rateless"), tmp_path)
+        listed = accounting.engagements()
+        assert [(one.consultant, one.bill_rate_cents) for one in listed] == [("Sam Okafor", None)]
+
+    def test_it_pages_rather_than_stopping_at_the_first_page(self, tmp_path: Path) -> None:
+        """A full page means there may be more. Stopping there would read as
+        every engagement past the first page having ended."""
+        accounting, _, _ = build(replay_from("engagements_paged"), tmp_path)
+        listed = accounting.engagements()
+        assert len(listed) == PRODUCT_PAGE + 1
+        assert listed[-1].consultant == "Last One"
+
+    def test_a_short_page_ends_the_paging(self, tmp_path: Path) -> None:
+        """One call, not two: the fixture records no second page, so a second
+        call would fail rather than pass quietly."""
+        replay = replay_from("engagements")
+        accounting, _, _ = build(replay, tmp_path)
+        accounting.engagements()
+        queries = [url for method, url in replay.calls if "FROM%20Item" in url]
+        assert len(queries) == 1
+
+
+class TestTheEngagementsCheck:
+    """The products check asks "does every row have a product?"; this asks the
+    other way round, which is the way that matters once QuickBooks is what says
+    an engagement is live."""
+
+    def _workbook(self, *consultants: str, active: bool = True) -> EngagementWorkbook:
+        from finance_ops_agent.domain.engagements import parse_workbook
+        from tests.scenarios.conftest import client_row, consultant_row, engagement_row
+
+        # The parser cross-checks each engagement's consultant against the
+        # Consultants sheet, so both sheets have to hold them.
+        return parse_workbook(
+            RawWorkbook(
+                clients=[client_row()],
+                consultants=[
+                    consultant_row(2 + n, Consultant=name, Email=f"{n}@example.com")
+                    for n, name in enumerate(consultants)
+                ],
+                vendors=[],
+                engagements=[
+                    engagement_row(2 + n, Consultant=name, Active="yes" if active else "no")
+                    for n, name in enumerate(consultants)
+                ],
+            )
+        )
+
+    def test_a_pass_counts_the_live_engagements(self, tmp_path: Path) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_engagements
+
+        accounting, _, _ = build(replay_from("engagements"), tmp_path)
+        check = check_quickbooks_engagements(
+            accounting, lambda: self._workbook("Priya Shah", "Dana Cruz")
+        )
+
+        assert check.result is CheckResult.PASS
+        assert "2 live engagement(s)" in check.detail
+        assert f"the sandbox company {REALM}" in check.detail
+
+    def test_an_engagement_with_no_row_fails_and_names_it(self, tmp_path: Path) -> None:
+        """No row means no billing schedule, which QuickBooks does not hold."""
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_engagements
+
+        accounting, _, _ = build(replay_from("engagements"), tmp_path)
+        check = check_quickbooks_engagements(accounting, lambda: self._workbook("Priya Shah"))
+
+        assert check.result is CheckResult.FAIL
+        assert "Dana Cruz at Acme Corp" in check.detail
+        assert "no row on the engagement list" in check.detail
+
+    def test_a_row_with_no_live_product_fails_and_says_what_will_happen(
+        self, tmp_path: Path
+    ) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_engagements
+
+        accounting, _, _ = build(replay_from("engagements"), tmp_path)
+        check = check_quickbooks_engagements(
+            accounting, lambda: self._workbook("Priya Shah", "Dana Cruz", "Sam Okafor")
+        )
+
+        assert check.result is CheckResult.FAIL
+        assert "Sam Okafor at Acme Corp" in check.detail
+        assert "no new periods" in check.detail
+        assert "mark the row inactive if the engagement has finished" in check.detail
+
+    def test_a_product_with_no_rate_fails(self, tmp_path: Path) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_engagements
+        from finance_ops_agent.domain.engagements import parse_workbook
+        from tests.scenarios.conftest import client_row, consultant_row, engagement_row
+
+        book = parse_workbook(
+            RawWorkbook(
+                clients=[client_row(2, **{"Client": "MasTec", "Legal name": "MasTec"})],
+                consultants=[consultant_row(2, Consultant="Sam Okafor")],
+                vendors=[],
+                engagements=[engagement_row(2, Consultant="Sam Okafor", Client="MasTec")],
+            )
+        )
+        accounting, _, _ = build(replay_from("engagements_rateless"), tmp_path)
+        check = check_quickbooks_engagements(accounting, lambda: book)
+
+        assert check.result is CheckResult.FAIL
+        assert "no rate" in check.detail
+        assert "Sam Okafor at MasTec" in check.detail
+
+    def test_a_company_with_no_categories_says_the_list_still_decides(self, tmp_path: Path) -> None:
+        """Not "every engagement has ended": a company part-way through being
+        set up answers exactly like manual mode."""
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_engagements
+
+        replay = Replay(
+            {
+                f"GET {_ITEM_LISTING_URL}": [
+                    {"status": 200, "json": {"QueryResponse": {}}, "headers": {}}
+                ]
+            }
+        )
+        accounting, _, _ = build(replay, tmp_path)
+        check = check_quickbooks_engagements(accounting, lambda: self._workbook("Priya Shah"))
+
+        assert check.result is CheckResult.PASS
+        assert "no products under a category" in check.detail

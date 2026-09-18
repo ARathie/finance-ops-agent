@@ -12,7 +12,7 @@ is the same question QuickBooksOnline answers by reading the private note.
 from collections.abc import Sequence
 
 from finance_ops_agent.domain.invoices import Invoice
-from finance_ops_agent.ports.accounting import CreatedInvoice
+from finance_ops_agent.ports.accounting import AccountingEngagement, CreatedInvoice
 from finance_ops_agent.ports.pdf import PdfRenderer
 from finance_ops_agent.ports.store import Store
 
@@ -49,6 +49,11 @@ class ManualQuickBooks:
     def engagement_rates(self, consultant: str, clients: Sequence[str]) -> None:
         # Nothing to ask: in manual mode the rates live in the engagement list.
         return None
+
+    def engagements(self) -> list[AccountingEngagement]:
+        # Nothing to enumerate: in manual mode QuickBooks Desktop is not
+        # reachable, so the engagement list says which engagements are live.
+        return []
 
     def paid_status(self, external_ids: list[str]) -> dict[str, bool]:
         # Manual mode cannot see payments; QuickBooks Online (PR 9) can.

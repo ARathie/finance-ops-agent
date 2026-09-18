@@ -354,3 +354,23 @@ Decision: **`docs/quickbooks-setup.md` is the Kevin-facing half of `cli/doctor.p
 - **The doctor points at it once**, after the failure count, and only when a QuickBooks check failed. Repeating it inside each message would lengthen a dozen sentences Kevin already has to read to fix one thing. A test asserts the file it names exists, because a pointer at a document that moved is worse than no pointer.
 
 Two things the document says that no check does. The **custom transaction numbers** setting cannot be read through the API, so nothing fails until the first invoice is made, voided and reported; that is written down as the one thing to get right before a real run rather than after. And **ending an engagement** is still the engagement list's `Active` column, not QuickBooks' -- marking a product inactive while the list still calls the engagement live turns it into a "no product for…" failure. Making QuickBooks the switch is agreed and not built; the document says so plainly rather than describing the intended behaviour as though it were there.
+
+## 42. QuickBooks says which engagements are live; the workbook says when to bill
+
+Decision 36 made each engagement a product under a category, and decision 38 moved both rates onto it. What still came from the workbook was the list of engagements itself, from the Engagements sheet's `Active` column -- so ending an engagement meant editing a spreadsheet, while everything else about it was edited in QuickBooks. Two switches for one thing, and only one of them was where Kevin was already working.
+
+Decision: **the accounting system is asked which engagements are live, and that is what decides whether to expect a timesheet.** In QuickBooks that is the active products under a category, listed with paging; `AccountingSystem.engagements()` is the port.
+
+This is a join, not a replacement, and the seam is worth naming: **QuickBooks says *which*, the workbook says *when*.** The billing schedule, the start date and the first period exist in no accounting system, so an engagement can only be scheduled from a row. That decides the awkward cases:
+
+- **A product with no row** cannot be given a period, so Kevin is asked (`LIST_ROW_PROBLEM`) rather than a schedule being guessed.
+- **A row with no live product** means no new periods. It is a run report line and a failing doctor check, not a review: doctor fails on exactly this before any timesheet is due, and saying it twice trains someone to skim both.
+- **A row marked inactive by hand, with a live product,** is live. QuickBooks is the switch, and its schedule is still read off that row.
+- **An empty listing means "nothing to say", never "everything has ended".** Manual mode answers that way, and so does a company whose products are not filled in yet. The engagement list then decides on its own, exactly as before. The dangerous reading of silence is the one where the agent quietly stops billing, so it is a test of its own.
+- **An accounting system that cannot answer does not stop the run**, for the same reason as the rates (decision 38): the list still says what is active and the next run picks the answer up.
+
+Ending an engagement means "expect no more timesheets" and nothing else -- it is not "can no longer invoice". Work already in hand keeps its items, a waiting invoice still goes out, and a late timesheet for a period that already happened is still handled.
+
+Two details that are easy to get wrong. The **order** is the workbook's, not sorted: items are created in that order and their numbers are what Kevin reads in the tracking sheet. And a **category is itself an Item** in QuickBooks, so the listing contains the clients as well as the engagements; a category is not an engagement, and neither is a product with no category.
+
+What this does **not** do is retire the Engagements sheet's columns. The pairing, the rates and the `Active` flag are now cross-checks rather than sources, and they earn their place while there is only one cycle's evidence that QuickBooks holds them correctly -- the fallback above depends on them. Removing them is its own change, once a full cycle has run with QuickBooks deciding.

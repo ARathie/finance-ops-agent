@@ -36,7 +36,11 @@ from finance_ops_agent.adapters.quickbooks.client import (
 from finance_ops_agent.domain.invoice_numbers import is_voided_number
 from finance_ops_agent.domain.invoices import Invoice
 from finance_ops_agent.domain.money import Money, invoice_amount
-from finance_ops_agent.ports.accounting import CreatedInvoice, EngagementRates
+from finance_ops_agent.ports.accounting import (
+    AccountingEngagement,
+    CreatedInvoice,
+    EngagementRates,
+)
 
 PRIVATE_NOTE_PREFIX = "fops item"
 # The whole entity, not a field list. QuickBooks' query language refuses
@@ -45,6 +49,14 @@ PRIVATE_NOTE_PREFIX = "fops item"
 # entity also means this does not have to be kept in step with which fields
 # the query language happens to accept.
 PRODUCT_FIELDS = "*"
+# QuickBooks caps a query at 1000 rows and pages with STARTPOSITION, which is
+# 1-based. Icon has a handful of products; the paging is here so that a company
+# with a real catalogue does not quietly return the first page and look as
+# though the rest of the engagements had ended.
+PRODUCT_PAGE = 1000
+# A bound on the loop, not on the catalogue: a server that kept answering with
+# a full page would otherwise spin for ever.
+MAX_PRODUCT_PAGES = 20
 
 
 def private_note(item_id: int, replaces: str | None = None) -> str:
@@ -85,6 +97,39 @@ def client_names(invoice: Invoice) -> list[str]:
         if name and name not in seen:
             seen.append(name)
     return seen
+
+
+def _engagement_from(row: dict[str, Any]) -> "AccountingEngagement | None":
+    """One row of an item listing, as an engagement -- or None if it is not one.
+
+    A category is itself an Item in QuickBooks, so the listing contains both
+    the engagements and the clients they sit under; a category is not an
+    engagement. Nor is a product with no category: `FullyQualifiedName` is the
+    whole path, so a colon in it is what says this product sits under
+    something.
+
+    The client is the segment the product sits *directly* under, which is the
+    same path `product_for` looks a product up by. A product nested deeper than
+    that still names its client correctly here; `product_for` finds it by name
+    alone, and the doctor says so.
+    """
+    if str(row.get("Type") or "") == "Category":
+        return None
+    path = str(row.get("FullyQualifiedName") or "")
+    if ":" not in path:
+        return None
+    category, _, name = path.rpartition(":")
+    price = row.get("UnitPrice")
+    cost = row.get("PurchaseCost")
+    vendor = row.get("PrefVendorRef") or {}
+    return AccountingEngagement(
+        ref=str(row["Id"]),
+        consultant=str(row.get("Name") or name),
+        client=category.rpartition(":")[2],
+        bill_rate_cents=None if price is None else _cents(price),
+        pay_rate_cents=None if cost is None else _cents(cost),
+        payee=str(vendor.get("name") or "") if isinstance(vendor, dict) else "",
+    )
 
 
 @dataclass(frozen=True)
@@ -342,6 +387,41 @@ class QuickBooksOnline:
             external_id=quickbooks_id,
             pdf=self.invoice_pdf(quickbooks_id),
         )
+
+    def engagements(self) -> list[AccountingEngagement]:
+        """Every active product under a category: one per live engagement.
+
+        This is the other direction from `product_for`. That one asks "what is
+        this engagement billed at?"; this one asks "which engagements are
+        there?", which is what lets QuickBooks say an engagement has finished
+        by the product being made inactive (decision 42).
+
+        Only products under a category count. A product with no category is not
+        an engagement -- it is a service Icon sells, or a product half set up --
+        and the client is the category it sits directly under, which is the
+        same path `product_for` looks a product up by.
+
+        `Active = true` is asked for explicitly rather than relied on: an
+        inactive product coming back would read as a live engagement.
+        """
+        found: list[AccountingEngagement] = []
+        start = 1
+        for _ in range(MAX_PRODUCT_PAGES):
+            rows = self._client.query(
+                f"SELECT {PRODUCT_FIELDS} FROM Item WHERE Active = true"
+                f" STARTPOSITION {start} MAXRESULTS {PRODUCT_PAGE}"
+            )
+            for row in rows:
+                engagement = _engagement_from(row)
+                if engagement is not None:
+                    found.append(engagement)
+            if len(rows) < PRODUCT_PAGE:
+                break
+            start += len(rows)
+        else:
+            logs.log("stopped paging through quickbooks products", pages=MAX_PRODUCT_PAGES)
+        logs.log("quickbooks engagements listed", count=len(found))
+        return found
 
     def engagement_rates(self, consultant: str, clients: Sequence[str]) -> EngagementRates | None:
         """Both sides of the engagement's product (decision 38)."""

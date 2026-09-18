@@ -20,6 +20,7 @@ from finance_ops_agent.adapters.email.client import (
     open_smtp,
 )
 from finance_ops_agent.adapters.email.inbox import INBOX
+from finance_ops_agent.domain.engagements import EngagementWorkbook
 from finance_ops_agent.domain.money import Money
 
 
@@ -298,6 +299,71 @@ def check_quickbooks_products(
         return (
             f"all {len(names)} engagement(s) have a product in {accounting.company},"
             " charging what the engagement list says"
+        )
+
+    return _run(name, run)
+
+
+def check_quickbooks_engagements(
+    accounting: object, load: Callable[[], "EngagementWorkbook"]
+) -> Check:
+    """Which engagements does QuickBooks say are live, and can each be scheduled?
+
+    The products check asks the question one way round -- does every row on the
+    engagement list have a product? This asks it the other way, which is the way
+    that matters now that QuickBooks is what says an engagement is live
+    (docs/decisions.md #42): an engagement QuickBooks has and the list has no
+    row for cannot be scheduled, because the billing schedule and the start date
+    are still the workbook's to say.
+
+    Both halves of a disagreement are named, because they are fixed in different
+    places: a missing row is fixed in the list, and a row the agent will stop
+    expecting timesheets for is fixed by making its product active again -- or
+    is correct, and the engagement has finished.
+    """
+    from finance_ops_agent.adapters.quickbooks.online import QuickBooksOnline
+    from finance_ops_agent.domain.live_engagements import live_engagements
+
+    name = "quickbooks engagements"
+    assert isinstance(accounting, QuickBooksOnline)
+
+    def run() -> str:
+        workbook = load()
+        listed = accounting.engagements()
+        answer = live_engagements(workbook, [(one.consultant, one.client) for one in listed])
+        rateless = sorted(
+            f"{one.consultant} at {one.client}" for one in listed if one.bill_rate_cents is None
+        )
+        problems: list[str] = []
+        if answer.without_a_row:
+            problems.append(
+                f"{len(answer.without_a_row)} engagement(s) in {accounting.company} have no row"
+                " on the engagement list, so I cannot tell how often to expect a timesheet"
+                f" or when the period ends: {', '.join(answer.without_a_row)}."
+            )
+        if answer.finished:
+            named = ", ".join(f"{consultant} at {client}" for consultant, client in answer.finished)
+            problems.append(
+                f"The engagement list still calls {len(answer.finished)} engagement(s) active"
+                f" and {accounting.company} has no live product for them, so I will expect no"
+                f" new periods: {named}. Make the product active again, or mark the row"
+                " inactive if the engagement has finished."
+            )
+        if rateless:
+            problems.append(
+                f"{len(rateless)} product(s) have no rate, and the rate on the product is what"
+                f" I bill: {', '.join(rateless)}."
+            )
+        if problems:
+            raise RuntimeError(" ".join(problems))
+        if not listed:
+            return (
+                f"{accounting.company} lists no products under a category, so the engagement"
+                " list decides which engagements are live, as it did before"
+            )
+        return (
+            f"{len(answer.live)} live engagement(s) in {accounting.company}, each with a row"
+            " on the engagement list to schedule it from"
         )
 
     return _run(name, run)

@@ -36,6 +36,7 @@ from finance_ops_agent.domain.engagements import (
 )
 from finance_ops_agent.domain.invoice_numbers import codes_for_client
 from finance_ops_agent.domain.items import EngagementSnapshot, Item, TimesheetRecord
+from finance_ops_agent.domain.live_engagements import LiveEngagements, live_engagements
 from finance_ops_agent.domain.messages import (
     InboundEmail,
     MessageKind,
@@ -350,13 +351,63 @@ def _ask_about_the_pay_rate(deps: RunDeps, item: Item, report: RunReport) -> Non
         outgoing_steps.enqueue_email(deps, "review_email", f"review:pay:{item.id}", item.id, email)
 
 
+def _which_engagements_are_live(
+    deps: RunDeps, workbook: EngagementWorkbook, report: RunReport
+) -> LiveEngagements:
+    """Ask the accounting system which engagements are live, and join.
+
+    QuickBooks holds the engagements now, so it is what says one has finished:
+    Kevin makes the product inactive and the agent stops expecting timesheets
+    (decision 42). The schedule still comes off the workbook row, which is why
+    an engagement QuickBooks has and the list does not is a review rather than
+    a guess.
+
+    An accounting system that cannot answer does not stop the run, for the same
+    reason as the rates (decision 38): the engagement list still says which
+    engagements are active, the timesheets are still read, and the next run
+    picks the answer up. Being unable to ask must never look like Icon having
+    stopped working.
+    """
+    listed: list[tuple[str, str]] = []
+    try:
+        listed = [
+            (engagement.consultant, engagement.client)
+            for engagement in deps.accounting.engagements()
+        ]
+    except AccountingFailed as error:
+        logs.log(
+            "could not ask the accounting system which engagements are live", said=str(error)[:200]
+        )
+    answer = live_engagements(workbook, listed)
+    for described in answer.without_a_row:
+        _open_review(
+            deps,
+            report,
+            None,
+            Finding(
+                ReviewCode.LIST_ROW_PROBLEM,
+                f"QuickBooks has an engagement for {described} and the engagement list has"
+                " no row for it, so I do not know how often to expect a timesheet or when"
+                " the periods end. Add the row, or make the product inactive in QuickBooks"
+                " if the engagement has finished.",
+            ),
+        )
+    for consultant, client in answer.finished:
+        # Not a review: `fops doctor` fails its products check on exactly this,
+        # loudly and before any timesheet is due. Saying it twice would train
+        # Kevin to skim both.
+        logs.log("no longer live in the accounting system", consultant=consultant, client=client)
+        report.note(f"no new periods expected: {consultant} at {client} is not live in QuickBooks")
+    return answer
+
+
 def _create_expected_items(deps: RunDeps, workbook: EngagementWorkbook, report: RunReport) -> None:
-    """A billing period that has ended for an active engagement, with no
-    timesheet yet, becomes a waiting_for_timesheet item."""
+    """A billing period that has ended for a live engagement, with no timesheet
+    yet, becomes a waiting_for_timesheet item."""
     today = deps.clock.today()
-    for (consultant, client), rows in _engagement_pairs(workbook).items():
-        if not any(row.active for row in rows):
-            continue
+    pairs = _engagement_pairs(workbook)
+    for consultant, client in _which_engagements_are_live(deps, workbook, report).live:
+        rows = pairs[(consultant, client)]
         start, end, latest = _pair_window(rows)
         for period in billing_periods(
             latest.billing_schedule, start, end, latest.first_period_start, until=today
