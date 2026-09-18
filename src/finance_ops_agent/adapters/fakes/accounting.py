@@ -12,6 +12,7 @@ from finance_ops_agent.ports.accounting import (
     AccountingEngagement,
     AccountingParty,
     CreatedInvoice,
+    EngagementListing,
     EngagementRates,
 )
 
@@ -64,10 +65,12 @@ class FakeAccounting:
             raise self.fail_with
         return self.payees.get(ref)
 
-    def engagements(self) -> list[AccountingEngagement]:
+    def engagements(self) -> EngagementListing:
         if self.fail_with is not None:
             raise self.fail_with
-        return list(self.live)
+        return EngagementListing(
+            live=list(self.live), products_seen=len(self.live), categories_seen=len(self.live)
+        )
 
     def engagement_rates(self, consultant: str, clients: Sequence[str]) -> EngagementRates | None:
         if self.fail_with is not None:

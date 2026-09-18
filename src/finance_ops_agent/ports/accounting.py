@@ -71,6 +71,20 @@ class AccountingEngagement:
 
 
 @dataclass(frozen=True)
+class EngagementListing:
+    """What the accounting system holds, and what it looked at to find it.
+
+    The counts are not decoration. "No engagements" and "no products at all"
+    call for completely different things to be done about them, and a listing
+    that reported only the first left someone guessing which they had.
+    """
+
+    live: list[AccountingEngagement]
+    products_seen: int = 0
+    categories_seen: int = 0
+
+
+@dataclass(frozen=True)
 class AccountingParty:
     """A client or a payee, beyond what an engagement says about them.
 
@@ -114,7 +128,7 @@ class AccountingSystem(Protocol):
         there is nothing to ask."""
         ...
 
-    def engagements(self) -> list[AccountingEngagement]:
+    def engagements(self) -> EngagementListing:
         """Every engagement the accounting system knows is live.
 
         Empty means "nothing to say", not "nothing is live": manual mode has

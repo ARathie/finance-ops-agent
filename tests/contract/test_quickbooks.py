@@ -1003,9 +1003,27 @@ class TestListingTheEngagements:
     not "what is this engagement billed at?" but "which engagements are
     there?" -- which is what lets QuickBooks say one has finished."""
 
+    def test_a_category_reached_only_by_parent_ref_still_counts(self, tmp_path: Path) -> None:
+        """Whether a category shows up in `FullyQualifiedName` depends on the
+        API version; `ParentRef` is the relationship itself. Reading the name
+        alone reported "no product has a category" against a company where
+        every product had one."""
+        accounting, _, _ = build(replay_from("engagements_parent_ref"), tmp_path)
+        listing = accounting.engagements()
+        assert [(one.consultant, one.client) for one in listing.live] == [
+            ("Priya Shah", "Acme Corp")
+        ]
+
+    def test_it_counts_what_it_read_not_only_what_it_recognised(self, tmp_path: Path) -> None:
+        """ "No engagements" and "no products at all" need different things
+        done about them."""
+        listing = build(replay_from("engagements"), tmp_path)[0].engagements()
+        assert listing.products_seen == 3  # two engagements and one uncategorised
+        assert listing.categories_seen == 1
+
     def test_only_products_under_a_category_are_engagements(self, tmp_path: Path) -> None:
         accounting, _, _ = build(replay_from("engagements"), tmp_path)
-        listed = accounting.engagements()
+        listed = accounting.engagements().live
         assert [(one.consultant, one.client) for one in listed] == [
             ("Priya Shah", "Acme Corp"),
             ("Dana Cruz", "Acme Corp"),
@@ -1015,7 +1033,7 @@ class TestListingTheEngagements:
         """A category is itself an Item in QuickBooks, so the listing holds
         both the engagements and the clients they sit under."""
         accounting, _, _ = build(replay_from("engagements"), tmp_path)
-        assert "Acme Corp" not in [one.consultant for one in accounting.engagements()]
+        assert "Acme Corp" not in [one.consultant for one in accounting.engagements().live]
 
     def test_it_asks_only_for_live_products(self, tmp_path: Path) -> None:
         """An inactive product coming back would read as a live engagement."""
@@ -1027,7 +1045,7 @@ class TestListingTheEngagements:
 
     def test_both_rates_and_the_payee_come_back(self, tmp_path: Path) -> None:
         accounting, _, _ = build(replay_from("engagements"), tmp_path)
-        priya = accounting.engagements()[0]
+        priya = accounting.engagements().live[0]
         assert priya.ref == "42"
         assert priya.bill_rate_cents == 14000
         assert priya.pay_rate_cents == 10000
@@ -1037,14 +1055,14 @@ class TestListingTheEngagements:
         """One that quietly vanished would look exactly like one that had
         finished, and the agent would stop expecting timesheets for it."""
         accounting, _, _ = build(replay_from("engagements_rateless"), tmp_path)
-        listed = accounting.engagements()
+        listed = accounting.engagements().live
         assert [(one.consultant, one.bill_rate_cents) for one in listed] == [("Sam Okafor", None)]
 
     def test_it_pages_rather_than_stopping_at_the_first_page(self, tmp_path: Path) -> None:
         """A full page means there may be more. Stopping there would read as
         every engagement past the first page having ended."""
         accounting, _, _ = build(replay_from("engagements_paged"), tmp_path)
-        listed = accounting.engagements()
+        listed = accounting.engagements().live
         assert len(listed) == PRODUCT_PAGE + 1
         assert listed[-1].consultant == "Last One"
 
@@ -1158,7 +1176,8 @@ class TestTheEngagementsCheck:
         check = check_quickbooks_engagements(accounting, lambda: self._workbook("Priya Shah"))
 
         assert check.result is CheckResult.PASS
-        assert "no products under a category" in check.detail
+        assert "none of the products sits under a category" in check.detail
+        assert "0 product(s) and 0 categories" in check.detail  # says what it read
 
 
 class TestReadingContactsAndTerms:
@@ -1244,3 +1263,31 @@ class TestReadingContactsAndTerms:
         accounting, _, _ = build(replay, tmp_path)
         accounting.customer("Acme Corporation")
         assert any("DisplayName%20%3D%20%27Acme%20Corporation%27" in url for url in replay.urls())
+
+
+class TestFindingTheProductByItsParent:
+    """The category is not always in `FullyQualifiedName`, and the path lookup
+    failing is not proof there is no category. Without this, two products of
+    one name were refused as ambiguous even though their parents told them
+    apart -- and, worse, a single one was billed from "the name alone" without
+    anyone checking which client it belonged to."""
+
+    def test_two_products_of_one_name_are_told_apart_by_their_parent(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(replay_from("product_by_parent_ref"), tmp_path)
+        product = accounting.product_for("Sridhar Doraiswamy", ["MasTec", "MasTec Inc"])
+        assert product.ref == "21"
+        assert product.unit_price_cents == 14_000  # MasTec's rate, not iStream's
+
+    def test_the_other_client_gets_the_other_product(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(replay_from("product_by_parent_ref"), tmp_path)
+        product = accounting.product_for("Sridhar Doraiswamy", ["iStream"])
+        assert product.ref == "22"
+        assert product.unit_price_cents == 16_000
+
+    def test_a_parent_is_asked_for_once_per_run(self, tmp_path: Path) -> None:
+        replay = replay_from("product_by_parent_ref")
+        accounting, _, _ = build(replay, tmp_path)
+        accounting.product_for("Sridhar Doraiswamy", ["MasTec"])
+        accounting.product_for("Sridhar Doraiswamy", ["iStream"])
+        asked = [url for _, url in replay.calls if "Id%20%3D%20%2720%27" in url]
+        assert len(asked) == 1

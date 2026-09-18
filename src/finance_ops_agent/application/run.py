@@ -392,7 +392,7 @@ def _which_engagements_are_live(
     try:
         listed = [
             (engagement.consultant, engagement.client)
-            for engagement in deps.accounting.engagements()
+            for engagement in deps.accounting.engagements().live
         ]
     except AccountingFailed as error:
         logs.log(

@@ -40,6 +40,7 @@ from finance_ops_agent.ports.accounting import (
     AccountingEngagement,
     AccountingParty,
     CreatedInvoice,
+    EngagementListing,
     EngagementRates,
 )
 
@@ -100,33 +101,44 @@ def client_names(invoice: Invoice) -> list[str]:
     return seen
 
 
-def _engagement_from(row: dict[str, Any]) -> "AccountingEngagement | None":
+def _engagement_from(
+    row: dict[str, Any], categories: dict[str, str]
+) -> "AccountingEngagement | None":
     """One row of an item listing, as an engagement -- or None if it is not one.
 
-    A category is itself an Item in QuickBooks, so the listing contains both
-    the engagements and the clients they sit under; a category is not an
-    engagement. Nor is a product with no category: `FullyQualifiedName` is the
-    whole path, so a colon in it is what says this product sits under
-    something.
+    A category is itself an Item in QuickBooks, so the listing contains both the
+    engagements and the clients they sit under; a category is not an engagement.
+    Nor is a product that sits under nothing.
 
-    The client is the segment the product sits *directly* under, which is the
-    same path `product_for` looks a product up by. A product nested deeper than
-    that still names its client correctly here; `product_for` finds it by name
-    alone, and the doctor says so.
+    **The parent is found by `ParentRef` first, and only then by splitting
+    `FullyQualifiedName`.** The two are meant to say the same thing, but whether
+    a category shows up in the fully qualified name depends on the API version
+    being talked to, while `ParentRef` is the relationship itself. Reading the
+    name alone reported "no product has a category" against a company where
+    every product had one.
     """
     if str(row.get("Type") or "") == "Category":
         return None
     path = str(row.get("FullyQualifiedName") or "")
-    if ":" not in path:
+    parent = row.get("ParentRef") or {}
+    client = ""
+    if isinstance(parent, dict) and parent.get("value"):
+        reference = str(parent["value"])
+        client = categories.get(reference) or str(parent.get("name") or "")
+    if not client and ":" in path:
+        client = path.rpartition(":")[0]
+    # Nested deeper than one level: the client is the category it sits directly
+    # under, which is the same one `product_for` looks a product up by.
+    client = client.rpartition(":")[2] or client
+    if not client:
         return None
-    category, _, name = path.rpartition(":")
     price = row.get("UnitPrice")
     cost = row.get("PurchaseCost")
     vendor = row.get("PrefVendorRef") or {}
     return AccountingEngagement(
         ref=str(row["Id"]),
-        consultant=str(row.get("Name") or name),
-        client=category.rpartition(":")[2],
+        consultant=str(row.get("Name") or path.rpartition(":")[2]),
+        client=client,
         bill_rate_cents=None if price is None else _cents(price),
         pay_rate_cents=None if cost is None else _cents(cost),
         payee=str(vendor.get("name") or "") if isinstance(vendor, dict) else "",
@@ -161,6 +173,7 @@ class QuickBooksOnline:
         self._customers: dict[str, str] = {}
         self._products: dict[tuple[str, tuple[str, ...]], Product] = {}
         self._terms: dict[str, int] | None = None
+        self._parents: dict[str, str] = {}
 
     @property
     def company(self) -> str:
@@ -260,10 +273,20 @@ class QuickBooksOnline:
             if rows:
                 return self._remember(key, consultant, rows[0], path)
 
-        # No category yet: allow it while exactly one product answers to the name.
+        # The path did not find it. That is not proof there is no category:
+        # whether one shows up in `FullyQualifiedName` depends on the API
+        # version being talked to, and `ParentRef` is the relationship itself.
+        # So ask by name, then read each candidate's parent.
         rows = self._client.query(
             f"SELECT {PRODUCT_FIELDS} FROM Item WHERE Name = '{_escape(consultant)}'"
         )
+        if len(rows) > 1:
+            wanted = {name.casefold() for name in clients if name}
+            under_the_client = [row for row in rows if self._parent_name(row).casefold() in wanted]
+            if len(under_the_client) == 1:
+                return self._remember(
+                    key, consultant, under_the_client[0], self._parent_name(under_the_client[0])
+                )
         if len(rows) > 1:
             names = ", ".join(
                 sorted(str(row.get("FullyQualifiedName") or row["Id"]) for row in rows)
@@ -284,7 +307,33 @@ class QuickBooksOnline:
                 " category named for the client, with the rate on it. I never create"
                 " products myself."
             )
-        return self._remember(key, consultant, rows[0], "")
+        return self._remember(key, consultant, rows[0], self._parent_name(rows[0]))
+
+    def _parent_name(self, row: dict[str, Any]) -> str:
+        """The category a product sits directly under, or "".
+
+        `ParentRef` sometimes carries the parent's name and sometimes only its
+        id, so the id is resolved and the answers are kept for the run: a
+        company where every consultant works for the same client would
+        otherwise ask for the same category once per engagement.
+        """
+        parent = row.get("ParentRef") or {}
+        if not isinstance(parent, dict) or not parent.get("value"):
+            return ""
+        named = str(parent.get("name") or "")
+        if not named:
+            reference = str(parent["value"])
+            if reference not in self._parents:
+                found = self._client.query(
+                    f"SELECT {PRODUCT_FIELDS} FROM Item WHERE Id = '{_escape(reference)}'"
+                )
+                self._parents[reference] = (
+                    str(found[0].get("FullyQualifiedName") or found[0].get("Name") or "")
+                    if found
+                    else ""
+                )
+            named = self._parents[reference]
+        return named.rpartition(":")[2] or named
 
     def _remember(
         self, key: tuple[str, tuple[str, ...]], consultant: str, row: dict[str, Any], path: str
@@ -310,7 +359,7 @@ class QuickBooksOnline:
             "quickbooks product found",
             consultant=consultant,
             quickbooks_id=product.ref,
-            matched_on=path or "the name alone, with no category",
+            matched_on=path or "the name alone, with no category I could read",
         )
         self._products[key] = product
         return product
@@ -455,7 +504,7 @@ class QuickBooksOnline:
         rows = self._client.query(f"SELECT * FROM Vendor WHERE Id = '{_escape(ref)}'")
         return self._party(rows[0], "TermRef") if rows else None
 
-    def engagements(self) -> list[AccountingEngagement]:
+    def engagements(self) -> EngagementListing:
         """Every active product under a category: one per live engagement.
 
         This is the other direction from `product_for`. That one asks "what is
@@ -464,31 +513,51 @@ class QuickBooksOnline:
         by the product being made inactive (decision 42).
 
         Only products under a category count. A product with no category is not
-        an engagement -- it is a service Icon sells, or a product half set up --
-        and the client is the category it sits directly under, which is the
-        same path `product_for` looks a product up by.
+        an engagement -- it is a service Icon sells, or a product half set up.
+        Everything read is counted, because "no engagements" and "no products
+        at all" need different things done about them.
 
         `Active = true` is asked for explicitly rather than relied on: an
         inactive product coming back would read as a live engagement.
         """
-        found: list[AccountingEngagement] = []
+        rows: list[dict[str, Any]] = []
         start = 1
         for _ in range(MAX_PRODUCT_PAGES):
-            rows = self._client.query(
+            page = self._client.query(
                 f"SELECT {PRODUCT_FIELDS} FROM Item WHERE Active = true"
                 f" STARTPOSITION {start} MAXRESULTS {PRODUCT_PAGE}"
             )
-            for row in rows:
-                engagement = _engagement_from(row)
-                if engagement is not None:
-                    found.append(engagement)
-            if len(rows) < PRODUCT_PAGE:
+            rows.extend(page)
+            if len(page) < PRODUCT_PAGE:
                 break
-            start += len(rows)
+            start += len(page)
         else:
             logs.log("stopped paging through quickbooks products", pages=MAX_PRODUCT_PAGES)
-        logs.log("quickbooks engagements listed", count=len(found))
-        return found
+
+        # Every row first, so a product's parent can be named even when the
+        # reference carries only an id: the categories are in this same listing.
+        categories = {
+            str(row["Id"]): str(row.get("FullyQualifiedName") or row.get("Name") or "")
+            for row in rows
+            if str(row.get("Type") or "") == "Category"
+        }
+        found = [
+            engagement
+            for engagement in (_engagement_from(row, categories) for row in rows)
+            if engagement is not None
+        ]
+        listing = EngagementListing(
+            live=found,
+            products_seen=len(rows) - len(categories),
+            categories_seen=len(categories),
+        )
+        logs.log(
+            "quickbooks engagements listed",
+            count=len(found),
+            products_seen=listing.products_seen,
+            categories_seen=listing.categories_seen,
+        )
+        return listing
 
     def engagement_rates(self, consultant: str, clients: Sequence[str]) -> EngagementRates | None:
         """Both sides of the engagement's product (decision 38)."""
