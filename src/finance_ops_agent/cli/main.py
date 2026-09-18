@@ -648,8 +648,6 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
                 rates = accounting.engagement_rates(expected.consultant, expected.clients)
             except Exception:
                 continue  # the products check reports this one
-            if rates is None or not rates.payee_ref:
-                continue
             consultant_row = by_consultant.get(expected.consultant)
             vendor_row = by_vendor.get(expected.payee)
             if vendor_row is not None:
@@ -658,12 +656,19 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
                 emails, timing = list(consultant_row.emails), consultant_row.pay_timing_days
             else:
                 continue
-            parties[("payee", rates.payee_ref)] = ExpectedParty(
-                what="payee",
-                name=expected.payee,
-                lookup=rates.payee_ref,
-                emails=emails,
-                payment_terms_days=timing,
+            # An engagement whose product names no vendor is still listed, with
+            # nothing to look up. Skipping it here made the check report only
+            # what it happened to find, so a company with no purchase sides at
+            # all looked the same as one that agreed about everything.
+            reference = "" if rates is None else rates.payee_ref
+            parties[("payee", reference or f"~{expected.consultant} at {expected.client}")] = (
+                ExpectedParty(
+                    what="payee",
+                    name=f"{expected.payee or expected.consultant}",
+                    lookup=reference,
+                    emails=emails,
+                    payment_terms_days=timing,
+                )
             )
         return [parties[key] for key in sorted(parties)]
 

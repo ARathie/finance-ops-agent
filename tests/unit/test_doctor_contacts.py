@@ -110,6 +110,21 @@ def test_no_record_at_all_is_named_rather_than_counted_as_agreement() -> None:
     assert "no record in QuickBooks" in result.detail
 
 
+def test_a_payee_with_nothing_to_look_up_is_named_not_skipped() -> None:
+    """A company with no purchase sides filled in must not read the same as one
+    that agrees about everything."""
+    payee = ExpectedParty(
+        what="payee",
+        name="Priya Shah",
+        lookup="",
+        emails=["priya@example.com"],
+        payment_terms_days=15,
+    )
+    result = check(FakeCompany(), payee)
+    assert result.result is CheckResult.PASS
+    assert "Priya Shah (no vendor on its product)" in result.detail
+
+
 def test_nothing_to_compare_says_so() -> None:
     assert check(FakeCompany()).detail.startswith("nothing to compare")
 

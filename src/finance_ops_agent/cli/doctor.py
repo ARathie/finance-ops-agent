@@ -482,6 +482,10 @@ def check_quickbooks_contacts(
         empty: list[str] = []
         compared = 0
         for party in wanted():
+            if not party.lookup:
+                # Nothing to ask by: the engagement's product names no vendor.
+                empty.append(f"{party.name} (no vendor on its product)")
+                continue
             try:
                 held = (
                     accounting.customer(party.lookup)
