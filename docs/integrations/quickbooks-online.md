@@ -29,6 +29,8 @@ QBO has no "draft" invoices. The agent creates the invoice **before** asking Kev
 
 `POST /v3/company/{realmId}/invoice` with:
 
+The product is fetched with `SELECT * FROM Item WHERE FullyQualifiedName = '<client>:<consultant>'` -- the whole entity, not a field list. QuickBooks' query language refuses `PrefVendorRef` in a `SELECT` ("Property PrefVendorRef not found for Entity Item"): references come back with the entity or not at all.
+
 - `CustomerRef` looked up by the engagement list's "QuickBooks customer" name, against `DisplayName` and then `CompanyName` (decision 32; looked up once per run, cached). A company name shared by several customers is refused rather than guessed between;
 - `DocNumber` = the number the agent worked out (decision 27). QuickBooks honours it only with custom transaction numbers on, and refuses a number another invoice already has (Intuit error 6140) -- which is what should happen, because a repeat means a bug, not something to wave through with `include=allowduplicatedocnum`;
 - one line: `SalesItemLineDetail` with `ItemRef` = **the engagement's product** (found by `FullyQualifiedName`, `<client>:<consultant>`), `Qty` = approved hours, `UnitPrice` = the rate read off that product, `ServiceDate` = the **end of the billing period** (the column Kevin's invoice template labels "period ending"), `Description` = the consultant's name (the product is the consultant);

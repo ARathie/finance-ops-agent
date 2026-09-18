@@ -39,9 +39,12 @@ from finance_ops_agent.domain.money import Money, invoice_amount
 from finance_ops_agent.ports.accounting import CreatedInvoice
 
 PRIVATE_NOTE_PREFIX = "fops item"
-# The purchase side is read but not used yet (decision 37): what Icon pays and
-# who it pays, so QuickBooks and the engagement list can be compared.
-PRODUCT_FIELDS = "Id, Name, UnitPrice, FullyQualifiedName, PurchaseCost, PrefVendorRef"
+# The whole entity, not a field list. QuickBooks' query language refuses
+# `PrefVendorRef` in a SELECT ("Property PrefVendorRef not found for Entity
+# Item"): references come back with the entity or not at all. Asking for the
+# entity also means this does not have to be kept in step with which fields
+# the query language happens to accept.
+PRODUCT_FIELDS = "*"
 
 
 def private_note(item_id: int, replaces: str | None = None) -> str:

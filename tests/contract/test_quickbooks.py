@@ -529,6 +529,19 @@ class TestFindingTheProduct:
         assert "Harbour Point:Sridhar Doraiswamy" in message
         assert "MasTec:Sridhar Doraiswamy" in message  # what it was looking for
 
+    def test_it_asks_for_the_entity_not_a_field_list(self, tmp_path: Path) -> None:
+        """QuickBooks refuses PrefVendorRef in a SELECT -- "Property
+        PrefVendorRef not found for Entity Item" -- because references come
+        back with the entity or not at all."""
+        replay = self._replay({"by_path": self._item("21", "MasTec:Sridhar Doraiswamy")})
+        accounting, _, _ = build(replay, tmp_path)
+
+        accounting.product_for("Sridhar Doraiswamy", ["MasTec"])
+
+        [(_, url)] = replay.calls
+        assert "SELECT%20%2A%20FROM%20Item" in url
+        assert "PrefVendorRef" not in url
+
     def test_the_purchase_side_is_read_too(self, tmp_path: Path) -> None:
         """What Icon pays and who it pays, read but not used yet (decision 37),
         so QuickBooks and the engagement list can be compared."""
