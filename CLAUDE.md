@@ -46,6 +46,7 @@ Some boxes in `docs/roadmap.md` need a human: an account created, a command run 
 - Every new rule, status change, and review reason has a test, including its failure path.
 - Fakes updated whenever a port changes; no network needed for tests; no credentials or real client data in the repo.
 - Docs updated in the same PR when behaviour changes; the PR's automated boxes ticked in `docs/roadmap.md`, and every "Needs a person" box left unticked and spelled out to the operator.
+- When a QuickBooks check in `cli/doctor.py` changes, `docs/quickbooks-setup.md` changes in the same PR. Those checks and that document are one specification written twice: the checks say what the agent expects, the document tells Kevin what to click. They drift silently otherwise, and the doctor points him at it when one fails.
 
 ## Do not
 

@@ -45,6 +45,24 @@ class Check:
 MAX_DETAIL = 4000
 
 
+# What Kevin has to have set up in QuickBooks, in his words. Every QuickBooks
+# check here is the machine-readable half of a section in that document, so the
+# two are changed together (CLAUDE.md, definition of done).
+SETUP_DOC = "docs/quickbooks-setup.md"
+
+
+def setup_pointer(failures: list[Check]) -> str | None:
+    """Where to go and fix a QuickBooks check, said once.
+
+    Each message already says what is wrong; none of them says where the thing
+    to change lives, and repeating that inside a dozen messages would only make
+    them longer to read.
+    """
+    if not any(check.name.startswith("quickbooks") for check in failures):
+        return None
+    return f"What QuickBooks needs to have in it: {SETUP_DOC}"
+
+
 def _run(name: str, check: Callable[[], str]) -> Check:
     try:
         return Check(name, CheckResult.PASS, check())

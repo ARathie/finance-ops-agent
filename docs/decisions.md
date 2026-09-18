@@ -342,3 +342,15 @@ Decision: **`fops engagements import` copies the workbook into the agent's store
 - The list is stored under one key in the state the agent already keeps, so there is no migration and a backup already carries it.
 
 What this does **not** do yet is give Kevin a way to change anything without the workbook: importing again from an edited file is the only path today. Editing commands come next, and the shape they should take is clearer once it is known which fields are still in the list after the rest move to QuickBooks.
+
+## 41. What Kevin sets up in QuickBooks is written down, next to the checks that test it
+
+More of the agent's inputs live in QuickBooks with every step of the move: the customers, a product per engagement, two rates on each one, a category that says which engagement it is, and a setting that decides whether Kevin's invoice numbers survive at all. None of it was written anywhere Kevin reads. `integrations/quickbooks-online.md` describes the same setup, but it is a developer's document -- it says what goes over the wire -- and `fops doctor` names what is wrong without saying where to go and change it.
+
+Decision: **`docs/quickbooks-setup.md` is the Kevin-facing half of `cli/doctor.py`**, one section per check, and each section ends with the line the doctor actually prints when that part is not right.
+
+- **The messages are quoted verbatim, not paraphrased.** A remembered approximation is worse than nothing: someone searching for the words on their screen has to find them.
+- **`CLAUDE.md` binds the two together**: a QuickBooks check that changes changes that document in the same PR. The checks are already the machine-readable form of it -- `ExpectedProduct` is a specification of what Kevin must have created -- so this keeps one thing from being two.
+- **The doctor points at it once**, after the failure count, and only when a QuickBooks check failed. Repeating it inside each message would lengthen a dozen sentences Kevin already has to read to fix one thing. A test asserts the file it names exists, because a pointer at a document that moved is worse than no pointer.
+
+Two things the document says that no check does. The **custom transaction numbers** setting cannot be read through the API, so nothing fails until the first invoice is made, voided and reported; that is written down as the one thing to get right before a real run rather than after. And **ending an engagement** is still the engagement list's `Active` column, not QuickBooks' -- marking a product inactive while the list still calls the engagement live turns it into a "no product for…" failure. Making QuickBooks the switch is agreed and not built; the document says so plainly rather than describing the intended behaviour as though it were there.

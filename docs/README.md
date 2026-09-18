@@ -19,6 +19,7 @@ Read in this order the first time. `context/` is the business's own description 
 - `timesheet-checks.md` — what the agent reads from a timesheet, the checks, and every reason it asks Kevin for a review.
 - `status-tracking.md` — the statuses, duplicates, corrections, and the tracking sheet.
 - `emails.md` — every email the agent sends and how Kevin replies.
+- `quickbooks-setup.md` — what Kevin sets up in QuickBooks Online, and the `fops doctor` line that names it when it is wrong.
 - `running-it.md` — installing it: the temporary Mac test setup and the server it runs on for real, the schedule, logs, backups, the heartbeat, and what to do when something looks wrong.
 - `first-cycle.md` — the tally sheet for the first real billing cycles (dry run, then ask first): what arrived, what was right, what needed Kevin.
 - `open-questions.md` — things only Kevin can answer, with the defaults used meanwhile.

@@ -12,6 +12,8 @@ Icon uses QuickBooks Desktop today and plans to move to QuickBooks Online (QBO).
 
 ### One-time setup
 
+This is the developer's half of it. `docs/quickbooks-setup.md` is the same setup written for Kevin -- what to click, and the `fops doctor` line that names each thing when it is wrong. Change both together (`CLAUDE.md`, definition of done).
+
 1. Icon finishes the Desktop → Online move. The Customers list in QBO must contain every client, with names matching the "QuickBooks customer" column of the engagement list. The agent never creates customers.
 2. **One product per engagement** -- that is, per consultant *per client*. The product is named for the consultant and sits under a **category named for the client**, so QuickBooks knows it as `MasTec:Sridhar Doraiswamy`, which is what the agent looks it up by (decision 36). The bill rate for that engagement goes on the product. A consultant at two clients has two products under two categories, which is the only way two rates can be held. The rate on the product is what the client is billed (decision 30); an engagement with no product, a product found by the client's other name, a product not yet under a category, two products of one name with no category to tell them apart (refused), or a product with no rate, is refused rather than guessed at. Create the payment terms used (Net 30 etc.).
 3. Put each engagement's **pay rate on the purchase side of its product** (tick "I purchase this product/service from a vendor", then the cost and the preferred vendor). That is what the agent tells Kevin to pay (decision 38); where it is blank the engagement list is used instead.

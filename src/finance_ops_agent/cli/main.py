@@ -542,6 +542,9 @@ def _command_doctor(args: argparse.Namespace) -> int:
     failures = [check for check in results if check.result is CheckResult.FAIL]
     if failures:
         print(f"\n{len(failures)} check(s) failed. Nothing was sent to a client.")
+        pointer = checks.setup_pointer(failures)
+        if pointer:
+            print(pointer)
         return 1
     print("\nEverything checks out. Nothing was sent to a client.")
     return 0
