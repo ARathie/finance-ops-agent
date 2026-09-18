@@ -557,7 +557,9 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
     from finance_ops_agent.cli.doctor import (
         Check,
         CheckResult,
+        ExpectedParty,
         ExpectedProduct,
+        check_quickbooks_contacts,
         check_quickbooks_customers,
         check_quickbooks_engagements,
         check_quickbooks_pay,
@@ -619,10 +621,57 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
             )
         return [wanted[key] for key in sorted(wanted)]
 
+    def wanted_contacts() -> list[ExpectedParty]:
+        """Every client, and every payee an engagement names, once each.
+
+        The payee is looked up by the id on its product's purchase side rather
+        than by name, so a vendor filed under a spelling nobody expected is
+        still the one compared.
+        """
+        parsed = parsed_list()
+        by_consultant = {row.name: row for row in parsed.consultants}
+        by_vendor = {row.company: row for row in parsed.vendors}
+        parties: dict[tuple[str, str], ExpectedParty] = {}
+        for client_row in parsed.clients:
+            if not client_row.active:
+                continue
+            lookup = client_row.quickbooks_customer or client_row.legal_name
+            parties[("client", lookup)] = ExpectedParty(
+                what="client",
+                name=client_row.name,
+                lookup=lookup,
+                emails=list(client_row.billing_emails),
+                payment_terms_days=client_row.payment_terms_days,
+            )
+        for expected in wanted_engagements():
+            try:
+                rates = accounting.engagement_rates(expected.consultant, expected.clients)
+            except Exception:
+                continue  # the products check reports this one
+            if rates is None or not rates.payee_ref:
+                continue
+            consultant_row = by_consultant.get(expected.consultant)
+            vendor_row = by_vendor.get(expected.payee)
+            if vendor_row is not None:
+                emails, timing = list(vendor_row.contact_emails), vendor_row.pay_timing_days
+            elif consultant_row is not None:
+                emails, timing = list(consultant_row.emails), consultant_row.pay_timing_days
+            else:
+                continue
+            parties[("payee", rates.payee_ref)] = ExpectedParty(
+                what="payee",
+                name=expected.payee,
+                lookup=rates.payee_ref,
+                emails=emails,
+                payment_terms_days=timing,
+            )
+        return [parties[key] for key in sorted(parties)]
+
     results.append(check_quickbooks_customers(accounting, wanted_customers))
     results.append(check_quickbooks_engagements(accounting, parsed_list))
     results.append(check_quickbooks_products(accounting, wanted_engagements))
     results.append(check_quickbooks_pay(accounting, wanted_engagements))
+    results.append(check_quickbooks_contacts(accounting, wanted_contacts))
     return results
 
 

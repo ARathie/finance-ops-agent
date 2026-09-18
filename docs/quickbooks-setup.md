@@ -9,7 +9,8 @@ creates a customer and it never creates a product.** If one is missing it stops
 and says so rather than inventing something to invoice against.
 
 After any change here, run `fops doctor`. It checks every item below except the
-first and the last, and names the client, consultant or setting that is wrong. Each section
+first and the invoice template, and names the client, consultant or setting
+that is wrong. Each section
 ends with the line doctor prints when that part is not right, so a failure can
 be read straight back to the thing to fix.
 
@@ -207,7 +208,40 @@ live, as it did before
 
 ---
 
-## 5. The invoice template
+## 5. Contacts and payment terms (being checked, not used yet)
+
+The agent doesn't take these from QuickBooks yet — it compares them with the
+engagement list so the two can be made to agree first. Filling them in costs
+nothing now and is what lets them move later.
+
+- **On each customer:** the email invoices go to, and the payment terms (Net 30
+  and so on).
+- **On each vendor** — the one named on a product's purchase side: their email,
+  and the terms that say how long Icon has to pay them.
+
+Terms are their own list in QuickBooks (**Settings → All lists → Terms**), and a
+customer or vendor points at one. If a term has no number of days on it, the
+agent reads it as "not filled in" rather than as a number.
+
+A blank field is not a disagreement — it's one you haven't got to. The check
+says which, so the line is a to-do list rather than a complaint:
+
+```
+ok   quickbooks contacts: all 3 record(s) in the production company
+9130357849073846 agree with the engagement list; not filled in yet: Sam Okafor
+(no email), MasTec (no payment terms)
+```
+
+A real difference fails and names both:
+
+```
+FAIL quickbooks contacts: QuickBooks and the engagement list do not agree about
+who to contact or when payment is due. Nothing uses QuickBooks' answer yet, so
+nothing is wrong today, but these have to agree before either moves across.
+QuickBooks gives MasTec 45 day(s) to pay and the engagement list says 30.
+```
+
+## 6. The invoice template
 
 Each invoice line should show: **period ending date, description, hours, rate,
 amount**.

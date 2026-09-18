@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from finance_ops_agent.domain.invoices import Invoice
 from finance_ops_agent.ports.accounting import (
     AccountingEngagement,
+    AccountingParty,
     CreatedInvoice,
     EngagementRates,
 )
@@ -32,6 +33,10 @@ class FakeAccounting:
         # every existing test wants: "nothing to say", so the engagement list
         # decides as it always has (docs/decisions.md #42).
         self.live: list[AccountingEngagement] = []
+        # What the accounting system holds about a client, by name, and about a
+        # payee, by the id an engagement's rates carry.
+        self.customers: dict[str, AccountingParty] = {}
+        self.payees: dict[str, AccountingParty] = {}
         self.create_attempts = 0
         self._counter = 0
 
@@ -48,6 +53,16 @@ class FakeAccounting:
         )
         self.invoices[item_id] = created
         return created
+
+    def customer(self, name: str) -> AccountingParty | None:
+        if self.fail_with is not None:
+            raise self.fail_with
+        return self.customers.get(name)
+
+    def payee(self, ref: str) -> AccountingParty | None:
+        if self.fail_with is not None:
+            raise self.fail_with
+        return self.payees.get(ref)
 
     def engagements(self) -> list[AccountingEngagement]:
         if self.fail_with is not None:

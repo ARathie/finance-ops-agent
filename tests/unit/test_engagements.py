@@ -263,6 +263,27 @@ class TestOtherBadCells:
         )
         assert problems_on(parsed.problems, "Engagements", 2)
 
+    def test_a_blank_schedule_means_monthly(self) -> None:
+        """Every engagement Icon bills is monthly, so a blank cell is an
+        answer rather than an unfinished row (decision 44)."""
+        parsed = parse_workbook(
+            workbook(engagements=[engagement_row(2, **{"Billing schedule": ""})])
+        )
+        assert not problems_on(parsed.problems, "Engagements", 2)
+        assert parsed.engagements[0].billing_schedule is BillingSchedule.MONTHLY
+
+    def test_a_blank_schedule_does_not_need_a_first_period_start(self) -> None:
+        """The check that catches weekly without one must not read a blank
+        cell as weekly."""
+        parsed = parse_workbook(
+            workbook(
+                engagements=[
+                    engagement_row(2, **{"Billing schedule": "", "First period start": ""})
+                ]
+            )
+        )
+        assert not problems_on(parsed.problems, "Engagements", 2)
+
     def test_vendor_paid_by_payroll(self) -> None:
         parsed = parse_workbook(workbook(vendors=[vendor_row(3, **{"Paid by": "payroll"})]))
         assert problems_on(parsed.problems, "Vendors", 3)

@@ -50,6 +50,14 @@ class ManualQuickBooks:
         # Nothing to ask: in manual mode the rates live in the engagement list.
         return None
 
+    def customer(self, name: str) -> None:
+        # Nothing to ask: in manual mode the client's terms and contacts live
+        # in the engagement list.
+        return None
+
+    def payee(self, ref: str) -> None:
+        return None
+
     def engagements(self) -> list[AccountingEngagement]:
         # Nothing to enumerate: in manual mode QuickBooks Desktop is not
         # reachable, so the engagement list says which engagements are live.

@@ -69,7 +69,7 @@ One row per consultant working for one client. When a rate changes, add a new ro
 | Role | Printed on the invoice line | Senior PeopleSoft Developer |
 | Start date | First day of the engagement | 2026-02-01 |
 | End date | Last day, or blank while ongoing | |
-| Billing schedule | `monthly`, `twice a month`, `every two weeks`, or `weekly` | monthly |
+| Billing schedule | `monthly`, `twice a month`, `every two weeks`, or `weekly`; **leave it blank for monthly** | |
 | First period start | For `every two weeks` and `weekly` only: the first day of any one period, so the agent can work out the rest | 2026-02-02 |
 | Bill rate | Dollars per hour Icon charges the client | 140.00 |
 | Pay rate | Dollars per hour Icon pays the consultant or vendor | 100.00 |

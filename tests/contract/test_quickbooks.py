@@ -1159,3 +1159,63 @@ class TestTheEngagementsCheck:
 
         assert check.result is CheckResult.PASS
         assert "no products under a category" in check.detail
+
+
+class TestReadingContactsAndTerms:
+    """Read and compared, never used yet: the addresses a timesheet may arrive
+    from and the terms that set a due date still come from the engagement list
+    (decision 45)."""
+
+    def test_a_customer_carries_its_email_and_its_terms(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(replay_from("contacts"), tmp_path)
+        held = accounting.customer("Acme Corporation")
+        assert held is not None
+        assert held.email == "ap@acme.example"
+        assert held.payment_terms_days == 30
+
+    def test_a_vendor_carries_its_email_and_its_terms(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(replay_from("contacts"), tmp_path)
+        held = accounting.payee("7")
+        assert held is not None
+        assert held.name == "Priya Shah"
+        assert held.email == "priya@example.com"
+        assert held.payment_terms_days == 15
+
+    def test_a_blank_field_is_none_rather_than_a_guess(self, tmp_path: Path) -> None:
+        """Not filled in is not the same as nothing being due."""
+        accounting, _, _ = build(replay_from("contacts"), tmp_path)
+        held = accounting.payee("8")
+        assert held is not None
+        assert held.email == ""
+        assert held.payment_terms_days is None  # the term exists but has no days
+
+    def test_a_vendor_that_is_not_there(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(replay_from("contacts"), tmp_path)
+        assert accounting.payee("404") is None
+
+    def test_no_id_asks_nothing(self, tmp_path: Path) -> None:
+        """A product with no vendor on its purchase side must not send a query
+        for the empty string."""
+        replay = replay_from("contacts")
+        accounting, _, _ = build(replay, tmp_path)
+        assert accounting.payee("") is None
+        assert replay.calls == []
+
+    def test_the_terms_are_read_once_for_the_whole_run(self, tmp_path: Path) -> None:
+        """They change about never, and a call per party would be a call per
+        engagement on every doctor run."""
+        replay = replay_from("contacts")
+        accounting, _, _ = build(replay, tmp_path)
+        accounting.payee("7")
+        accounting.payee("8")
+        accounting.customer("Acme Corporation")
+        terms = [url for _, url in replay.calls if "FROM%20Term" in url]
+        assert len(terms) == 1
+
+    def test_the_customer_is_found_the_same_way_the_invoice_finds_it(self, tmp_path: Path) -> None:
+        """Otherwise the record compared could be a different customer from the
+        one billed."""
+        replay = replay_from("contacts")
+        accounting, _, _ = build(replay, tmp_path)
+        accounting.customer("Acme Corporation")
+        assert any("DisplayName%20%3D%20%27Acme%20Corporation%27" in url for url in replay.urls())

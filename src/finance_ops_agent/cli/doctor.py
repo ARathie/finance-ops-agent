@@ -11,6 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import Protocol
 
 from finance_ops_agent.adapters.email.client import (
     Folders,
@@ -22,6 +23,7 @@ from finance_ops_agent.adapters.email.client import (
 from finance_ops_agent.adapters.email.inbox import INBOX
 from finance_ops_agent.domain.engagements import EngagementWorkbook
 from finance_ops_agent.domain.money import Money
+from finance_ops_agent.ports.accounting import AccountingParty
 
 
 class CheckResult(StrEnum):
@@ -425,6 +427,103 @@ def check_quickbooks_pay(accounting: object, wanted: Callable[[], list[ExpectedP
             )
         note = f"all {checked} engagement(s) with a purchase side agree with the engagement list"
         return note if not empty else f"{note}; {empty} not filled in yet"
+
+    return _run(name, run)
+
+
+@dataclass(frozen=True)
+class ExpectedParty:
+    """A client or a payee as the engagement list has it, for comparing with
+    what QuickBooks holds about the same person or company."""
+
+    what: str  # "client" or "payee", for the message
+    name: str
+    lookup: str  # the name or id to ask QuickBooks by
+    emails: list[str]
+    payment_terms_days: int
+
+
+class PartyRecords(Protocol):
+    """The two questions this check asks of an accounting system.
+
+    A protocol rather than the adapter itself: the checks above take `object`
+    and assert the concrete type, which means they can only be exercised
+    through recorded HTTP. Saying what is actually needed costs nothing and
+    lets the comparison be tested on its own.
+    """
+
+    @property
+    def company(self) -> str: ...
+
+    def customer(self, name: str) -> "AccountingParty | None": ...
+
+    def payee(self, ref: str) -> "AccountingParty | None": ...
+
+
+def check_quickbooks_contacts(
+    accounting: PartyRecords, wanted: Callable[[], list[ExpectedParty]]
+) -> Check:
+    """Do QuickBooks' own customer and vendor records agree with the list?
+
+    Read and compared, not used: the addresses a timesheet may arrive from and
+    the terms that set a due date still come from the engagement list, and this
+    is what has to agree before either moves across (docs/decisions.md #45).
+    It is the same shape decision 37 used before the pay rate moved, for the
+    same reason -- a difference found here is found while someone is looking at
+    the engagement list, not when an invoice is due.
+
+    A blank field in QuickBooks is not a disagreement. It is one that has not
+    been filled in, and saying so is how Kevin knows what is left to do.
+    """
+    name = "quickbooks contacts"
+
+    def run() -> str:
+        differences: list[str] = []
+        empty: list[str] = []
+        compared = 0
+        for party in wanted():
+            try:
+                held = (
+                    accounting.customer(party.lookup)
+                    if party.what == "client"
+                    else accounting.payee(party.lookup)
+                )
+            except Exception as error:
+                differences.append(f"{party.name}: {error}")
+                continue
+            if held is None:
+                empty.append(f"{party.name} (no record in QuickBooks)")
+                continue
+            compared += 1
+            if not held.email:
+                empty.append(f"{party.name} (no email)")
+            elif party.emails and held.email.casefold() not in [
+                address.casefold() for address in party.emails
+            ]:
+                differences.append(
+                    f"QuickBooks has {held.email} for {party.name} and the engagement"
+                    f" list has {', '.join(party.emails)}."
+                )
+            if held.payment_terms_days is None:
+                empty.append(f"{party.name} (no payment terms)")
+            elif held.payment_terms_days != party.payment_terms_days:
+                differences.append(
+                    f"QuickBooks gives {party.name} {held.payment_terms_days} day(s) to"
+                    f" pay and the engagement list says {party.payment_terms_days}."
+                )
+        if differences:
+            raise RuntimeError(
+                "QuickBooks and the engagement list do not agree about who to contact or"
+                " when payment is due. Nothing uses QuickBooks' answer yet, so nothing is"
+                " wrong today, but these have to agree before either moves across. "
+                + " ".join(differences)
+            )
+        missing = ", ".join(sorted(set(empty)))
+        if not compared:
+            found = f"nothing to compare yet in {accounting.company}"
+            return f"{found}; not filled in yet: {missing}" if missing else found
+        note = f"all {compared} record(s) in {accounting.company} agree with the engagement list"
+        return note if not missing else f"{note}; not filled in yet: {missing}"
 
     return _run(name, run)
 

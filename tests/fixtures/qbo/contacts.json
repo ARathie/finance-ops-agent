@@ -1,0 +1,139 @@
+{
+  "exchanges": [
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20Id%2C%20Name%2C%20DueDays%20FROM%20Term",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {
+            "Term": [
+              {
+                "Id": "3",
+                "Name": "Net 30",
+                "DueDays": 30
+              },
+              {
+                "Id": "4",
+                "Name": "Net 15",
+                "DueDays": 15
+              },
+              {
+                "Id": "9",
+                "Name": "Due on receipt"
+              }
+            ]
+          }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20Id%2C%20DisplayName%20FROM%20Customer%20WHERE%20DisplayName%20%3D%20%27Acme%20Corporation%27",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {
+            "Customer": [
+              {
+                "Id": "58",
+                "DisplayName": "Acme Corporation"
+              }
+            ]
+          }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20%2A%20FROM%20Customer%20WHERE%20Id%20%3D%20%2758%27",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {
+            "Customer": [
+              {
+                "Id": "58",
+                "DisplayName": "Acme Corporation",
+                "PrimaryEmailAddr": {
+                  "Address": "ap@acme.example"
+                },
+                "SalesTermRef": {
+                  "value": "3",
+                  "name": "Net 30"
+                }
+              }
+            ]
+          }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20%2A%20FROM%20Vendor%20WHERE%20Id%20%3D%20%277%27",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {
+            "Vendor": [
+              {
+                "Id": "7",
+                "DisplayName": "Priya Shah",
+                "PrimaryEmailAddr": {
+                  "Address": "priya@example.com"
+                },
+                "TermRef": {
+                  "value": "4",
+                  "name": "Net 15"
+                }
+              }
+            ]
+          }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20%2A%20FROM%20Vendor%20WHERE%20Id%20%3D%20%278%27",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {
+            "Vendor": [
+              {
+                "Id": "8",
+                "DisplayName": "Dana Cruz",
+                "TermRef": {
+                  "value": "9",
+                  "name": "Due on receipt"
+                }
+              }
+            ]
+          }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20%2A%20FROM%20Vendor%20WHERE%20Id%20%3D%20%27404%27",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {}
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    }
+  ]
+}

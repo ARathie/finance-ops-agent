@@ -44,6 +44,7 @@ class EngagementRates:
     bill_rate_cents: int
     pay_rate_cents: int | None
     payee: str
+    payee_ref: str = ""  # the payee's own id, to look up their contact and terms
 
 
 @dataclass(frozen=True)
@@ -67,6 +68,22 @@ class AccountingEngagement:
     bill_rate_cents: int | None
     pay_rate_cents: int | None
     payee: str
+
+
+@dataclass(frozen=True)
+class AccountingParty:
+    """A client or a payee, beyond what an engagement says about them.
+
+    Read so that what QuickBooks holds can be compared with the engagement list
+    before anything depends on it, the way the purchase side was in
+    docs/decisions.md #37. `None` for the terms means QuickBooks has nothing
+    there, which is not the same as nothing being due.
+    """
+
+    ref: str
+    name: str
+    email: str
+    payment_terms_days: int | None
 
 
 @dataclass(frozen=True)
@@ -103,6 +120,16 @@ class AccountingSystem(Protocol):
         engagement list in both cases rather than concluding that Icon has
         stopped working.
         """
+        ...
+
+    def customer(self, name: str) -> AccountingParty | None:
+        """The client as the accounting system holds it, or None where it has
+        nothing to say. Manual mode always says None."""
+        ...
+
+    def payee(self, ref: str) -> AccountingParty | None:
+        """Who Icon pays for an engagement -- the vendor on its product's
+        purchase side -- by the id `EngagementRates.payee_ref` carries."""
         ...
 
     def cancel_invoice(self, external_id: str, renamed_to: str | None = None) -> None:

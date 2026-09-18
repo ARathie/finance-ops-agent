@@ -38,6 +38,7 @@ from finance_ops_agent.domain.invoices import Invoice
 from finance_ops_agent.domain.money import Money, invoice_amount
 from finance_ops_agent.ports.accounting import (
     AccountingEngagement,
+    AccountingParty,
     CreatedInvoice,
     EngagementRates,
 )
@@ -150,6 +151,7 @@ class Product:
     unit_price_cents: int
     purchase_cost_cents: int | None = None
     vendor: str = ""
+    vendor_ref: str = ""  # the vendor's own id, to read their email and terms
 
 
 class QuickBooksOnline:
@@ -158,6 +160,7 @@ class QuickBooksOnline:
         self._today = today  # from the Clock port, never the system clock
         self._customers: dict[str, str] = {}
         self._products: dict[tuple[str, tuple[str, ...]], Product] = {}
+        self._terms: dict[str, int] | None = None
 
     @property
     def company(self) -> str:
@@ -301,6 +304,7 @@ class QuickBooksOnline:
             unit_price_cents=_cents(row["UnitPrice"]),
             purchase_cost_cents=None if cost is None else _cents(cost),
             vendor=str(vendor.get("name") or "") if isinstance(vendor, dict) else "",
+            vendor_ref=str(vendor.get("value") or "") if isinstance(vendor, dict) else "",
         )
         logs.log(
             "quickbooks product found",
@@ -390,6 +394,51 @@ class QuickBooksOnline:
             pdf=self.invoice_pdf(quickbooks_id),
         )
 
+    def _term_days(self) -> dict[str, int]:
+        """Every payment term in the company, by id.
+
+        QuickBooks keeps terms as their own entity and puts only a reference on
+        a customer or a vendor, so the days have to be looked up. There are a
+        handful of them and they change about never, so they are read once per
+        run rather than per party.
+        """
+        if self._terms is None:
+            self._terms = {}
+            for row in self._client.query("SELECT Id, Name, DueDays FROM Term"):
+                days = row.get("DueDays")
+                if days is not None:
+                    self._terms[str(row["Id"])] = int(days)
+        return self._terms
+
+    def _party(self, row: dict[str, Any], terms_field: str) -> AccountingParty:
+        email = row.get("PrimaryEmailAddr") or {}
+        term = row.get(terms_field) or {}
+        days: int | None = None
+        if isinstance(term, dict) and term.get("value"):
+            days = self._term_days().get(str(term["value"]))
+        return AccountingParty(
+            ref=str(row["Id"]),
+            name=str(row.get("DisplayName") or row.get("CompanyName") or ""),
+            email=str(email.get("Address") or "") if isinstance(email, dict) else "",
+            payment_terms_days=days,
+        )
+
+    def customer(self, name: str) -> AccountingParty | None:
+        """The client's own record: where invoices go, and how long they have
+        to pay. Found the same way `customer_ref` finds it, so the two never
+        disagree about which customer a name means."""
+        reference = self.customer_ref(name)
+        rows = self._client.query(f"SELECT * FROM Customer WHERE Id = '{_escape(reference)}'")
+        return self._party(rows[0], "SalesTermRef") if rows else None
+
+    def payee(self, ref: str) -> AccountingParty | None:
+        """The vendor on a product's purchase side: who Icon pays, where to
+        reach them, and how long Icon has to pay."""
+        if not ref:
+            return None
+        rows = self._client.query(f"SELECT * FROM Vendor WHERE Id = '{_escape(ref)}'")
+        return self._party(rows[0], "TermRef") if rows else None
+
     def engagements(self) -> list[AccountingEngagement]:
         """Every active product under a category: one per live engagement.
 
@@ -433,6 +482,7 @@ class QuickBooksOnline:
             bill_rate_cents=product.unit_price_cents,
             pay_rate_cents=product.purchase_cost_cents,
             payee=product.vendor,
+            payee_ref=product.vendor_ref,
         )
 
     def find_invoice(self, item_id: int) -> CreatedInvoice | None:

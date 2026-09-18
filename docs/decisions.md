@@ -391,3 +391,29 @@ What this changes is *when* a drifted rate is found. Before, the only way to dis
 `EngagementSnapshot.pay_disagreement` became `rate_disagreement`, since it now carries all three. Items already in the database hold the old name, so it is still read: a rename that silently dropped their text would lose the one sentence saying what the disagreement was.
 
 What is left in the workbook after this is what QuickBooks has no home for: the billing schedules, the addresses timesheets may arrive from, the names to match on, the delivery method, payment terms and pay timing. The rate columns stay as the cross-check and as the fallback when QuickBooks cannot answer.
+
+## 44. A blank billing schedule means monthly
+
+Every engagement Icon bills is monthly. Making Kevin write "monthly" on every row is a cell to get wrong for no information gained, and a blank one was rejecting the whole row.
+
+Decision: **a blank "Billing schedule" means monthly.** The other schedules still work and still have to be asked for by name, and "First period start" is still required for the two that need it -- a blank cell must not be read as weekly, which is its own test.
+
+## 45. What QuickBooks holds about a client or a payee is read and compared, not used
+
+The addresses a timesheet may arrive from, and the terms that set a due date, are the next things that could leave the engagement list. QuickBooks has a home for both: a customer carries `PrimaryEmailAddr` and `SalesTermRef`, and the vendor on a product's purchase side carries `PrimaryEmailAddr` and `TermRef`. Terms are their own entity, so a reference has to be resolved to a number of days; they are read once per run rather than once per party.
+
+Decision: **`fops doctor` reads both records and compares them with the engagement list, and nothing uses QuickBooks' answer yet.** This is the shape decision 37 used before the pay rate moved, for the same reason: a difference found here is found while someone is looking at the engagement list, not when an invoice is due or a timesheet is refused.
+
+- **A blank field in QuickBooks is not a disagreement.** It has not been filled in, and the check says which so Kevin knows what is left rather than being told he is wrong.
+- **A payee is looked up by the id on its product's purchase side, never by name.** A vendor filed under a spelling nobody expected is still the one compared.
+- **A client's record is found the same way the invoice finds it** -- display name, then company name -- so the record compared can never be a different customer from the one billed.
+- **Several addresses on the list against one in QuickBooks is agreement if any of them match.** The list holds every address a client sends invoices to; QuickBooks holds one.
+
+Moving the timesheet addresses is the one to be careful with, because that field decides **who may send a timesheet**, and getting it wrong either refuses a real one or accepts someone else's. `FOPS_TIMESHEET_FORWARDERS` stays regardless (decision 25): forwarding by hand has to keep working while the agent is being tested, and it is reported loudly outside dry run.
+
+This check takes a `Protocol` saying what it needs rather than the adapter plus an `isinstance`, which is what the checks before it do. That was why none of them could be exercised except through recorded HTTP; saying what is actually needed costs nothing and lets the comparison be tested on its own.
+
+Two things that did **not** move, and why:
+
+- **"Names on timesheets" and "Other names"** are Icon's own knowledge of how a client or a person is written on somebody else's paperwork -- `ACME Corp.`, `Shah, Priya`. QuickBooks holds structured names (a vendor's given and family name, a customer's display, company and print-on-cheque names) which are worth reading as extra candidates, but it has no list of aliases, and inventing one from the structured fields would quietly narrow what the agent recognises.
+- **"Delivery"** is not a payment method. It is `email` (the agent sends the invoice) or `portal` (Kevin uploads it to the client's own system and the agent sends nothing). QuickBooks' `PreferredDeliveryMethod` answers a different question -- how QuickBooks itself would deliver -- and has no value meaning "Icon uploads this by hand somewhere else".
