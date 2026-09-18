@@ -606,6 +606,54 @@ class TestFindingTheProduct:
         assert at_istream.unit_price_cents == 12_000
 
 
+class TestTheProductsCheck:
+    """It says which company it looked in and counts engagements, not people:
+    a consultant at two clients is two products (decision 36)."""
+
+    def _expected(self, bill_cents: int = 14_000) -> list[ExpectedProduct]:
+        return [
+            ExpectedProduct(
+                consultant="Sridhar Doraiswamy",
+                client="MasTec",
+                clients=["MasTec"],
+                bill_rate_cents=bill_cents,
+                pay_rate_cents=10_000,
+                payee="Blue Peak Consulting LLC",
+            )
+        ]
+
+    def test_a_pass_counts_engagements_and_names_the_company(self, tmp_path: Path) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_products
+
+        replay = TestFindingTheProduct()._replay(
+            {"by_path": TestFindingTheProduct()._item("21", "MasTec:Sridhar Doraiswamy")}
+        )
+        accounting, _, _ = build(replay, tmp_path)
+
+        check = check_quickbooks_products(accounting, self._expected)
+
+        assert check.result is CheckResult.PASS
+        assert "1 engagement(s)" in check.detail
+        assert f"the sandbox company {REALM}" in check.detail
+
+    def test_a_bill_rate_that_disagrees_fails_before_an_invoice_does(self, tmp_path: Path) -> None:
+        """Otherwise this is only discoverable by watching an invoice be
+        created, found to disagree, and voided (decision 30)."""
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_products
+
+        replay = TestFindingTheProduct()._replay(
+            {"by_path": TestFindingTheProduct()._item("21", "MasTec:Sridhar Doraiswamy", 150.0)}
+        )
+        accounting, _, _ = build(replay, tmp_path)
+
+        check = check_quickbooks_products(accounting, self._expected)
+
+        assert check.result is CheckResult.FAIL
+        assert "$150.00" in check.detail  # what the product charges
+        assert "$140.00" in check.detail  # what the engagement list says
+        assert "MasTec:Sridhar Doraiswamy" in check.detail
+
+
 class TestThePayRatesCheck:
     """`fops doctor` compares the purchase side with the engagement list, so
     the two can be made to agree before anything moves across (decision 37)."""

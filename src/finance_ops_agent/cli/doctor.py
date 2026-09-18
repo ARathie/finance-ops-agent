@@ -266,8 +266,14 @@ def check_quickbooks_products(
                     f" and the engagement list says ${Money(expected.bill_rate_cents)}."
                 )
         if problems:
-            raise RuntimeError("QuickBooks cannot price these consultants. " + " ".join(problems))
-        return f"all {len(names)} consultant(s) have a product with a rate"
+            raise RuntimeError(
+                f"I looked in {accounting.company} and cannot price"
+                f" {len(problems)} of {len(names)} engagement(s). " + " ".join(problems)
+            )
+        return (
+            f"all {len(names)} engagement(s) have a product in {accounting.company},"
+            " charging what the engagement list says"
+        )
 
     return _run(name, run)
 
