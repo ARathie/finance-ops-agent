@@ -347,6 +347,7 @@ class QuickBooksOnline:
         """Both sides of the engagement's product (decision 38)."""
         product = self.product_for(consultant, clients)
         return EngagementRates(
+            ref=product.ref,
             bill_rate_cents=product.unit_price_cents,
             pay_rate_cents=product.purchase_cost_cents,
             payee=product.vendor,

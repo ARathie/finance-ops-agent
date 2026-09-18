@@ -215,7 +215,10 @@ def build_snapshot(
         )
     pay_rate_cents = rate_row.pay_rate.cents
     disagreement = ""
+    engagement_ref = ""
     rates = _rates_from_accounting(accounting, rate_row, client)
+    if rates is not None:
+        engagement_ref = rates.ref
     if rates is not None and rates.pay_rate_cents is not None:
         if rates.pay_rate_cents != pay_rate_cents:
             disagreement = (
@@ -252,6 +255,7 @@ def build_snapshot(
         client_delivery=client.delivery.value,
         send_automatically=rate_row.send_automatically,
         pay_disagreement=disagreement,
+        engagement_ref=engagement_ref,
     )
 
 
@@ -281,6 +285,41 @@ def _rates_from_accounting(
             said=str(error)[:200],
         )
         return None
+
+
+def _find_item(
+    deps: RunDeps,
+    workbook: EngagementWorkbook,
+    rate_row: Engagement | None,
+    consultant: str,
+    client: str,
+    period: BillingPeriod,
+) -> Item | None:
+    """This engagement's item for this period, by the accounting system's id
+    first and by name second.
+
+    A client or consultant renamed in the accounting system is the same
+    engagement, and its id says so; looking only by name would have made a
+    second item and expected a second invoice (docs/decisions.md #39). Where
+    the item is found by id under different names, the names catch up.
+    """
+    if rate_row is not None:
+        client_row = _client_by_name(workbook, rate_row.client)
+        if client_row is not None:
+            rates = _rates_from_accounting(deps.accounting, rate_row, client_row)
+            if rates is not None and rates.ref:
+                found = deps.store.find_item_by_engagement(rates.ref, period)
+                if found is not None:
+                    if (found.consultant, found.client) != (consultant, client):
+                        logs.log(
+                            "an engagement was renamed; catching the item up",
+                            item_id=found.id,
+                            was=f"{found.consultant} at {found.client}",
+                            now=f"{consultant} at {client}",
+                        )
+                        return deps.store.relabel_item(found.id, consultant, client)
+                    return found
+    return deps.store.find_item(consultant, client, period)
 
 
 def _ask_about_the_pay_rate(deps: RunDeps, item: Item, report: RunReport) -> None:
@@ -324,16 +363,24 @@ def _create_expected_items(deps: RunDeps, workbook: EngagementWorkbook, report: 
         ):
             if period.end >= today:
                 continue
-            if deps.store.find_item(consultant, client, period) is not None:
-                continue
             rate_row, findings = checks.rate_row_in_force(rows, period)
             if rate_row is None or findings:
                 continue  # the rate problem surfaces when a timesheet arrives
+            # By the engagement's id first: a renamed one already has an item,
+            # and looking only by name would expect a second invoice for work
+            # that is already in hand (decision 39).
+            if _find_item(deps, workbook, rate_row, consultant, client, period) is not None:
+                continue
             snapshot = build_snapshot(workbook, rate_row, deps.accounting)
             if snapshot is None:
                 continue
             waiting = deps.store.create_item(
-                consultant, client, period, ItemStatus.WAITING_FOR_TIMESHEET, snapshot
+                consultant,
+                client,
+                period,
+                ItemStatus.WAITING_FOR_TIMESHEET,
+                snapshot,
+                snapshot.engagement_ref,
             )
             _ask_about_the_pay_rate(deps, waiting, report)
             report.expected_items_created += 1
@@ -584,12 +631,17 @@ def _process_timesheet(
     is_duplicate = False
     is_correction = False
     if consultant is not None and client_name is not None and period is not None:
-        item = deps.store.find_item(consultant.name, client_name, period)
+        item = _find_item(deps, workbook, rate_row, consultant.name, client_name, period)
         if item is None and rate_row is not None:
             snapshot = build_snapshot(workbook, rate_row, deps.accounting)
             if snapshot is not None:
                 item = deps.store.create_item(
-                    consultant.name, client_name, period, ItemStatus.RECEIVED, snapshot
+                    consultant.name,
+                    client_name,
+                    period,
+                    ItemStatus.RECEIVED,
+                    snapshot,
+                    snapshot.engagement_ref,
                 )
                 _ask_about_the_pay_rate(deps, item, report)
         if item is not None and item.status is ItemStatus.WAITING_FOR_TIMESHEET:

@@ -809,7 +809,9 @@ class TestWhatIconPays:
     def _rates(self, pay_cents: int | None, payee: str = "") -> "EngagementRates":
         from finance_ops_agent.ports.accounting import EngagementRates
 
-        return EngagementRates(bill_rate_cents=14_000, pay_rate_cents=pay_cents, payee=payee)
+        return EngagementRates(
+            ref="21", bill_rate_cents=14_000, pay_rate_cents=pay_cents, payee=payee
+        )
 
     def test_the_pay_rate_comes_off_the_product(self, env: ScenarioEnv) -> None:
         """The engagement list says 100.00; QuickBooks says 110.00 and wins."""
@@ -885,6 +887,56 @@ class TestWhatIconPays:
         item = env.the_item()
         assert item.status is ItemStatus.READY
         assert item.snapshot.pay_rate_cents == 10_000  # the workbook's
+
+
+class TestARenamedEngagement:
+    """A client or consultant renamed in QuickBooks is the same engagement, and
+    the accounting system's id says so. Looking only by name would make a
+    second item and expect a second invoice (decision 39)."""
+
+    def _rates(self, ref: str = "21") -> EngagementRates:
+        return EngagementRates(ref=ref, bill_rate_cents=14_000, pay_rate_cents=None, payee="")
+
+    def test_the_item_carries_the_engagement_id(self, env: ScenarioEnv) -> None:
+        env.accounting.rates[("Priya Shah", "Acme Corp")] = self._rates()
+        clean_timesheet(env)
+        env.run()
+
+        assert env.the_item().engagement_ref == "21"
+
+    def test_a_rename_finds_the_same_item_and_catches_its_names_up(self, env: ScenarioEnv) -> None:
+        from tests.scenarios.conftest import client_row, engagement_row
+
+        env.accounting.rates[("Priya Shah", "Acme Corp")] = self._rates()
+        clean_timesheet(env)
+        env.run()
+        first = env.the_item()
+        assert first.client == "Acme Corp"
+
+        # Kevin tidies the name in QuickBooks, and the engagement list follows.
+        env.workbook.clients[0] = client_row(2, Client="Acme Corporation")
+        env.workbook.engagements[0] = engagement_row(2, Client="Acme Corporation")
+        env.accounting.rates[("Priya Shah", "Acme Corporation")] = self._rates()
+        env.add_email(
+            PRIYA,
+            attachment=("timesheet-again.pdf", b"PDFDATA-AGAIN"),
+            scripted_reading=reading(AUG_START, AUG_END),
+        )
+        env.run()
+
+        again = env.the_item()  # asserts there is still exactly one
+        assert again.id == first.id
+        assert again.client == "Acme Corporation"  # the label caught up
+        assert again.engagement_ref == "21"
+
+    def test_without_an_id_it_still_works_by_name(self, env: ScenarioEnv) -> None:
+        """Manual mode has no accounting system to have an id in."""
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        assert item.engagement_ref == ""
+        assert item.consultant == "Priya Shah"
 
 
 class TestMondaySummary:

@@ -40,6 +40,7 @@ class EngagementRates:
     keeps what the engagement list says (docs/decisions.md #38).
     """
 
+    ref: str  # the accounting system's id for the engagement, stable across renames
     bill_rate_cents: int
     pay_rate_cents: int | None
     payee: str

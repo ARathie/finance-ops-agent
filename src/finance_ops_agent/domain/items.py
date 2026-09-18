@@ -39,6 +39,9 @@ class EngagementSnapshot(BaseModel):
     # Set when QuickBooks and the engagement list disagree about what Icon pays
     # or who it pays; QuickBooks' answer is the one used (docs/decisions.md #38).
     pay_disagreement: str = ""
+    # The accounting system's id for this engagement, so the item can be found
+    # again when a name is tidied (docs/decisions.md #39).
+    engagement_ref: str = ""
 
 
 @dataclass(frozen=True)
@@ -49,6 +52,10 @@ class Item:
     period: BillingPeriod
     status: ItemStatus
     snapshot: EngagementSnapshot
+    # The accounting system's id for the engagement this belongs to. It
+    # survives a rename, where the consultant and client names above are the
+    # label a person reads (docs/decisions.md #39). Blank in manual mode.
+    engagement_ref: str = ""
     approved_hours: Hours | None = None
     invoice_amount: Money | None = None
     amount_owed: Money | None = None

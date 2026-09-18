@@ -315,3 +315,16 @@ Decision: **the pay rate and the payee come from the engagement's product in Qui
 This is a change of shape, not only of source: the amount owed is worked out when a timesheet is read, so the accounting system is now consulted while an item is being created, in `application/run.py`. That is the first time the accounting port is asked anything outside invoicing, which is why `AccountingSystem` gained `engagement_rates` rather than the application reaching for an adapter.
 
 What still comes from the engagement list about paying: **how** Icon pays (bank transfer, payroll, check) and **when** (the pay timing days). Both have plausible homes on a QuickBooks vendor record, and neither is worth moving until the rest of the residue moves with it.
+
+## 39. An item belongs to an engagement, not to a pair of names
+
+An engagement is a product in QuickBooks (decision 36), and its client and consultant come from that product's category path. Names get tidied: `MasTec` becomes `MasTec Inc`, a consultant's spelling is corrected. Items were found by consultant and client name alone, so a rename would have orphaned every item in flight -- the agent would have stopped finding them, expected fresh invoices for work already in hand, and left the originals waiting for ever.
+
+Decision: **an item carries the accounting system's id for its engagement, and is found by that first.** The consultant and client names stay on the item as the label a person reads, and **catch up** when the accounting system's names change.
+
+- Found by id under different names, the item is **relabelled**, not duplicated. It is the same engagement; the id says so.
+- Found by neither, it is a new item, as before.
+- **Both places that look for an item do this**: the one that reads a timesheet, and the one that works out which invoices to expect. The second runs first in a run, so leaving it looking by name alone would have made the duplicate before the rename could be noticed.
+- **An empty id matches nothing.** Manual mode has no accounting system to have an id in, and those items are still found by name; an empty id must not match all of them.
+
+`items.engagement_ref` is nullable for items made before this and for manual mode. The unique constraint still stands on consultant, client and period -- one invoice per consultant per client per month (CLAUDE.md rule 3) is unchanged, and the id is the identity rather than a second key.

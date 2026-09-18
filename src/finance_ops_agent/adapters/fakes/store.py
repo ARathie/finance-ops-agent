@@ -62,6 +62,7 @@ class FakeStore:
         period: BillingPeriod,
         status: ItemStatus,
         snapshot: EngagementSnapshot,
+        engagement_ref: str = "",
     ) -> Item:
         if status not in INITIAL_STATUSES:
             raise ValueError(f"an item cannot start as {status}")
@@ -77,6 +78,7 @@ class FakeStore:
             period=period,
             status=status,
             snapshot=snapshot,
+            engagement_ref=engagement_ref,
         )
         self._next_id += 1
         self._items[item.id] = item
@@ -98,6 +100,20 @@ class FakeStore:
             if item.consultant == consultant and item.client == client and item.period == period:
                 return item
         return None
+
+    def find_item_by_engagement(self, engagement_ref: str, period: BillingPeriod) -> Item | None:
+        if not engagement_ref:
+            return None
+        for item in self._items.values():
+            if item.engagement_ref == engagement_ref and item.period == period:
+                return item
+        return None
+
+    def relabel_item(self, item_id: int, consultant: str, client: str) -> Item:
+        item = self._items[item_id]
+        relabelled = replace(item, consultant=consultant, client=client)
+        self._items[item_id] = relabelled
+        return relabelled
 
     def list_items(self) -> list[Item]:
         return list(self._items.values())

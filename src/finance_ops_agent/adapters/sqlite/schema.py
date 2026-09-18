@@ -52,6 +52,9 @@ class ItemRow(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     consultant: Mapped[str]
     client: Mapped[str]
+    # The accounting system's id for the engagement, which survives a rename;
+    # null in manual mode and for items made before decision 39.
+    engagement_ref: Mapped[str | None] = mapped_column(String, index=True)
     period_start: Mapped[date] = mapped_column(Date)
     period_end: Mapped[date] = mapped_column(Date)
     status: Mapped[str]
