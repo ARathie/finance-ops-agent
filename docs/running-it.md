@@ -197,6 +197,14 @@ grep '"what": "review opened"' data/fops.log            # everything the agent a
 
 ## Backups
 
+## Where the engagement list lives
+
+`fops engagements` says which of the two the agent is reading -- the workbook at `FOPS_ENGAGEMENT_LIST`, or its own store -- and what is in it.
+
+`fops engagements import` copies the workbook into the store, after which the agent does not open that file again (decision 40). A workbook with problems is refused rather than imported. `fops engagements forget` puts the agent back on the file, which is the way back if an import turns out to be wrong.
+
+`fops doctor` names the source on its engagement list line, so a change to the workbook that seems to do nothing is explained rather than mysterious.
+
 ## The agent's mail folders
 
 `Agent/Processed`, `Agent/Needs Review` and `Agent/Ignored` say what the agent made of each message: read and used, could not use, set aside. They are a courtesy for a person looking at the mailbox -- the database is the record -- and they do not track where an invoice has got to. A timesheet read cleanly is filed as processed before its invoice is made.

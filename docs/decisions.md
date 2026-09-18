@@ -328,3 +328,17 @@ Decision: **an item carries the accounting system's id for its engagement, and i
 - **An empty id matches nothing.** Manual mode has no accounting system to have an id in, and those items are still found by name; an empty id must not match all of them.
 
 `items.engagement_ref` is nullable for items made before this and for manual mode. The unique constraint still stands on consultant, client and period -- one invoice per consultant per client per month (CLAUDE.md rule 3) is unchanged, and the id is the identity rather than a second key.
+
+## 40. The engagement list moves into the agent's own store
+
+Rates, the consultant-client pairing, and whether an engagement is live all belong to QuickBooks now (decisions 30, 36 and 38). What is left in the workbook is Icon's own operating policy -- billing schedules, the addresses timesheets arrive from, the names to match on, which clients are invoiced by email and which by portal -- and no accounting system has a home for any of it. Keeping a spreadsheet alive for that residue means two places to edit, one of which nothing checks.
+
+Decision: **`fops engagements import` copies the workbook into the agent's store, and the agent reads it from there.** `fops engagements` says which of the two it is reading and what is in it; `fops engagements forget` puts it back on the file.
+
+**What is stored is the workbook exactly as it was read** -- sheets of rows of cells, by row number -- not a new shape. Nothing downstream can tell the difference: the same parsing, the same checks, the same problems naming the same sheet and row Kevin sees. That is deliberate. Reshaping the data and changing where it lives at the same time would have made every rule about it suspect at once, and fields can now leave the list one at a time as they move to QuickBooks rather than everything moving together.
+
+- **A workbook with problems is not imported.** Importing one the agent would refuse to bill from only moves the problem somewhere harder to look at.
+- **`fops doctor` says which source it read**, because someone editing the workbook after importing and seeing nothing change deserves to be told why rather than to work it out.
+- The list is stored under one key in the state the agent already keeps, so there is no migration and a backup already carries it.
+
+What this does **not** do yet is give Kevin a way to change anything without the workbook: importing again from an edited file is the only path today. Editing commands come next, and the shape they should take is clearer once it is known which fields are still in the list after the rest move to QuickBooks.

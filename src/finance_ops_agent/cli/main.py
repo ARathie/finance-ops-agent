@@ -30,6 +30,8 @@ if TYPE_CHECKING:
     from finance_ops_agent.application.eval_runner import UsageReport
     from finance_ops_agent.cli.doctor import Check
     from finance_ops_agent.config import Config, MailSettings
+    from finance_ops_agent.domain.engagements import EngagementWorkbook
+    from finance_ops_agent.ports.engagement_list import EngagementList
     from finance_ops_agent.ports.reader import TokenUsage
 
 
@@ -141,6 +143,23 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="the marker kept in the invoice's private note (default: a new one each run)",
     )
+
+    engagements = commands.add_parser(
+        "engagements",
+        help="the engagement list the agent reads: import the workbook into the"
+        " agent's own store, or show what is in it",
+    )
+    engagements.add_argument(
+        "action", choices=("show", "import", "forget"), nargs="?", default="show"
+    )
+    engagements.add_argument(
+        "--from",
+        dest="from_path",
+        type=Path,
+        default=None,
+        help="the workbook to import (default: FOPS_ENGAGEMENT_LIST)",
+    )
+    engagements.add_argument("--data", type=Path, default=None, help="the data folder")
 
     forget = commands.add_parser(
         "forget",
@@ -296,6 +315,20 @@ def _accounting(
     return QuickBooksOnline(client, today)
 
 
+def _engagement_list(config: "Config", store: SqliteStore) -> "EngagementList":
+    """The store where it has been imported, the workbook until then.
+
+    The workbook is on its way out (decision 40). Everything downstream reads
+    the same shape either way, so nothing but this line can tell which it was.
+    """
+    from finance_ops_agent.adapters.excel.engagement_list import ExcelEngagementList
+    from finance_ops_agent.adapters.stored.engagement_list import StoredEngagementList, imported
+
+    if imported(store):
+        return StoredEngagementList(store)
+    return ExcelEngagementList(config.engagement_list)
+
+
 def _mail_account(mail: "MailSettings") -> "MailAccount":
     from finance_ops_agent.adapters.email.client import MailAccount
 
@@ -319,7 +352,6 @@ def _real_deps(mode_override: "Mode | None" = None, since: "date | None" = None)
     from finance_ops_agent.adapters.clock import SystemClock
     from finance_ops_agent.adapters.email.inbox import ImapInbox
     from finance_ops_agent.adapters.email.sender import SmtpSender
-    from finance_ops_agent.adapters.excel.engagement_list import ExcelEngagementList
     from finance_ops_agent.application.run import MAILBOX_POSITION_KEY
     from finance_ops_agent.config import Config, MailSettings
 
@@ -340,7 +372,7 @@ def _real_deps(mode_override: "Mode | None" = None, since: "date | None" = None)
         # skipped by its Message-ID, so nothing is handled or sent twice.
         store.set_state(MAILBOX_POSITION_KEY, "")
     return RunDeps(
-        engagement_list=ExcelEngagementList(config.engagement_list),
+        engagement_list=_engagement_list(config, store),
         inbox=ImapInbox(account, config.agent_mailbox, start_date),
         reader=ClaudeReader(model=config.model),
         store=store,
@@ -409,7 +441,6 @@ def _command_run(args: argparse.Namespace) -> int:
 
 
 def _command_doctor(args: argparse.Namespace) -> int:
-    from finance_ops_agent.adapters.excel.engagement_list import ExcelEngagementList
     from finance_ops_agent.cli import doctor as checks
     from finance_ops_agent.cli.doctor import Check, CheckResult
     from finance_ops_agent.config import ENV_FILE, Config, MailSettings, MissingSettingError
@@ -449,13 +480,19 @@ def _command_doctor(args: argparse.Namespace) -> int:
     )
 
     def load_list() -> tuple[int, list[str]]:
-        parsed = parse_workbook(ExcelEngagementList(config.engagement_list).load())
+        parsed = parse_workbook(_engagement_list(config, _open_store(config.data_dir)).load())
         return len(parsed.engagements), [
             f"{problem.sheet} row {problem.row_number}: {problem.message}"
             for problem in parsed.problems
         ]
 
-    results.append(checks.check_engagement_list(load_list, config.engagement_list))
+    from finance_ops_agent.adapters.stored.engagement_list import imported
+
+    results.append(
+        checks.check_engagement_list(
+            load_list, config.engagement_list, stored=imported(_open_store(config.data_dir))
+        )
+    )
 
     def describe_database() -> str:
         store = _open_store(config.data_dir)
@@ -511,7 +548,6 @@ def _command_doctor(args: argparse.Namespace) -> int:
 
 
 def _quickbooks_checks(config: "Config") -> list["Check"]:
-    from finance_ops_agent.adapters.excel.engagement_list import ExcelEngagementList
     from finance_ops_agent.adapters.quickbooks.client import QuickBooksClient
     from finance_ops_agent.adapters.quickbooks.online import QuickBooksOnline
     from finance_ops_agent.adapters.quickbooks.tokens import TokenStore
@@ -539,7 +575,7 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
     accounting = QuickBooksOnline(client, date.today())  # noqa: DTZ011
 
     def wanted_customers() -> list[str]:
-        parsed = parse_workbook(ExcelEngagementList(config.engagement_list).load())
+        parsed = parse_workbook(_engagement_list(config, _open_store(config.data_dir)).load())
         return sorted(
             {
                 client_row.quickbooks_customer or client_row.legal_name
@@ -553,7 +589,7 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
         consultant at two clients has two rates (decision 36)."""
         from finance_ops_agent.application.run import build_snapshot
 
-        parsed = parse_workbook(ExcelEngagementList(config.engagement_list).load())
+        parsed = parse_workbook(_engagement_list(config, _open_store(config.data_dir)).load())
         by_client = {client_row.name: client_row for client_row in parsed.clients}
         wanted: dict[tuple[str, str], ExpectedProduct] = {}
         for engagement in parsed.engagements:
@@ -658,6 +694,100 @@ def _command_qbo_test_invoice(args: argparse.Namespace) -> int:
 
 
 SENT_ALREADY = ("invoice_sent", "client_paid")
+
+
+def _command_engagements(args: argparse.Namespace) -> int:
+    """Where the engagement list lives, and moving it into the agent's store.
+
+    The workbook is on its way out (decision 40): once it is imported the agent
+    reads the store and the file is not opened again.
+    """
+    from finance_ops_agent.adapters.excel.engagement_list import (
+        CsvEngagementList,
+        ExcelEngagementList,
+    )
+    from finance_ops_agent.adapters.stored.engagement_list import (
+        ENGAGEMENT_LIST_KEY,
+        StoredEngagementList,
+        imported,
+        put,
+    )
+    from finance_ops_agent.config import Config
+    from finance_ops_agent.domain.engagements import parse_workbook
+
+    config = Config.from_env()
+    store = _open_store(args.data if args.data is not None else config.data_dir)
+
+    if args.action == "forget":
+        if not imported(store):
+            print("The agent is reading the workbook already; there is nothing to forget.")
+            return 0
+        store.set_state(ENGAGEMENT_LIST_KEY, "")
+        print(
+            "Removed the engagement list from the agent's store."
+            f" It will read {config.engagement_list} again."
+        )
+        return 0
+
+    if args.action == "import":
+        source = args.from_path if args.from_path is not None else config.engagement_list
+        reader = CsvEngagementList(source) if source.is_dir() else ExcelEngagementList(source)
+        try:
+            workbook = reader.load()
+        except OSError as error:
+            print(f"Could not read {source}: {error}")
+            return 1
+        parsed = parse_workbook(workbook)
+        if parsed.problems:
+            # Importing a workbook the agent would refuse to bill from would
+            # only move the problem somewhere harder to see.
+            print(f"{source} has {len(parsed.problems)} problem(s); nothing was imported:")
+            for problem in parsed.problems:
+                print(f"  {problem.sheet} row {problem.row_number}: {problem.message}")
+            return 1
+        put(store, workbook)
+        print(f"Imported {source} into the agent's store.")
+        _print_engagement_list(parsed)
+        print("\nThe agent reads its own copy now and will not open that file again.")
+        print("Keep the file somewhere safe until you are sure, then `fops engagements forget`")
+        print("puts the agent back on it.")
+        return 0
+
+    where = "the agent's own store" if imported(store) else str(config.engagement_list)
+    source_list = (
+        StoredEngagementList(store)
+        if imported(store)
+        else (
+            CsvEngagementList(config.engagement_list)
+            if config.engagement_list.is_dir()
+            else ExcelEngagementList(config.engagement_list)
+        )
+    )
+    try:
+        parsed = parse_workbook(source_list.load())
+    except Exception as error:
+        print(f"Could not read the engagement list: {error}")
+        return 1
+    print(f"The agent reads its engagement list from {where}.")
+    _print_engagement_list(parsed)
+    if not imported(store):
+        print("\n`fops engagements import` moves it into the agent's store.")
+    return 0
+
+
+def _print_engagement_list(parsed: "EngagementWorkbook") -> None:
+    print(
+        f"  {len(parsed.clients)} client(s), {len(parsed.consultants)} consultant(s),"
+        f" {len(parsed.vendors)} vendor(s), {len(parsed.engagements)} engagement(s)"
+    )
+    for engagement in parsed.engagements:
+        state = "" if engagement.active else " (not active)"
+        print(
+            f"    {engagement.consultant} at {engagement.client},"
+            f" {engagement.billing_schedule.value}, from {engagement.start_date}{state}"
+        )
+    for problem in parsed.problems:
+        print(f"  problem: {problem.sheet} row {problem.row_number}: {problem.message}")
 
 
 def _command_forget(args: argparse.Namespace) -> int:
@@ -920,6 +1050,8 @@ def main(argv: list[str] | None = None) -> int:
         return _command_qbo_connect(args)
     if args.command == "qbo-test-invoice":
         return _command_qbo_test_invoice(args)
+    if args.command == "engagements":
+        return _command_engagements(args)
     if args.command == "forget":
         return _command_forget(args)
     if args.command == "backup":

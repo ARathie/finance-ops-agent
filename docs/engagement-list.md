@@ -2,6 +2,8 @@
 
 The engagement list is the spreadsheet Kevin keeps with every client, consultant, vendor company, and engagement. The agent reads it at the start of every run. It is the **only** place the agent takes rates, billing contacts, and payment terms from. Nothing in an email or on a timesheet can override it.
 
+**Where it lives.** Until `fops engagements import` is run it is this file. After that the agent keeps its own copy and does not open the file again (decision 40); `fops engagements` says which, and `fops engagements forget` puts it back on the file. The columns below are the same either way.
+
 File: `engagements.xlsx` (location set in the agent's settings; a CSV export of each sheet works too). Kevin edits it in Excel like any other spreadsheet. The agent never writes to it.
 
 **Starting from scratch:** copy `templates/engagements-template.xlsx`. It has the four sheets with these columns in this order, one made-up example row on each to replace, a "Read me" sheet in plain words, and dropdowns on every column that only takes certain words (`Delivery`, `Type`, `Paid by`, `Billing schedule`, the yes/no columns) so the commonest mistake cannot be made. Rebuild it with `uv run python templates/build_template.py` if a column here ever changes.

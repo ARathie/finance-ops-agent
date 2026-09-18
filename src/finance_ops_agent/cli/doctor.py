@@ -148,17 +148,24 @@ def check_timesheet_forwarders(forwarders: tuple[str, ...], mode: str) -> Check:
     )
 
 
-def check_engagement_list(load: Callable[[], tuple[int, list[str]]], path: Path) -> Check:
-    """Say which file was read, not only what was in it.
+def check_engagement_list(
+    load: Callable[[], tuple[int, list[str]]], path: Path, stored: bool = False
+) -> Check:
+    """Say where it was read from, not only what was in it.
 
     `FOPS_ENGAGEMENT_LIST` is usually a relative path, so the file depends on
     the folder the command was run in, and a copy edited somewhere else looks
     exactly like a change that did not take. The resolved path settles it.
+
+    Once the list has been imported the agent reads its own store and does not
+    open that file at all (decision 40), and someone editing the workbook and
+    seeing nothing change deserves to be told so by name.
     """
 
     def run() -> str:
         rows, problems = load()
-        where = f"{rows} engagement row(s) from {path.resolve()}"
+        source = "the agent's own store" if stored else str(path.resolve())
+        where = f"{rows} engagement row(s) from {source}"
         if problems:
             raise MailboxProblem(f"{where}, but {len(problems)} problem(s): {problems[0]}")
         return f"{where}, no problems"
