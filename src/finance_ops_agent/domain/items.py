@@ -8,7 +8,7 @@ prepared (docs/decisions.md #3).
 from dataclasses import dataclass
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from finance_ops_agent.domain.money import Hours, Money
 from finance_ops_agent.domain.periods import BillingPeriod
@@ -36,9 +36,13 @@ class EngagementSnapshot(BaseModel):
     consultant_code: str = ""  # the consultant's part of it (PS, or PSHAH when shared)
     client_delivery: str = "email"  # email, or portal (Kevin uploads it himself)
     send_automatically: bool = False  # the engagement row's "Send automatically" column
-    # Set when QuickBooks and the engagement list disagree about what Icon pays
-    # or who it pays; QuickBooks' answer is the one used (docs/decisions.md #38).
-    pay_disagreement: str = ""
+    # Set when QuickBooks and the engagement list disagree about a rate or
+    # about who Icon pays; QuickBooks' answer is the one used, and the item
+    # waits for Kevin (docs/decisions.md #38 and #43). Items written before the
+    # bill rate joined it stored this under its old name, so that is still read.
+    rate_disagreement: str = Field(
+        default="", validation_alias=AliasChoices("rate_disagreement", "pay_disagreement")
+    )
     # The accounting system's id for this engagement, so the item can be found
     # again when a name is tidied (docs/decisions.md #39).
     engagement_ref: str = ""

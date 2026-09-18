@@ -99,9 +99,10 @@ different categories, which is why the client's name goes in the category.
 
 Both rates come from here and nowhere else. The engagement list still holds its
 own copies, and they are now a cross-check rather than the source: where the two
-disagree about the **bill rate**, the invoice is voided and you are told; where
-they disagree about the **pay rate**, QuickBooks' figure is used and the item
-waits for you. Neither is a number the agent picks between quietly.
+disagree, QuickBooks' figure is the one used, the timesheet waits for you, and
+you get a review email naming both numbers. Nothing is invoiced and no payment
+is instructed until you answer, so a rate that has drifted costs you a reply
+rather than a voided invoice.
 
 A purchase side left blank is not a disagreement — it is one not filled in yet,
 and the engagement list is used until it is.

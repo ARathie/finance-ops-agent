@@ -374,3 +374,20 @@ Ending an engagement means "expect no more timesheets" and nothing else -- it is
 Two details that are easy to get wrong. The **order** is the workbook's, not sorted: items are created in that order and their numbers are what Kevin reads in the tracking sheet. And a **category is itself an Item** in QuickBooks, so the listing contains the clients as well as the engagements; a category is not an engagement, and neither is a product with no category.
 
 What this does **not** do is retire the Engagements sheet's columns. The pairing, the rates and the `Active` flag are now cross-checks rather than sources, and they earn their place while there is only one cycle's evidence that QuickBooks holds them correctly -- the fallback above depends on them. Removing them is its own change, once a full cycle has run with QuickBooks deciding.
+
+## 43. The bill rate comes off the product too, and is taken when the timesheet is read
+
+Decision 30 said the invoice is priced from the consultant's product, and it was -- but only the invoice. Everything the agent computed for itself still used the engagement list's bill rate: the preview, the amount Kevin approves, the tracking sheet, the guardrail on an unusual amount. The two were held together by the total check, which voided an invoice whose total disagreed. So the workbook was still a *source* of the bill rate, not only a cross-check, and it was the last thing keeping decision 30 half-finished.
+
+Decision: **the bill rate is taken from the product when the timesheet is read**, into the item's snapshot, the way the pay rate has been since decision 38. A disagreement with the engagement list is a review naming both figures, and the item waits.
+
+What this changes is *when* a drifted rate is found. Before, the only way to discover it was to create the invoice, see the total disagree, and void it -- which spent an invoice number and left a voided invoice in Kevin's books, all because a spreadsheet nobody had updated said something else. Now it is found when the timesheet is read, before anything exists to void, and it costs a reply.
+
+- **The item waits, as on any review.** For the bill rate that is plainly right: nothing should be invoiced at a price two systems disagree about.
+- **One review per item, not one per field.** A bill rate, a pay rate and a payee that all disagree are one message naming all three. Two emails about one engagement is how a person learns to skim them.
+- **The total check stays.** Its job is now different and still real: the invoice is not created until Kevin approves, so the product's rate can change in between. That window is what it guards.
+- **Where QuickBooks cannot price the engagement, the engagement list does.** A product with no rate makes the lookup fail, which is already a refusal in its own right and a failing doctor check; the run does not stop.
+
+`EngagementSnapshot.pay_disagreement` became `rate_disagreement`, since it now carries all three. Items already in the database hold the old name, so it is still read: a rename that silently dropped their text would lose the one sentence saying what the disagreement was.
+
+What is left in the workbook after this is what QuickBooks has no home for: the billing schedules, the addresses timesheets may arrive from, the names to match on, the delivery method, payment terms and pay timing. The rate columns stay as the cross-check and as the fallback when QuickBooks cannot answer.

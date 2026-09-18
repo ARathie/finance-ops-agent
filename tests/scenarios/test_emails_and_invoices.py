@@ -801,6 +801,79 @@ class TestWhenQuickBooksIsUnhappy:
         assert [r.number for r in env.store.invoices_for_item(item.id)] == ["083126AC-PS"]
 
 
+class TestWhatTheClientIsCharged:
+    """The bill rate comes off the product too (decision 43). It is the one
+    that has to be right before anything leaves: it is what the client pays and
+    what Kevin approves."""
+
+    def _rates(self, bill_cents: int) -> "EngagementRates":
+        from finance_ops_agent.ports.accounting import EngagementRates
+
+        return EngagementRates(
+            ref="21", bill_rate_cents=bill_cents, pay_rate_cents=10_000, payee=""
+        )
+
+    def test_the_bill_rate_comes_off_the_product(self, env: ScenarioEnv) -> None:
+        """The engagement list says 140.00; QuickBooks says 150.00 and wins."""
+        env.accounting.rates[("Priya Shah", "Acme Corp")] = self._rates(15_000)
+        env.workbook.engagements[0] = engagement_row(2, **{"Bill rate": "150.00"})
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        assert item.snapshot.bill_rate_cents == 15_000
+        assert item.invoice_amount == Money(2_340_000)  # 156.00 hours at 150.00
+
+    def test_a_drifted_rate_is_caught_before_an_invoice_is_made(self, env: ScenarioEnv) -> None:
+        """Before this, the only way to find it was to create the invoice, see
+        the total disagree and void it -- spending a number and leaving a
+        voided invoice in the books (decision 43)."""
+        env.accounting.rates[("Priya Shah", "Acme Corp")] = self._rates(15_000)
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        assert item.snapshot.bill_rate_cents == 15_000  # QuickBooks' figure is used
+        review = next(r for r in env.store.open_reviews() if "QuickBooks charges" in r.message)
+        assert "$150.00" in review.message  # QuickBooks
+        assert "$140.00" in review.message  # the engagement list
+        assert item.status is not ItemStatus.READY  # nothing is invoiced meanwhile
+        assert env.accounting.create_attempts == 0
+
+    def test_agreement_says_nothing(self, env: ScenarioEnv) -> None:
+        env.accounting.rates[("Priya Shah", "Acme Corp")] = self._rates(14_000)
+        clean_timesheet(env)
+        env.run()
+
+        assert env.the_item().snapshot.rate_disagreement == ""
+        assert not any("QuickBooks charges" in r.message for r in env.store.open_reviews())
+
+    def test_the_engagement_list_is_used_where_quickbooks_cannot_say(
+        self, env: ScenarioEnv
+    ) -> None:
+        """Manual mode, and a product the accounting system could not price."""
+        clean_timesheet(env)
+        env.run()
+
+        assert env.the_item().snapshot.bill_rate_cents == 14_000  # the workbook's
+
+    def test_both_rates_disagreeing_is_one_review_naming_both(self, env: ScenarioEnv) -> None:
+        """One review per item, not one per field: two emails about the same
+        engagement is how a person learns to skim them."""
+        from finance_ops_agent.ports.accounting import EngagementRates
+
+        env.accounting.rates[("Priya Shah", "Acme Corp")] = EngagementRates(
+            ref="21", bill_rate_cents=15_000, pay_rate_cents=11_000, payee=""
+        )
+        clean_timesheet(env)
+        env.run()
+
+        said = [r.message for r in env.store.open_reviews() if "QuickBooks" in r.message]
+        assert len(said) == 1
+        assert "QuickBooks charges" in said[0]
+        assert "QuickBooks pays" in said[0]
+
+
 class TestWhatIconPays:
     """What Icon pays, and who it pays, come from the engagement's product in
     QuickBooks where it has them (decision 38). The engagement list stays the
@@ -859,7 +932,7 @@ class TestWhatIconPays:
         clean_timesheet(env)
         env.run()
 
-        assert env.the_item().snapshot.pay_disagreement == ""
+        assert env.the_item().snapshot.rate_disagreement == ""
         assert not any("QuickBooks pays" in r.message for r in env.store.open_reviews())
 
     def test_a_different_payee_is_used_and_told(self, env: ScenarioEnv) -> None:

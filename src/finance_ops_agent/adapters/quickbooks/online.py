@@ -354,9 +354,11 @@ class QuickBooksOnline:
             )
         if total_cents != invoice.total.cents:
             # Void first, then report: an amount the agent cannot vouch for must
-            # not survive, and it must never reach a client. Since the rate now
-            # comes off the product, this is also what catches the product's
-            # rate and the engagement list's having drifted apart.
+            # not survive, and it must never reach a client. The agent priced
+            # this from the product when the timesheet was read (decision 43),
+            # so what is left for this to catch is the product's rate having
+            # been changed between then and now -- a window that opens because
+            # the invoice is not made until Kevin approves.
             logs.log(
                 "quickbooks total disagrees with the engagement list",
                 item_id=item_id,

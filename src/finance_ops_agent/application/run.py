@@ -194,11 +194,16 @@ def build_snapshot(
 ) -> EngagementSnapshot | None:
     """The engagement row as the item will remember it.
 
-    What Icon pays, and who it pays, come from the engagement's product in the
+    Both rates and the payee come from the engagement's product in the
     accounting system where it has them, and from the engagement list where it
-    does not (docs/decisions.md #38). The engagement list stays the
+    does not (docs/decisions.md #38 and #43). The engagement list stays the
     cross-check: a disagreement is recorded on the snapshot so the caller can
-    ask Kevin, and QuickBooks' figure is the one used meanwhile."""
+    ask Kevin, and QuickBooks' figure is the one used meanwhile.
+
+    The bill rate is the one that must be right before anything leaves: it is
+    what the client is charged and what Kevin approves. Taking it here means a
+    rate that has drifted is found when the timesheet is read, rather than by
+    creating the invoice and voiding it."""
     client = _client_by_name(workbook, rate_row.client)
     consultant = _consultant_by_name(workbook, rate_row.consultant)
     if client is None or consultant is None:
@@ -214,32 +219,44 @@ def build_snapshot(
             consultant.paid_by,
             (consultant.pay_timing_days),
         )
+    bill_rate_cents = rate_row.bill_rate.cents
     pay_rate_cents = rate_row.pay_rate.cents
-    disagreement = ""
+    said: list[str] = []
     engagement_ref = ""
     rates = _rates_from_accounting(accounting, rate_row, client)
+    who = f"{rate_row.consultant} at {rate_row.client}"
     if rates is not None:
         engagement_ref = rates.ref
+        if rates.bill_rate_cents != bill_rate_cents:
+            # Caught here rather than by the invoice: before this, a drifted
+            # rate was only found by creating the invoice, seeing the total
+            # disagree and voiding it, which spent a number and left a voided
+            # invoice in the books for a spreadsheet nobody had updated
+            # (decision 43).
+            said.append(
+                f"QuickBooks charges ${Money(rates.bill_rate_cents)} an hour for"
+                f" {who} and the engagement list says"
+                f" ${Money(bill_rate_cents)}. I am using QuickBooks' figure, which is"
+                " where the rate lives now. Make them agree."
+            )
+        bill_rate_cents = rates.bill_rate_cents
     if rates is not None and rates.pay_rate_cents is not None:
         if rates.pay_rate_cents != pay_rate_cents:
-            disagreement = (
-                f"QuickBooks pays {rate_row.consultant} at {rate_row.client}"
+            said.append(
+                f"QuickBooks pays {who}"
                 f" ${Money(rates.pay_rate_cents)} an hour and the engagement list says"
                 f" ${Money(pay_rate_cents)}. I am using QuickBooks' figure, which is"
                 " where the rate lives now. Make them agree."
             )
         pay_rate_cents = rates.pay_rate_cents
     if rates is not None and rates.payee and rates.payee != payee:
-        if disagreement:
-            disagreement += " "
-        disagreement += (
-            f"QuickBooks pays {rates.payee} for {rate_row.consultant} at"
-            f" {rate_row.client} and the engagement list says {payee}. I am using"
-            " QuickBooks' answer. Make them agree."
+        said.append(
+            f"QuickBooks pays {rates.payee} for {who} and the engagement list says"
+            f" {payee}. I am using QuickBooks' answer. Make them agree."
         )
         payee = rates.payee
     return EngagementSnapshot(
-        bill_rate_cents=rate_row.bill_rate.cents,
+        bill_rate_cents=bill_rate_cents,
         pay_rate_cents=pay_rate_cents,
         payment_terms_days=client.payment_terms_days,
         pay_timing_days=pay_timing,
@@ -255,7 +272,7 @@ def build_snapshot(
         consultant_code=_consultant_code(workbook, rate_row),
         client_delivery=client.delivery.value,
         send_automatically=rate_row.send_automatically,
-        pay_disagreement=disagreement,
+        rate_disagreement=" ".join(said),
         engagement_ref=engagement_ref,
     )
 
@@ -323,30 +340,33 @@ def _find_item(
     return deps.store.find_item(consultant, client, period)
 
 
-def _ask_about_the_pay_rate(deps: RunDeps, item: Item, report: RunReport) -> None:
-    """QuickBooks and the engagement list disagree about what Icon pays.
+def _ask_about_the_rates(deps: RunDeps, item: Item, report: RunReport) -> None:
+    """QuickBooks and the engagement list disagree about a rate, or about who
+    Icon pays.
 
-    QuickBooks' figure is the one used, because that is where the rate lives
-    now (decision 38), but Kevin is the one who pays and he is told before he
-    does.
+    QuickBooks' figure is the one used, because that is where the rates live
+    now (decisions 38 and 43), but Kevin is the one who pays and who signs off
+    what a client is charged, and he is told before either happens.
 
-    Like every other review, this one **pauses the item** until he answers, so
-    the client's invoice waits on a disagreement that does not affect it. That
-    is the cost of having one mechanism rather than two, and it is meant to be
-    rare: `fops doctor` compares the two before any timesheet arrives, so the
-    disagreements are found when someone is looking at the engagement list
-    rather than when an invoice is due.
+    This **pauses the item** until he answers, as every review does. For the
+    bill rate that is plainly right -- nothing should be invoiced at a price
+    two systems disagree about. For the pay rate it means a client's invoice
+    waits on a disagreement that does not affect it, which is the cost of one
+    mechanism rather than two. Either way it is meant to be rare: `fops doctor`
+    compares the two before any timesheet arrives, so the disagreements are
+    found when someone is looking at the engagement list rather than when an
+    invoice is due.
     """
-    if not item.snapshot.pay_disagreement:
+    if not item.snapshot.rate_disagreement:
         return
     if deps.store.open_review(
-        item.id, ReviewCode.LIST_ROW_PROBLEM.value, item.snapshot.pay_disagreement
+        item.id, ReviewCode.LIST_ROW_PROBLEM.value, item.snapshot.rate_disagreement
     ):
         report.reviews_opened += 1
         email = emails.needs_review(
             deps.settings.admin_email,
             f"{item.consultant} — {item.client}",
-            [item.snapshot.pay_disagreement],
+            [item.snapshot.rate_disagreement],
         )
         outgoing_steps.enqueue_email(deps, "review_email", f"review:pay:{item.id}", item.id, email)
 
@@ -433,7 +453,7 @@ def _create_expected_items(deps: RunDeps, workbook: EngagementWorkbook, report: 
                 snapshot,
                 snapshot.engagement_ref,
             )
-            _ask_about_the_pay_rate(deps, waiting, report)
+            _ask_about_the_rates(deps, waiting, report)
             report.expected_items_created += 1
             report.note(
                 f"waiting for a timesheet: {consultant} at {client}, {period.start} to {period.end}"
@@ -694,7 +714,7 @@ def _process_timesheet(
                     snapshot,
                     snapshot.engagement_ref,
                 )
-                _ask_about_the_pay_rate(deps, item, report)
+                _ask_about_the_rates(deps, item, report)
         if item is not None and item.status is ItemStatus.WAITING_FOR_TIMESHEET:
             item = deps.store.change_status(item.id, ItemStatus.RECEIVED, {})
         if item is not None:
