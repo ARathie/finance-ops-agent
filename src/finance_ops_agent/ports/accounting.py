@@ -81,7 +81,10 @@ class EngagementListing:
 
     live: list[AccountingEngagement]
     products_seen: int = 0
-    categories_seen: int = 0
+    categories_seen: int = 0  # the ones products actually sit under
+    # Categories that exist in the company, whether or not anything uses them.
+    # "None have been made" and "none are being used" need different fixes.
+    categories_that_exist: int = 0
 
 
 @dataclass(frozen=True)

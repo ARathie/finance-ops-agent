@@ -354,9 +354,10 @@ def check_quickbooks_engagements(
         rateless = sorted(
             f"{one.consultant} at {one.client}" for one in listed if one.bill_rate_cents is None
         )
+        used = listing.categories_seen
         seen = (
             f"{listing.products_seen} product(s) and"
-            f" {listing.categories_seen} categor{'y' if listing.categories_seen == 1 else 'ies'}"
+            f" {used} categor{'y' if used == 1 else 'ies'} in use"
         )
         problems: list[str] = []
         if answer.without_a_row:
@@ -384,10 +385,16 @@ def check_quickbooks_engagements(
             # Which of the two this is decides what to do about it, and saying
             # only the first left someone comparing it against a company they
             # could see was full of categorised products.
+            why = (
+                "no categories have been made in it at all"
+                if not listing.categories_that_exist
+                else f"it has {listing.categories_that_exist} categor"
+                + ("y" if listing.categories_that_exist == 1 else "ies")
+                + " but no product sits under one"
+            )
             return (
-                f"I read {seen} in {accounting.company} and none of the products sits under"
-                " a category, so the engagement list decides which engagements are live,"
-                " as it did before"
+                f"I read {seen} in {accounting.company} and {why}, so the engagement list"
+                " decides which engagements are live, as it did before"
             )
         return (
             f"{len(answer.live)} live engagement(s) in {accounting.company}, each with a row"

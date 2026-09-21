@@ -96,6 +96,20 @@ invoice drives the count negative and puts the money in the wrong place.
 Invoices still come out, so `fops doctor` names these rather than failing —
 but they are worth changing before real billing.
 
+**QuickBooks will not turn an inventory product into a service one.** If a
+consultant was created as Inventory, make that product inactive and create a
+new Service product in its place. Do that before putting it under a category,
+so the category goes on the one that will be used.
+
+To see what you actually have, rather than what a screen appears to show:
+
+```
+fops qbo-show product --brief
+```
+
+One line per product: its type, and what it sits under. A product with no
+`under …` on its line is in no category, whatever the edit screen showed.
+
 | Field | What to put | What the agent does with it |
 |---|---|---|
 | **Name** | The consultant's name | Prints it in the Description column of the invoice |

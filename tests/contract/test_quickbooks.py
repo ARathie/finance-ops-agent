@@ -1202,6 +1202,19 @@ class TestTheEngagementsCheck:
         assert "no rate" in check.detail
         assert "Sam Okafor at MasTec" in check.detail
 
+    def test_a_company_whose_categories_exist_but_are_unused_says_that_instead(
+        self, tmp_path: Path
+    ) -> None:
+        """Making the categories and putting products under them are different
+        jobs, so being told the wrong one is being sent to the wrong screen."""
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_engagements
+
+        accounting, _, _ = build(replay_from("engagements_unused_category"), tmp_path)
+        check = check_quickbooks_engagements(accounting, lambda: self._workbook("Priya Shah"))
+
+        assert check.result is CheckResult.PASS
+        assert "1 category but no product sits under one" in check.detail
+
     def test_a_company_with_no_categories_says_the_list_still_decides(self, tmp_path: Path) -> None:
         """Not "every engagement has ended": a company part-way through being
         set up answers exactly like manual mode."""
@@ -1218,8 +1231,8 @@ class TestTheEngagementsCheck:
         check = check_quickbooks_engagements(accounting, lambda: self._workbook("Priya Shah"))
 
         assert check.result is CheckResult.PASS
-        assert "none of the products sits under a category" in check.detail
-        assert "0 product(s) and 0 categories" in check.detail  # says what it read
+        assert "no categories have been made in it at all" in check.detail
+        assert "0 product(s) and 0 categories in use" in check.detail  # says what it read
 
 
 class TestReadingContactsAndTerms:

@@ -629,6 +629,7 @@ class QuickBooksOnline:
             live=found,
             products_seen=len(rows) - typed,
             categories_seen=len({name for name in categories.values() if name}),
+            categories_that_exist=typed,
         )
         logs.log(
             "quickbooks engagements listed",
