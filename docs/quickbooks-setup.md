@@ -219,15 +219,22 @@ nothing now and is what lets them move later.
 - **On each vendor** — the one named on a product's purchase side: their email,
   and the terms that say how long Icon has to pay them.
 
-Terms are their own list in QuickBooks (**Settings → All lists → Terms**), and
-a customer or vendor has to *point at one* — having Net 30 in the list, or
-picking it on each invoice, is not the same thing. Set it on the record itself:
-**Customer → Edit → Payments → Terms**, and **Vendor → Edit → Terms**.
+Terms are their own list in QuickBooks (**Settings → All lists → Terms**). A
+customer or vendor can point at one of its own — **Customer → Edit → Payments →
+Terms** — but it does not have to: where it names none, the agent uses your
+**company default** (Account and settings → Sales → Sales form content), which
+is the date QuickBooks itself would put on the invoice.
 
-The check tells the two apart, because they need different fixes: *"no terms on
-the record itself"* means nobody chose one for that customer or vendor, and
-*"the term 'Due on receipt' has no number of days on it"* means the term was
-chosen but QuickBooks has no due-days on it to work a date out from.
+Worth knowing, because the screen is misleading here: the Customer Details tab
+shows `Terms: Net 30` whether the customer holds those terms or is simply
+getting the company default. It is showing what an invoice would get, not what
+the record says. The check reports only when there is **no default either**, or
+when a term is chosen that carries no number of days.
+
+One consequence: a company default applies to every client, so a client on
+different terms is invisible in QuickBooks alone. Comparing it with the
+engagement list is exactly what catches that, which is a reason to keep the
+list's own column after the terms move across.
 
 On a **vendor**, the name and the company name can differ: yours are filed
 under the consultant, with the firm you actually pay in the company name

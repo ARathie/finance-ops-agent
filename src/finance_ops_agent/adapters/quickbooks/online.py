@@ -45,6 +45,9 @@ from finance_ops_agent.ports.accounting import (
 )
 
 PRIVATE_NOTE_PREFIX = "fops item"
+# A sentinel for "not asked yet", because "asked, and the company has no
+# default" is a real and different answer that must not be asked again.
+_UNREAD: Any = object()
 # The whole entity, not a field list. QuickBooks' query language refuses
 # `PrefVendorRef` in a SELECT ("Property PrefVendorRef not found for Entity
 # Item"): references come back with the entity or not at all. Asking for the
@@ -78,6 +81,19 @@ def item_id_from_note(note: str) -> int | None:
         return int(rest[0])
     except ValueError:
         return None
+
+
+def _clean(value: Any) -> str:
+    """A name or address from QuickBooks, as text that can be compared.
+
+    QuickBooks keeps whatever was typed or pasted, and a name pasted from a
+    document arrives with a non-breaking space on the end -- `"Subramanian
+    Arumugam\xa0"`. It looks identical to the plain name on every screen and
+    is not equal to it, so an invisible character became a disagreement nobody
+    could see, and would have become a payee name with one in it. Every name
+    and address read from QuickBooks comes through here.
+    """
+    return " ".join(str(value or "").split())
 
 
 def _escape(value: str) -> str:
@@ -129,7 +145,7 @@ def _engagement_from(
         client = path.rpartition(":")[0]
     # Nested deeper than one level: the client is the category it sits directly
     # under, which is the same one `product_for` looks a product up by.
-    client = client.rpartition(":")[2] or client
+    client = _clean(client.rpartition(":")[2] or client)
     if not client:
         return None
     price = row.get("UnitPrice")
@@ -137,11 +153,11 @@ def _engagement_from(
     vendor = row.get("PrefVendorRef") or {}
     return AccountingEngagement(
         ref=str(row["Id"]),
-        consultant=str(row.get("Name") or path.rpartition(":")[2]),
+        consultant=_clean(row.get("Name") or path.rpartition(":")[2]),
         client=client,
         bill_rate_cents=None if price is None else _cents(price),
         pay_rate_cents=None if cost is None else _cents(cost),
-        payee=str(vendor.get("name") or "") if isinstance(vendor, dict) else "",
+        payee=_clean(vendor.get("name")) if isinstance(vendor, dict) else "",
     )
 
 
@@ -179,6 +195,8 @@ class QuickBooksOnline:
         self._terms: dict[str, int] | None = None
         self._parents: dict[str, str] = {}
         self._vendors: dict[str, tuple[str, str]] = {}
+        # Unread, as distinct from read and found to be nothing.
+        self._company_default: int | None = _UNREAD
 
     @property
     def company(self) -> str:
@@ -325,7 +343,7 @@ class QuickBooksOnline:
         if ref not in self._vendors:
             rows = self._client.query(f"SELECT * FROM Vendor WHERE Id = '{_escape(ref)}'")
             self._vendors[ref] = (
-                (str(rows[0].get("DisplayName") or ""), str(rows[0].get("CompanyName") or ""))
+                (_clean(rows[0].get("DisplayName")), _clean(rows[0].get("CompanyName")))
                 if rows
                 else ("", "")
             )
@@ -342,7 +360,7 @@ class QuickBooksOnline:
         parent = row.get("ParentRef") or {}
         if not isinstance(parent, dict) or not parent.get("value"):
             return ""
-        named = str(parent.get("name") or "")
+        named = _clean(parent.get("name"))
         if not named:
             reference = str(parent["value"])
             if reference not in self._parents:
@@ -350,12 +368,12 @@ class QuickBooksOnline:
                     f"SELECT {PRODUCT_FIELDS} FROM Item WHERE Id = '{_escape(reference)}'"
                 )
                 self._parents[reference] = (
-                    str(found[0].get("FullyQualifiedName") or found[0].get("Name") or "")
+                    _clean(found[0].get("FullyQualifiedName") or found[0].get("Name"))
                     if found
                     else ""
                 )
             named = self._parents[reference]
-        return named.rpartition(":")[2] or named
+        return _clean(named.rpartition(":")[2] or named)
 
     def _remember(
         self, key: tuple[str, tuple[str, ...]], consultant: str, row: dict[str, Any], path: str
@@ -372,10 +390,10 @@ class QuickBooksOnline:
         vendor_ref = str(vendor.get("value") or "") if isinstance(vendor, dict) else ""
         product = Product(
             ref=str(row["Id"]),
-            name=str(row.get("FullyQualifiedName") or row.get("Name") or consultant),
+            name=_clean(row.get("FullyQualifiedName") or row.get("Name") or consultant),
             unit_price_cents=_cents(row["UnitPrice"]),
             purchase_cost_cents=None if cost is None else _cents(cost),
-            vendor=str(vendor.get("name") or "") if isinstance(vendor, dict) else "",
+            vendor=_clean(vendor.get("name")) if isinstance(vendor, dict) else "",
             vendor_ref=vendor_ref,
             vendor_company=self._vendor_names(vendor_ref)[1] if vendor_ref else "",
         )
@@ -487,6 +505,27 @@ class QuickBooksOnline:
             logs.log("quickbooks terms read", count=len(self._terms))
         return self._terms
 
+    def _company_terms(self) -> int | None:
+        """The terms QuickBooks itself would put on an invoice by default.
+
+        A customer's own `SalesTermRef` is only set when someone chose terms on
+        that customer. The Customer Details screen shows terms either way,
+        because it shows what an invoice would get -- which is the company
+        default from Account and settings when the record names none. Reading
+        the default is what makes the agent's due date the one QuickBooks would
+        have worked out (docs/decisions.md #47).
+        """
+        if self._company_default is _UNREAD:
+            self._company_default = None
+            rows = self._client.query("SELECT * FROM Preferences")
+            if rows:
+                sales = rows[0].get("SalesFormsPrefs") or {}
+                term = sales.get("DefaultTerms") or {} if isinstance(sales, dict) else {}
+                if isinstance(term, dict) and term.get("value"):
+                    self._company_default = self._term_days().get(str(term["value"]))
+            logs.log("quickbooks company default terms read", days=self._company_default)
+        return self._company_default
+
     def _party(self, row: dict[str, Any], terms_field: str) -> AccountingParty:
         email = row.get("PrimaryEmailAddr") or {}
         term = row.get(terms_field) or {}
@@ -494,11 +533,12 @@ class QuickBooksOnline:
         note = ""
         reference = str(term.get("value") or "") if isinstance(term, dict) else ""
         if not reference:
-            # The company can have Net 30 in its Terms list and put it on every
-            # invoice by default without any customer or vendor carrying it.
-            # "The list has none" and "this record has none" need different
-            # fixes, so they are not reported as the same thing.
-            note = "no terms on the record itself"
+            # Nothing on the record: fall back to what QuickBooks would do,
+            # which is the company default. Only when there is no default
+            # either is there nothing to compare.
+            days = self._company_terms()
+            if days is None:
+                note = "no terms on the record and no company default"
         else:
             days = self._term_days().get(reference)
             if days is None:
@@ -506,9 +546,9 @@ class QuickBooksOnline:
                 note = f"the term {named!r} has no number of days on it"
         return AccountingParty(
             ref=str(row["Id"]),
-            name=str(row.get("DisplayName") or row.get("CompanyName") or ""),
-            company=str(row.get("CompanyName") or ""),
-            email=str(email.get("Address") or "") if isinstance(email, dict) else "",
+            name=_clean(row.get("DisplayName") or row.get("CompanyName")),
+            company=_clean(row.get("CompanyName")),
+            email=_clean(email.get("Address")) if isinstance(email, dict) else "",
             payment_terms_days=days,
             terms_note=note,
         )
@@ -562,7 +602,7 @@ class QuickBooksOnline:
         # Every row first, so a product's parent can be named even when the
         # reference carries only an id: the categories are in this same listing.
         categories = {
-            str(row["Id"]): str(row.get("FullyQualifiedName") or row.get("Name") or "")
+            str(row["Id"]): _clean(row.get("FullyQualifiedName") or row.get("Name"))
             for row in rows
             if str(row.get("Type") or "") == "Category"
         }

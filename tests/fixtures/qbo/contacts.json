@@ -153,6 +153,30 @@
           "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
         }
       }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20%2A%20FROM%20Preferences",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {
+            "Preferences": [
+              {
+                "Id": "1",
+                "SalesFormsPrefs": {
+                  "DefaultTerms": {
+                    "value": "3",
+                    "name": "Net 30"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
     }
   ]
 }

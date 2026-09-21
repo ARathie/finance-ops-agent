@@ -1,0 +1,41 @@
+{
+  "exchanges": [
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20%2A%20FROM%20Vendor%20WHERE%20Id%20%3D%20%278%27",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {
+            "Vendor": [
+              {
+                "Id": "8",
+                "DisplayName": "Dana Cruz"
+              }
+            ]
+          }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20%2A%20FROM%20Preferences",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {
+            "Preferences": [
+              {
+                "Id": "1"
+              }
+            ]
+          }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    }
+  ]
+}

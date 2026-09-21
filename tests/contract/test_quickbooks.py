@@ -1242,22 +1242,42 @@ class TestReadingContactsAndTerms:
         assert held.email == "priya@example.com"
         assert held.payment_terms_days == 15
 
-    def test_a_blank_field_is_none_rather_than_a_guess(self, tmp_path: Path) -> None:
+    def test_a_blank_email_is_none_rather_than_a_guess(self, tmp_path: Path) -> None:
         """Not filled in is not the same as nothing being due."""
         accounting, _, _ = build(replay_from("contacts"), tmp_path)
         held = accounting.payee("8")
         assert held is not None
         assert held.email == ""
-        assert held.payment_terms_days is None
 
-    def test_a_record_naming_no_term_says_so(self, tmp_path: Path) -> None:
-        """A company can have Net 30 in its Terms list and on every invoice by
-        default without any record carrying it. That needs a different fix from
-        a term with no days, so it is not reported as the same thing."""
+    def test_a_record_naming_no_term_falls_back_to_the_company_default(
+        self, tmp_path: Path
+    ) -> None:
+        """A customer's own SalesTermRef is only set when someone chose terms on
+        that customer; the Customer Details screen shows terms either way,
+        because it shows what an invoice would get. Reading the default is what
+        makes the agent's due date the one QuickBooks would have worked out."""
         accounting, _, _ = build(replay_from("contacts"), tmp_path)
         held = accounting.payee("8")
         assert held is not None
-        assert held.terms_note == "no terms on the record itself"
+        assert held.payment_terms_days == 30
+        assert held.terms_note == ""
+
+    def test_no_terms_and_no_default_is_nothing_to_compare(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(replay_from("contacts_no_default"), tmp_path)
+        held = accounting.payee("8")
+        assert held is not None
+        assert held.payment_terms_days is None
+        assert held.terms_note == "no terms on the record and no company default"
+
+    def test_the_company_default_is_read_once(self, tmp_path: Path) -> None:
+        """A company with no default must not be asked again every time a
+        record turns out to name no terms."""
+        replay = replay_from("contacts_no_default")
+        accounting, _, _ = build(replay, tmp_path)
+        accounting.payee("8")
+        accounting.payee("8")
+        asked = [url for _, url in replay.calls if "Preferences" in url]
+        assert len(asked) == 1
 
     def test_a_term_with_no_days_names_the_term(self, tmp_path: Path) -> None:
         accounting, _, _ = build(replay_from("contacts"), tmp_path)
@@ -1293,7 +1313,6 @@ class TestReadingContactsAndTerms:
         replay = replay_from("contacts")
         accounting, _, _ = build(replay, tmp_path)
         accounting.payee("7")
-        accounting.payee("8")
         accounting.customer("Acme Corporation")
         terms = [url for _, url in replay.calls if "FROM%20Term" in url]
         assert len(terms) == 1
@@ -1416,3 +1435,95 @@ class TestAVendorFiledUnderThePersonsName:
         accounting.engagement_rates("Subramanian Arumugam", ["MasTec"])
         asked = [url for _, url in replay.calls if "FROM%20Vendor" in url]
         assert len(asked) == 1
+
+
+class TestNamesWithInvisibleCharactersInThem:
+    """A vendor's company name pasted from a document arrives as `"Subramanian
+    Arumugam "` -- a non-breaking space on the end. It is identical to the
+    plain name on every screen and not equal to it, so it became a
+    disagreement nobody could see, and would have become a payee name with an
+    invisible character in it."""
+
+    def _replay(self) -> Replay:
+        from urllib.parse import quote
+
+        base = "https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000"
+
+        def key(statement: str) -> str:
+            return f"GET {base}/query?query=" + quote(statement)
+
+        return Replay(
+            {
+                key(
+                    f"SELECT {PRODUCT_FIELDS} FROM Item"
+                    " WHERE FullyQualifiedName = 'MasTec:Subramanian Arumugam'"
+                ): [
+                    {
+                        "status": 200,
+                        "json": {
+                            "QueryResponse": {
+                                "Item": [
+                                    {
+                                        "Id": "31",
+                                        "Name": "Subramanian Arumugam ",
+                                        "FullyQualifiedName": "MasTec:Subramanian Arumugam",
+                                        "UnitPrice": 140.0,
+                                        "PurchaseCost": 100.0,
+                                        "PrefVendorRef": {
+                                            "value": "63",
+                                            "name": "Subramanian Arumugam",
+                                        },
+                                    }
+                                ]
+                            }
+                        },
+                    }
+                ],
+                key(f"SELECT {PRODUCT_FIELDS} FROM Vendor WHERE Id = '63'"): [
+                    {
+                        "status": 200,
+                        "json": {
+                            "QueryResponse": {
+                                "Vendor": [
+                                    {
+                                        "Id": "63",
+                                        "DisplayName": "Subramanian Arumugam",
+                                        # As QuickBooks really returned it.
+                                        "CompanyName": "Subramanian Arumugam ",
+                                    }
+                                ]
+                            }
+                        },
+                    }
+                ],
+            }
+        )
+
+    def test_the_payee_has_no_invisible_character_in_it(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(self._replay(), tmp_path)
+        rates = accounting.engagement_rates("Subramanian Arumugam", ["MasTec"])
+        assert rates is not None
+        assert rates.payee == "Subramanian Arumugam"
+
+    def test_it_agrees_with_the_engagement_list_rather_than_looking_identical(
+        self, tmp_path: Path
+    ) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, ExpectedProduct, check_quickbooks_pay
+
+        expected = ExpectedProduct(
+            consultant="Subramanian Arumugam",
+            client="MasTec",
+            clients=["MasTec"],
+            bill_rate_cents=14_000,
+            pay_rate_cents=10_000,
+            payee="Subramanian Arumugam",
+        )
+        accounting, _, _ = build(self._replay(), tmp_path)
+        check = check_quickbooks_pay(accounting, lambda: [expected])
+        assert check.result is CheckResult.PASS
+
+    def test_a_product_name_is_cleaned_too(self, tmp_path: Path) -> None:
+        """It is the Description on the invoice the client reads."""
+        accounting, _, _ = build(self._replay(), tmp_path)
+        product = accounting.product_for("Subramanian Arumugam", ["MasTec"])
+        assert product.vendor_company == "Subramanian Arumugam"

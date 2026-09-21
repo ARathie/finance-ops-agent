@@ -430,3 +430,17 @@ Decision: **the payee is the vendor's company name where it has one, and either 
 The second half of this decision is about method. Three times in one day a field's shape was guessed at and the guess was wrong -- `PrefVendorRef` in a `SELECT` list, `DueDays` in another, and a product's category taken by splitting `FullyQualifiedName` when the relationship lives in `ParentRef`. Each time the symptom was the same: a check reported nothing where the QuickBooks screen plainly showed something, and the next step was another guess.
 
 Decision: **`fops qbo-show <customer|vendor|product|term> [name]` prints the record exactly as QuickBooks returns it** -- the whole entity, no field picking, nothing written and no client touched. Where a check says a field is absent and the screen says otherwise, the record settles it. The contacts check names the command when it reports missing terms, because that is exactly the case where the answer is one command away and a guess is not worth making.
+
+## 47. The company's default terms count, and names from QuickBooks are cleaned
+
+`fops qbo-show` (decision 46) settled two things on its first use, both of which had been guessed at wrongly.
+
+**A customer's screen shows terms it does not hold.** MasTec's Customer Details tab shows `Terms: Net 30`; the record QuickBooks returns has no `SalesTermRef` at all. The tab shows what an invoice would get, and where a record names no terms that is the **company default** from Account and settings. (The same record shows the tab and the API disagreeing elsewhere, too: `PreferredDeliveryMethod` is `Print` in the record and "None" on the screen. The screen is not a rendering of the record.)
+
+Decision: **where a customer or vendor names no terms, the company default is used**, because that is the date QuickBooks itself would work out. Only when there is no default either is there nothing to compare, and the check says so in those words. The default is read once per run, and "not asked yet" is kept distinct from "asked, and there is none", or a company without one would be asked again for every record.
+
+A company default applies to every client, so a client on different terms is invisible in QuickBooks alone -- which the comparison with the engagement list is exactly what catches.
+
+**A name can carry a character nobody can see.** The vendor for Subramanian Arumugam has `CompanyName` of `"Subramanian Arumugam "` -- a non-breaking space on the end, from a paste. It is identical to the plain name on every screen and is not equal to it. That would have been a disagreement no one could explain, and, since the payee is the company name where there is one (decision 46), a payment instruction naming a payee with an invisible character in it.
+
+Decision: **every name and address read from QuickBooks is whitespace-normalised** -- non-breaking spaces included -- before it is compared or kept. One helper, used by every read, rather than a `strip()` at each comparison: the next such character will arrive somewhere nobody thought to put one.
