@@ -89,6 +89,13 @@ cannot hold both.
 QuickBooks allows two products with the same name as long as they are in
 different categories, which is why the client's name goes in the category.
 
+Make each one a **Service** (or Non-inventory) product, not an Inventory one.
+An hour of someone's time is not stock: an Inventory product counts a quantity
+on hand and posts to your stock and cost-of-goods-sold accounts, so every
+invoice drives the count negative and puts the money in the wrong place.
+Invoices still come out, so `fops doctor` names these rather than failing —
+but they are worth changing before real billing.
+
 | Field | What to put | What the agent does with it |
 |---|---|---|
 | **Name** | The consultant's name | Prints it in the Description column of the invoice |

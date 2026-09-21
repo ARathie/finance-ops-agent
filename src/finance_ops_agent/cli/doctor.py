@@ -298,10 +298,27 @@ def check_quickbooks_products(
                 f"I looked in {accounting.company} and cannot price"
                 f" {len(problems)} of {len(names)} engagement(s). " + " ".join(problems)
             )
-        return (
+        note = (
             f"all {len(names)} engagement(s) have a product in {accounting.company},"
             " charging what the engagement list says"
         )
+        # Not a failure -- invoices are made from these -- but worth saying
+        # once. An inventory item counts a quantity on hand and posts to stock
+        # and cost of goods sold; consultants' hours are a service, and billing
+        # them as stock drives the count negative and puts the money in the
+        # wrong accounts (docs/decisions.md #49).
+        stock = sorted(
+            expected.consultant
+            for expected in names
+            if accounting.product_kind(expected.consultant, expected.clients) == "Inventory"
+        )
+        if stock:
+            note += (
+                f". {len(stock)} of them are Inventory products, which count stock and post"
+                f" to cost of goods sold: {', '.join(stock)}. Consultants' hours are"
+                " usually a Service or Non-inventory product"
+            )
+        return note
 
     return _run(name, run)
 

@@ -7,6 +7,7 @@ message QuickBooks gave, which is usually a missing customer or item.
 """
 
 import base64
+import os
 import time
 from collections.abc import Callable
 from datetime import datetime
@@ -100,7 +101,9 @@ class QuickBooksClient:
         http: httpx.Client | None = None,
         now: Callable[[], datetime] = utcnow,
         sleep: Callable[[float], None] = time.sleep,
+        minorversion: str = "",
     ) -> None:
+        self._minorversion = minorversion or os.environ.get("FOPS_QBO_MINORVERSION", "").strip()
         self._store = store
         self._client_id = client_id
         self._client_secret = client_secret
@@ -124,7 +127,16 @@ class QuickBooksClient:
 
     def company_url(self, suffix: str) -> str:
         base = base_url(self.tokens.environment)
-        return f"{base}/v3/company/{self.realm_id}{suffix}"
+        url = f"{base}/v3/company/{self.realm_id}{suffix}"
+        # Intuit serves an old shape of each entity unless a minor version is
+        # asked for, and newer fields -- `Sku`, and the category relationship a
+        # product carries -- simply do not come back. Nothing is sent by
+        # default, because every recorded exchange and every company already
+        # working was answered without one; `FOPS_QBO_MINORVERSION` turns it on
+        # for a company whose newer fields are missing (docs/decisions.md #49).
+        if self._minorversion:
+            url += ("&" if "?" in url else "?") + f"minorversion={self._minorversion}"
+        return url
 
     def refresh(self) -> Tokens:
         """Refresh, storing the rotated refresh token before using the new access token."""

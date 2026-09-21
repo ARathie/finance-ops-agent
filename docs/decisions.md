@@ -454,3 +454,15 @@ Decision: **where a product's parent is not among the items that came back, it i
 This is the third form of one mistake: taking the shape of a QuickBooks answer for granted -- a field list it would refuse, a category in a name that need not be there, and now a category among items that need not come back. The rule that falls out of all three is the same. **Where the agent can ask, it asks; where it cannot, it says what it saw.** The counts in the doctor line exist for that second half, and they are what made this one visible in a single run rather than another round of guessing.
 
 The counts now say what they mean too: categories are counted by the parents actually resolved, not by rows of a particular type, so the line stops reporting the old symptom once the cause is gone.
+
+## 49. Ask Intuit for a newer shape of the record, and say when a consultant is held as stock
+
+`fops qbo-show product "Subramanian Arumugam"` returned the record that ended the category hunt. It has **no `ParentRef` and no `SubItem`**, so the agent was right at every step: there is no category on that product as far as the API is concerned, and no amount of code will find one. Two things follow.
+
+**Intuit serves an old shape of each entity unless a minor version is asked for.** The same company was already known to withhold `Sku` for want of one. Whether the category relationship is among the fields a later version adds is a question about one company's data, answerable in a single call rather than by reasoning.
+
+Decision: **`FOPS_QBO_MINORVERSION` adds a minor version to every request, and `fops qbo-show --minorversion` tries one without changing anything.** Nothing is sent by default: every recorded exchange, and every company already working, was answered without one, and changing what is asked for on a guess is what this whole sequence has been about. If the newer shape carries the category, the setting is the fix and the recordings are re-made against it.
+
+**The same record showed something nobody was looking for.** `"Type": "Inventory"`, with `TrackQtyOnHand`, an inventory asset account and cost of goods sold. An hour of someone's time is not stock. Invoices are still made from such a product, which is why this is not a refusal, but each one drives a quantity on hand negative and posts the money to stock and cost of goods sold rather than to income and an expense.
+
+Decision: **`fops doctor` names the engagements whose product is an Inventory item**, in the products check that passes anyway, and says that a Service or Non-inventory product is what hours are usually held as. It is Kevin's books that are affected rather than the agent's arithmetic, so it is said once and plainly, not raised as a failure.

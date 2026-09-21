@@ -129,6 +129,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="",
         help="the name to look it up by, or an id for a vendor; omit to list them all",
     )
+    show.add_argument(
+        "--minorversion",
+        default="",
+        help="ask Intuit for a newer shape of the record, to see whether a field"
+        " missing from it only appears at a later version (try 75)",
+    )
 
     test_invoice = commands.add_parser(
         "qbo-test-invoice",
@@ -732,7 +738,10 @@ def _command_qbo_show(args: argparse.Namespace) -> int:
         print(str(error))
         return 1
     client = QuickBooksClient(
-        TokenStore(config.qbo_token_path), settings.client_id, settings.client_secret
+        TokenStore(config.qbo_token_path),
+        settings.client_id,
+        settings.client_secret,
+        minorversion=str(args.minorversion or ""),
     )
     entity, field = SHOWABLE[args.entity]
     name = str(args.name or "")

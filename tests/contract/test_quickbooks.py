@@ -1560,3 +1560,96 @@ class TestACategoryTheListingDoesNotReturn:
         accounting.engagements()
         asked = [url for _, url in replay.calls if "Id%20%3D%20%2720%27" in url]
         assert len(asked) == 1
+
+
+class TestAConsultantHeldAsStock:
+    """Kevin's sandbox products are Inventory items: they count a quantity on
+    hand and post to stock and cost of goods sold. Invoices are still made from
+    them, so this is something to say rather than something to refuse."""
+
+    def _replay(self, kind: str) -> Replay:
+        from urllib.parse import quote
+
+        base = "https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000"
+        statement = (
+            f"SELECT {PRODUCT_FIELDS} FROM Item"
+            " WHERE FullyQualifiedName = 'MasTec:Sridhar Doraiswamy'"
+        )
+        return Replay(
+            {
+                f"GET {base}/query?query=" + quote(statement): [
+                    {
+                        "status": 200,
+                        "json": {
+                            "QueryResponse": {
+                                "Item": [
+                                    {
+                                        "Id": "22",
+                                        "Name": "Sridhar Doraiswamy",
+                                        "FullyQualifiedName": "MasTec:Sridhar Doraiswamy",
+                                        "UnitPrice": 140.0,
+                                        "Type": kind,
+                                    }
+                                ]
+                            }
+                        },
+                    }
+                ]
+            }
+        )
+
+    def _expected(self) -> list[ExpectedProduct]:
+        return [
+            ExpectedProduct(
+                consultant="Sridhar Doraiswamy",
+                client="MasTec",
+                clients=["MasTec"],
+                bill_rate_cents=14_000,
+                pay_rate_cents=10_000,
+                payee="Sridhar Doraiswamy",
+            )
+        ]
+
+    def test_it_passes_but_says_so(self, tmp_path: Path) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_products
+
+        accounting, _, _ = build(self._replay("Inventory"), tmp_path)
+        check = check_quickbooks_products(accounting, self._expected)
+
+        assert check.result is CheckResult.PASS  # invoices are still made from it
+        assert "Inventory product" in check.detail
+        assert "Sridhar Doraiswamy" in check.detail
+        assert "Service or Non-inventory" in check.detail
+
+    def test_a_service_product_says_nothing(self, tmp_path: Path) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_products
+
+        accounting, _, _ = build(self._replay("Service"), tmp_path)
+        check = check_quickbooks_products(accounting, self._expected)
+
+        assert check.result is CheckResult.PASS
+        assert "Inventory" not in check.detail
+
+
+class TestAskingForANewerShapeOfTheRecord:
+    """Intuit serves an old shape of each entity unless a minor version is
+    asked for, and newer fields do not come back at all. Nothing is sent by
+    default; `FOPS_QBO_MINORVERSION` turns it on."""
+
+    def test_no_minor_version_is_sent_unless_one_is_set(self, tmp_path: Path) -> None:
+        replay = replay_from("engagements")
+        accounting, _, _ = build(replay, tmp_path)
+        accounting.engagements()
+        assert not any("minorversion" in url for url in replay.urls())
+
+    def test_a_set_version_reaches_every_request(self, tmp_path: Path) -> None:
+        from finance_ops_agent.adapters.quickbooks.client import QuickBooksClient
+        from finance_ops_agent.adapters.quickbooks.tokens import TokenStore
+
+        store = TokenStore(tmp_path / "qbo_tokens.json")
+        store.save(tokens())
+        client = QuickBooksClient(
+            store, "an-id", "a-secret", http=Replay({}).client(), minorversion="75"
+        )
+        assert client.company_url("/query?query=SELECT").endswith("&minorversion=75")
+        assert client.company_url("/invoice").endswith("?minorversion=75")

@@ -184,6 +184,7 @@ class Product:
     # firm Icon actually pays. Both are held, and either matching the
     # engagement list's payee is agreement (docs/decisions.md #46).
     vendor_company: str = ""
+    kind: str = ""  # Service, NonInventory, Inventory -- QuickBooks' own word
 
 
 class QuickBooksOnline:
@@ -396,6 +397,7 @@ class QuickBooksOnline:
             vendor=_clean(vendor.get("name")) if isinstance(vendor, dict) else "",
             vendor_ref=vendor_ref,
             vendor_company=self._vendor_names(vendor_ref)[1] if vendor_ref else "",
+            kind=_clean(row.get("Type")),
         )
         logs.log(
             "quickbooks product found",
@@ -635,6 +637,19 @@ class QuickBooksOnline:
             categories_seen=listing.categories_seen,
         )
         return listing
+
+    def product_kind(self, consultant: str, clients: Sequence[str] = ()) -> str:
+        """What kind of product QuickBooks holds this engagement as.
+
+        Only the doctor asks. An Inventory product counts a quantity on hand
+        and posts to stock and cost of goods sold, which is not what an hour of
+        someone's time is; invoices are still made from it, so this is
+        something to say rather than something to refuse.
+        """
+        try:
+            return self.product_for(consultant, clients).kind
+        except QuickBooksFailed:
+            return ""
 
     def engagement_rates(self, consultant: str, clients: Sequence[str]) -> EngagementRates | None:
         """Both sides of the engagement's product (decision 38)."""
