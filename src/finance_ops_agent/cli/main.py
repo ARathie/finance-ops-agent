@@ -113,6 +113,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="loopback port for the redirect (must match the Intuit app)",
     )
 
+    show = commands.add_parser(
+        "qbo-show",
+        help="print what QuickBooks actually returns for one record, to settle"
+        " what a field is called and whether it is there",
+    )
+    show.add_argument(
+        "entity",
+        choices=sorted(SHOWABLE),
+        help="which kind of record to print",
+    )
+    show.add_argument(
+        "name",
+        nargs="?",
+        default="",
+        help="the name to look it up by, or an id for a vendor; omit to list them all",
+    )
+
     test_invoice = commands.add_parser(
         "qbo-test-invoice",
         help="create one invoice in QuickBooks to prove the path works, then remove it"
@@ -649,7 +666,9 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
             except Exception:
                 continue  # the products check reports this one
             consultant_row = by_consultant.get(expected.consultant)
-            vendor_row = by_vendor.get(expected.payee)
+            vendor_row = by_vendor.get(expected.payee) or (
+                by_vendor.get(rates.payee) if rates is not None else None
+            )
             if vendor_row is not None:
                 emails, timing = list(vendor_row.contact_emails), vendor_row.pay_timing_days
             elif consultant_row is not None:
@@ -678,6 +697,57 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
     results.append(check_quickbooks_pay(accounting, wanted_engagements))
     results.append(check_quickbooks_contacts(accounting, wanted_contacts))
     return results
+
+
+# What `fops qbo-show` will print, and the field each is looked up by. It exists
+# because the same mistake was made three times in one day: a field guessed at,
+# a check reporting nothing where a record plainly had something, and no way to
+# see what QuickBooks had actually sent. Reading nothing is cheaper than
+# guessing (docs/decisions.md #46).
+SHOWABLE = {
+    "customer": ("Customer", "DisplayName"),
+    "vendor": ("Vendor", "DisplayName"),
+    "product": ("Item", "Name"),
+    "term": ("Term", "Name"),
+}
+
+
+def _command_qbo_show(args: argparse.Namespace) -> int:
+    """Print one record exactly as QuickBooks returns it.
+
+    No interpretation and no field picking: the whole entity, so that what a
+    field is called and whether it is there can be read rather than guessed.
+    Nothing is written and no client is touched.
+    """
+    import json as json_module
+
+    from finance_ops_agent.adapters.quickbooks.client import QuickBooksClient
+    from finance_ops_agent.adapters.quickbooks.tokens import TokenStore
+    from finance_ops_agent.config import Config, MissingSettingError, QuickBooksSettings
+
+    config = Config.from_env()
+    try:
+        settings = QuickBooksSettings.from_env()
+    except MissingSettingError as error:
+        print(str(error))
+        return 1
+    client = QuickBooksClient(
+        TokenStore(config.qbo_token_path), settings.client_id, settings.client_secret
+    )
+    entity, field = SHOWABLE[args.entity]
+    name = str(args.name or "")
+    if not name:
+        where = ""
+    elif args.entity == "vendor" and name.isdigit():
+        where = f" WHERE Id = '{name}'"
+    else:
+        where = f" WHERE {field} = '{name.replace(chr(39), chr(39) * 2)}'"
+    rows = client.query(f"SELECT * FROM {entity}{where}")
+    if not rows:
+        print(f"QuickBooks returned no {args.entity} for {name!r}.")
+        return 1
+    print(json_module.dumps(rows, indent=2, sort_keys=True))
+    return 0
 
 
 def _send_test_email(sender: "SmtpSender", admin_email: str) -> "Check":
@@ -1110,6 +1180,8 @@ def main(argv: list[str] | None = None) -> int:
         return _command_run(args)
     if args.command == "qbo-connect":
         return _command_qbo_connect(args)
+    if args.command == "qbo-show":
+        return _command_qbo_show(args)
     if args.command == "qbo-test-invoice":
         return _command_qbo_test_invoice(args)
     if args.command == "engagements":

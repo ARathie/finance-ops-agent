@@ -417,10 +417,14 @@ def check_quickbooks_pay(accounting: object, wanted: Callable[[], list[ExpectedP
                     f" ${Money(product.purchase_cost_cents)} an hour and the engagement"
                     f" list says ${Money(expected.pay_rate_cents)}."
                 )
-            if product.vendor and product.vendor != expected.payee:
+            # Either name is agreement: the display name is often the person
+            # and the company name the firm Icon actually pays.
+            known = {name for name in (product.vendor, product.vendor_company) if name}
+            if known and expected.payee not in known:
                 differences.append(
                     f"{expected.consultant} at {expected.client}: QuickBooks pays"
-                    f" {product.vendor} and the engagement list says {expected.payee}."
+                    f" {' or '.join(sorted(known))} and the engagement list says"
+                    f" {expected.payee}."
                 )
         if differences:
             raise RuntimeError(
@@ -531,6 +535,11 @@ def check_quickbooks_contacts(
                 " wrong today, but these have to agree before either moves across. "
                 + " ".join(differences)
             )
+        if any("no terms on the record" in said for said in empty):
+            # Said once, not per record: if QuickBooks plainly shows terms that
+            # this says are absent, the record itself settles it and guessing
+            # at the field name does not.
+            empty.append('`fops qbo-show customer "<name>"` prints what QuickBooks sent')
         missing = ", ".join(sorted(set(empty)))
         if not compared:
             found = f"nothing to compare yet in {accounting.company}"

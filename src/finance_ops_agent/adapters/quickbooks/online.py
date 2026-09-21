@@ -164,6 +164,10 @@ class Product:
     purchase_cost_cents: int | None = None
     vendor: str = ""
     vendor_ref: str = ""  # the vendor's own id, to read their email and terms
+    # A vendor's display name is often the consultant and its company name the
+    # firm Icon actually pays. Both are held, and either matching the
+    # engagement list's payee is agreement (docs/decisions.md #46).
+    vendor_company: str = ""
 
 
 class QuickBooksOnline:
@@ -174,6 +178,7 @@ class QuickBooksOnline:
         self._products: dict[tuple[str, tuple[str, ...]], Product] = {}
         self._terms: dict[str, int] | None = None
         self._parents: dict[str, str] = {}
+        self._vendors: dict[str, tuple[str, str]] = {}
 
     @property
     def company(self) -> str:
@@ -309,6 +314,23 @@ class QuickBooksOnline:
             )
         return self._remember(key, consultant, rows[0], self._parent_name(rows[0]))
 
+    def _vendor_names(self, ref: str) -> tuple[str, str]:
+        """A vendor's display name and its company name.
+
+        `PrefVendorRef` on a product carries only the display name, which for a
+        consultant working through a firm is the person. Who Icon pays is the
+        firm, and that is the company name -- so both are read, and both count
+        as agreement with the engagement list's payee.
+        """
+        if ref not in self._vendors:
+            rows = self._client.query(f"SELECT * FROM Vendor WHERE Id = '{_escape(ref)}'")
+            self._vendors[ref] = (
+                (str(rows[0].get("DisplayName") or ""), str(rows[0].get("CompanyName") or ""))
+                if rows
+                else ("", "")
+            )
+        return self._vendors[ref]
+
     def _parent_name(self, row: dict[str, Any]) -> str:
         """The category a product sits directly under, or "".
 
@@ -347,13 +369,15 @@ class QuickBooksOnline:
             )
         cost = row.get("PurchaseCost")
         vendor = row.get("PrefVendorRef") or {}
+        vendor_ref = str(vendor.get("value") or "") if isinstance(vendor, dict) else ""
         product = Product(
             ref=str(row["Id"]),
             name=str(row.get("FullyQualifiedName") or row.get("Name") or consultant),
             unit_price_cents=_cents(row["UnitPrice"]),
             purchase_cost_cents=None if cost is None else _cents(cost),
             vendor=str(vendor.get("name") or "") if isinstance(vendor, dict) else "",
-            vendor_ref=str(vendor.get("value") or "") if isinstance(vendor, dict) else "",
+            vendor_ref=vendor_ref,
+            vendor_company=self._vendor_names(vendor_ref)[1] if vendor_ref else "",
         )
         logs.log(
             "quickbooks product found",
@@ -483,6 +507,7 @@ class QuickBooksOnline:
         return AccountingParty(
             ref=str(row["Id"]),
             name=str(row.get("DisplayName") or row.get("CompanyName") or ""),
+            company=str(row.get("CompanyName") or ""),
             email=str(email.get("Address") or "") if isinstance(email, dict) else "",
             payment_terms_days=days,
             terms_note=note,
@@ -566,7 +591,7 @@ class QuickBooksOnline:
             ref=product.ref,
             bill_rate_cents=product.unit_price_cents,
             pay_rate_cents=product.purchase_cost_cents,
-            payee=product.vendor,
+            payee=product.vendor_company or product.vendor,
             payee_ref=product.vendor_ref,
         )
 

@@ -226,6 +226,7 @@ Take a backup first. `fops backup` writes `data/backups/fops-backup-YYYY-MM-DD.z
 
 ## Warnings that need a person
 
+- **A QuickBooks check says a field is missing that QuickBooks plainly shows.** `fops qbo-show customer "<name>"` (or `vendor`, `product`, `term`) prints the record exactly as QuickBooks returns it. It writes nothing and touches no client, and it is the quickest way to settle what a field is called and whether it is there.
 - **A QuickBooks check fails.** Nothing on the server is wrong: something in QuickBooks itself is missing or does not match. `quickbooks-setup.md` has a section per check, with the exact line the doctor prints when that part is not right.
 - **The QuickBooks connection ages out.** The refresh token lasts about 100 days; after 80 the end of every run prints a warning saying how many days are left. Run `fops qbo-connect` to renew it. If it does expire, the agent keeps working on everything except QuickBooks and reports the failures as reviews.
 - **A review email from the agent** always means it wants Kevin, not the operator.

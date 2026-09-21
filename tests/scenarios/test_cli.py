@@ -115,3 +115,24 @@ class TestTheEngagementsCommand:
 
         assert main(["engagements"]) == 0
         assert "the agent's own store" not in capsys.readouterr().out
+
+
+class TestTheShowCommand:
+    """`fops qbo-show` prints a record as QuickBooks returns it, so what a
+    field is called and whether it is there can be read rather than guessed
+    (decision 46)."""
+
+    def test_every_kind_it_offers_knows_what_to_ask_for(self) -> None:
+        from finance_ops_agent.cli.main import SHOWABLE
+
+        for entity, field in SHOWABLE.values():
+            assert entity and field
+
+    def test_a_name_with_a_quote_in_it_cannot_break_out_of_the_query(self) -> None:
+        """`O'Brien Holdings` is a company name, not the end of a string."""
+        from finance_ops_agent.cli.main import SHOWABLE
+
+        _, field = SHOWABLE["customer"]
+        name = "O'Brien Holdings"
+        where = f" WHERE {field} = '{name.replace(chr(39), chr(39) * 2)}'"
+        assert where == " WHERE DisplayName = 'O''Brien Holdings'"

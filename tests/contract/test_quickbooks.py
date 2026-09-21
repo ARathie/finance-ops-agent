@@ -451,6 +451,24 @@ class TestFindingTheProduct:
         ):
             statement = f"SELECT {PRODUCT_FIELDS} FROM Item WHERE " + where
             script[key(statement)] = [{"status": 200, "json": answer}]
+        # A product with a preferred vendor has its company name read, because
+        # the display name is often the person and the company is who Icon pays.
+        script[key(f"SELECT {PRODUCT_FIELDS} FROM Vendor WHERE Id = '9'")] = [
+            {
+                "status": 200,
+                "json": {
+                    "QueryResponse": {
+                        "Vendor": [
+                            {
+                                "Id": "9",
+                                "DisplayName": "Sridhar Doraiswamy",
+                                "CompanyName": "Blue Peak Consulting LLC",
+                            }
+                        ]
+                    }
+                },
+            }
+        ]
         return Replay(script)
 
     def _item(self, item_id: str, path: str, rate: float = 140.0) -> dict[str, object]:
@@ -568,7 +586,8 @@ class TestFindingTheProduct:
         product = accounting.product_for("Sridhar Doraiswamy", ["MasTec"])
 
         assert product.purchase_cost_cents == 10_000
-        assert product.vendor == "Blue Peak Consulting LLC"
+        assert product.vendor == "Blue Peak Consulting LLC"  # the reference's own name
+        assert product.vendor_company == "Blue Peak Consulting LLC"  # read off the vendor
 
     def test_a_product_with_nothing_on_its_purchase_side(self, tmp_path: Path) -> None:
         """Not filled in is not the same as nothing owed."""
@@ -679,7 +698,9 @@ class TestThePayRatesCheck:
             )
         ]
 
-    def _replay(self, purchase: dict[str, object]) -> Replay:
+    def _replay(
+        self, purchase: dict[str, object], company: str = "Blue Peak Consulting LLC"
+    ) -> Replay:
         from urllib.parse import quote
 
         item: dict[str, object] = {
@@ -693,11 +714,30 @@ class TestThePayRatesCheck:
             f"SELECT {PRODUCT_FIELDS} FROM Item"
             " WHERE FullyQualifiedName = 'MasTec:Sridhar Doraiswamy'"
         )
+        vendor = f"SELECT {PRODUCT_FIELDS} FROM Vendor WHERE Id = '9'"
         return Replay(
             {
                 f"GET {self.BASE}/query?query=" + quote(statement): [
                     {"status": 200, "json": {"QueryResponse": {"Item": [item]}}}
-                ]
+                ],
+                # The display name is the person; the company name is who Icon
+                # pays, and either matches the engagement list's payee.
+                f"GET {self.BASE}/query?query=" + quote(vendor): [
+                    {
+                        "status": 200,
+                        "json": {
+                            "QueryResponse": {
+                                "Vendor": [
+                                    {
+                                        "Id": "9",
+                                        "DisplayName": "Sridhar Doraiswamy",
+                                        "CompanyName": company,
+                                    }
+                                ]
+                            }
+                        },
+                    }
+                ],
             }
         )
 
@@ -734,15 +774,17 @@ class TestThePayRatesCheck:
         from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_pay
 
         replay = self._replay(
-            {"PurchaseCost": 100.0, "PrefVendorRef": {"value": "9", "name": "Someone Else Ltd"}}
+            {"PurchaseCost": 100.0, "PrefVendorRef": {"value": "9", "name": "Someone Else Ltd"}},
+            company="Someone Else Holdings",
         )
         accounting, _, _ = build(replay, tmp_path)
 
         check = check_quickbooks_pay(accounting, self._expected)
 
         assert check.result is CheckResult.FAIL
-        assert "Someone Else Ltd" in check.detail
-        assert "Blue Peak Consulting LLC" in check.detail
+        assert "Someone Else Ltd" in check.detail  # the display name
+        assert "Someone Else Holdings" in check.detail  # and the company name
+        assert "Blue Peak Consulting LLC" in check.detail  # what the list says
 
     def test_nothing_filled_in_is_not_a_disagreement(self, tmp_path: Path) -> None:
         """A product whose purchase side is empty has not been filled in; it
@@ -1290,4 +1332,87 @@ class TestFindingTheProductByItsParent:
         accounting.product_for("Sridhar Doraiswamy", ["MasTec"])
         accounting.product_for("Sridhar Doraiswamy", ["iStream"])
         asked = [url for _, url in replay.calls if "Id%20%3D%20%2720%27" in url]
+        assert len(asked) == 1
+
+
+class TestAVendorFiledUnderThePersonsName:
+    """Kevin's vendors are named for the consultant, with the firm Icon pays in
+    the company name -- `Subramanian Arumugam` / `Star Tech Services, Inc.`.
+    The reference on a product carries only the display name, so reading that
+    alone made every such engagement look like a disagreement."""
+
+    def _replay(self, tmp_path: Path) -> Replay:
+        from urllib.parse import quote
+
+        def key(statement: str) -> str:
+            return "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000" + (
+                "/query?query=" + quote(statement)
+            )
+
+        return Replay(
+            {
+                key(
+                    f"SELECT {PRODUCT_FIELDS} FROM Item"
+                    " WHERE FullyQualifiedName = 'MasTec:Subramanian Arumugam'"
+                ): [
+                    {
+                        "status": 200,
+                        "json": {
+                            "QueryResponse": {
+                                "Item": [
+                                    {
+                                        "Id": "31",
+                                        "Name": "Subramanian Arumugam",
+                                        "FullyQualifiedName": "MasTec:Subramanian Arumugam",
+                                        "UnitPrice": 140.0,
+                                        "PurchaseCost": 100.0,
+                                        "PrefVendorRef": {
+                                            "value": "11",
+                                            "name": "Subramanian Arumugam",
+                                        },
+                                    }
+                                ]
+                            }
+                        },
+                    }
+                ],
+                key(f"SELECT {PRODUCT_FIELDS} FROM Vendor WHERE Id = '11'"): [
+                    {
+                        "status": 200,
+                        "json": {
+                            "QueryResponse": {
+                                "Vendor": [
+                                    {
+                                        "Id": "11",
+                                        "DisplayName": "Subramanian Arumugam",
+                                        "CompanyName": "Star Tech Services, Inc.",
+                                    }
+                                ]
+                            }
+                        },
+                    }
+                ],
+            }
+        )
+
+    def test_the_firm_is_who_icon_pays(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(self._replay(tmp_path), tmp_path)
+        rates = accounting.engagement_rates("Subramanian Arumugam", ["MasTec"])
+        assert rates is not None
+        assert rates.payee == "Star Tech Services, Inc."
+
+    def test_the_persons_name_is_kept_as_well(self, tmp_path: Path) -> None:
+        """Either matching the engagement list's payee is agreement, because
+        Kevin may have written down either one."""
+        accounting, _, _ = build(self._replay(tmp_path), tmp_path)
+        product = accounting.product_for("Subramanian Arumugam", ["MasTec"])
+        assert product.vendor == "Subramanian Arumugam"
+        assert product.vendor_company == "Star Tech Services, Inc."
+
+    def test_the_vendor_is_asked_for_once(self, tmp_path: Path) -> None:
+        replay = self._replay(tmp_path)
+        accounting, _, _ = build(replay, tmp_path)
+        accounting.product_for("Subramanian Arumugam", ["MasTec"])
+        accounting.engagement_rates("Subramanian Arumugam", ["MasTec"])
+        asked = [url for _, url in replay.calls if "FROM%20Vendor" in url]
         assert len(asked) == 1

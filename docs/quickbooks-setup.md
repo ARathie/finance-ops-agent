@@ -229,6 +229,25 @@ the record itself"* means nobody chose one for that customer or vendor, and
 *"the term 'Due on receipt' has no number of days on it"* means the term was
 chosen but QuickBooks has no due-days on it to work a date out from.
 
+On a **vendor**, the name and the company name can differ: yours are filed
+under the consultant, with the firm you actually pay in the company name
+(`Subramanian Arumugam` / `Star Tech Services, Inc.`). The agent pays the firm
+where there is one, and either name matching the engagement list counts as
+agreement — you may have written down either.
+
+If a line here says a field is missing and the QuickBooks screen plainly shows
+it, don't take the agent's word for it:
+
+```
+fops qbo-show customer "MasTec North America, Inc."
+fops qbo-show vendor "Subramanian Arumugam"
+fops qbo-show term
+```
+
+That prints the record exactly as QuickBooks sends it. It writes nothing and
+touches no client, and it settles what a field is called and whether it is
+really there.
+
 A blank field is not a disagreement — it's one you haven't got to. The check
 says which, so the line is a to-do list rather than a complaint:
 

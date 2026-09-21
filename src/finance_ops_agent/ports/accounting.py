@@ -98,6 +98,9 @@ class AccountingParty:
     name: str
     email: str
     payment_terms_days: int | None
+    # A vendor's display name is often the person and its company name the firm
+    # Icon pays. Both count as agreement with the engagement list's payee.
+    company: str = ""
     # Why there are no terms, where there are none. "The company has no such
     # term" and "this record does not name one" need different fixes.
     terms_note: str = ""

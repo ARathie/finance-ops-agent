@@ -420,3 +420,13 @@ Two things that did **not** move, and why:
 
 - **"Names on timesheets" and "Other names"** are Icon's own knowledge of how a client or a person is written on somebody else's paperwork -- `ACME Corp.`, `Shah, Priya`. QuickBooks holds structured names (a vendor's given and family name, a customer's display, company and print-on-cheque names) which are worth reading as extra candidates, but it has no list of aliases, and inventing one from the structured fields would quietly narrow what the agent recognises.
 - **"Delivery"** is not a payment method. It is `email` (the agent sends the invoice) or `portal` (Kevin uploads it to the client's own system and the agent sends nothing). QuickBooks' `PreferredDeliveryMethod` answers a different question -- how QuickBooks itself would deliver -- and has no value meaning "Icon uploads this by hand somewhere else".
+
+## 46. A vendor's company name is who Icon pays, and `fops qbo-show` ends the guessing
+
+Kevin's vendors are filed under the consultant's name, with the firm Icon actually pays in the **company name**: `Subramanian Arumugam` / `Star Tech Services, Inc.`. The `PrefVendorRef` on a product carries only the display name, so reading that alone made every such engagement look like a disagreement with the engagement list, which names the firm.
+
+Decision: **the payee is the vendor's company name where it has one, and either name counts as agreement.** The vendor is read once per run and both names are kept: Kevin may have written down either, and a doctor check that insists on one spelling is noise rather than a finding.
+
+The second half of this decision is about method. Three times in one day a field's shape was guessed at and the guess was wrong -- `PrefVendorRef` in a `SELECT` list, `DueDays` in another, and a product's category taken by splitting `FullyQualifiedName` when the relationship lives in `ParentRef`. Each time the symptom was the same: a check reported nothing where the QuickBooks screen plainly showed something, and the next step was another guess.
+
+Decision: **`fops qbo-show <customer|vendor|product|term> [name]` prints the record exactly as QuickBooks returns it** -- the whole entity, no field picking, nothing written and no client touched. Where a check says a field is absent and the screen says otherwise, the record settles it. The contacts check names the command when it reports missing terms, because that is exactly the case where the answer is one command away and a guess is not worth making.
