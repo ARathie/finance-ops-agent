@@ -606,15 +606,27 @@ class QuickBooksOnline:
             for row in rows
             if str(row.get("Type") or "") == "Category"
         }
+        # A parent that is not itself in the listing is still a parent: ask for
+        # it by id rather than dropping the product. Whatever the reason a
+        # category does not come back as an item, a product that plainly has a
+        # parent must not read as one with no category.
+        for row in rows:
+            parent = row.get("ParentRef") or {}
+            if not isinstance(parent, dict) or not parent.get("value"):
+                continue
+            reference = str(parent["value"])
+            if reference not in categories and not parent.get("name"):
+                categories[reference] = self._parent_name(row)
         found = [
             engagement
             for engagement in (_engagement_from(row, categories) for row in rows)
             if engagement is not None
         ]
+        typed = sum(1 for row in rows if str(row.get("Type") or "") == "Category")
         listing = EngagementListing(
             live=found,
-            products_seen=len(rows) - len(categories),
-            categories_seen=len(categories),
+            products_seen=len(rows) - typed,
+            categories_seen=len({name for name in categories.values() if name}),
         )
         logs.log(
             "quickbooks engagements listed",

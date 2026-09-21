@@ -1527,3 +1527,36 @@ class TestNamesWithInvisibleCharactersInThem:
         accounting, _, _ = build(self._replay(), tmp_path)
         product = accounting.product_for("Subramanian Arumugam", ["MasTec"])
         assert product.vendor_company == "Subramanian Arumugam"
+
+
+class TestACategoryTheListingDoesNotReturn:
+    """A sandbox reported 22 products and 0 categories against a company where
+    every product had one. Whatever the reason a category does not come back
+    as an item of its own, a product that plainly has a parent must not read
+    as one with no category."""
+
+    def test_the_parent_is_asked_for_rather_than_the_product_dropped(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(replay_from("engagements_hidden_category"), tmp_path)
+        listing = accounting.engagements()
+        assert [(one.consultant, one.client) for one in listing.live] == [
+            ("Priya Shah", "Acme Corp"),
+            ("Dana Cruz", "Acme Corp"),
+        ]
+
+    def test_a_product_with_no_parent_is_still_not_an_engagement(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(replay_from("engagements_hidden_category"), tmp_path)
+        assert "Consulting" not in [one.consultant for one in accounting.engagements().live]
+
+    def test_the_count_says_a_category_was_found(self, tmp_path: Path) -> None:
+        """The line that named the problem has to stop naming it once it is
+        gone, or the next person reads the old symptom."""
+        listing = build(replay_from("engagements_hidden_category"), tmp_path)[0].engagements()
+        assert listing.products_seen == 3
+        assert listing.categories_seen == 1
+
+    def test_one_parent_shared_by_two_products_is_asked_for_once(self, tmp_path: Path) -> None:
+        replay = replay_from("engagements_hidden_category")
+        accounting, _, _ = build(replay, tmp_path)
+        accounting.engagements()
+        asked = [url for _, url in replay.calls if "Id%20%3D%20%2720%27" in url]
+        assert len(asked) == 1

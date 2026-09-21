@@ -444,3 +444,13 @@ A company default applies to every client, so a client on different terms is inv
 **A name can carry a character nobody can see.** The vendor for Subramanian Arumugam has `CompanyName` of `"Subramanian Arumugam "` -- a non-breaking space on the end, from a paste. It is identical to the plain name on every screen and is not equal to it. That would have been a disagreement no one could explain, and, since the payee is the company name where there is one (decision 46), a payment instruction naming a payee with an invisible character in it.
 
 Decision: **every name and address read from QuickBooks is whitespace-normalised** -- non-breaking spaces included -- before it is compared or kept. One helper, used by every read, rather than a `strip()` at each comparison: the next such character will arrive somewhere nobody thought to put one.
+
+## 48. A parent that is not in the listing is still a parent
+
+A sandbox reported "22 product(s) and 0 categories" against a company where every product sits under one. Two things could produce that -- the item listing not returning categories as items of their own, or returning them under a type the agent does not recognise -- and both ended the same way: a product whose `ParentRef` carried only an id was matched against a category map that did not contain it, so it read as a product with no category and was dropped.
+
+Decision: **where a product's parent is not among the items that came back, it is asked for by id rather than the product being discarded.** One query per distinct parent, kept for the run, which for Icon is one per client. The same lookup `product_for` already uses.
+
+This is the third form of one mistake: taking the shape of a QuickBooks answer for granted -- a field list it would refuse, a category in a name that need not be there, and now a category among items that need not come back. The rule that falls out of all three is the same. **Where the agent can ask, it asks; where it cannot, it says what it saw.** The counts in the doctor line exist for that second half, and they are what made this one visible in a single run rather than another round of guessing.
+
+The counts now say what they mean too: categories are counted by the parents actually resolved, not by rows of a particular type, so the line stops reporting the old symptom once the cause is gone.
