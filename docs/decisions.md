@@ -461,8 +461,18 @@ The counts now say what they mean too: categories are counted by the parents act
 
 **Intuit serves an old shape of each entity unless a minor version is asked for.** The same company was already known to withhold `Sku` for want of one. Whether the category relationship is among the fields a later version adds is a question about one company's data, answerable in a single call rather than by reasoning.
 
-Decision: **`FOPS_QBO_MINORVERSION` adds a minor version to every request, and `fops qbo-show --minorversion` tries one without changing anything.** Nothing is sent by default: every recorded exchange, and every company already working, was answered without one, and changing what is asked for on a guess is what this whole sequence has been about. If the newer shape carries the category, the setting is the fix and the recordings are re-made against it.
+Decision: **`FOPS_QBO_MINORVERSION` adds a minor version to every request, and `fops qbo-show --minorversion` tries one without changing anything.** Nothing is sent by default: every recorded exchange, and every company already working, was answered without one, and changing what is asked for on a guess is what this whole sequence has been about.
+
+**Asked at minor version 75, the record came back byte for byte the same.** So the category is not a field being withheld: it is not there. The setting stays, because it cost one flag to add and answers this question for the next field that goes missing, but it is not the fix for this one. What is left is that these products have no category in QuickBooks at all, whatever the screen that was used to set one appeared to do -- and the thing they do have is a type that should not be there either.
 
 **The same record showed something nobody was looking for.** `"Type": "Inventory"`, with `TrackQtyOnHand`, an inventory asset account and cost of goods sold. An hour of someone's time is not stock. Invoices are still made from such a product, which is why this is not a refusal, but each one drives a quantity on hand negative and posts the money to stock and cost of goods sold rather than to income and an expense.
 
 Decision: **`fops doctor` names the engagements whose product is an Inventory item**, in the products check that passes anyway, and says that a Service or Non-inventory product is what hours are usually held as. It is Kevin's books that are affected rather than the agent's arithmetic, so it is said once and plainly, not raised as a failure.
+
+## 50. Twenty-two records, one line each
+
+Every step of the category hunt asked for one record at a time, and each answer ruled out one explanation. The question left standing -- does any product in this company sit under anything? -- is about all of them at once, and twenty-two full records is not something anyone reads.
+
+Decision: **`fops qbo-show --brief` prints one line per record**: the id, what kind of thing it is, the name, what it sits under, and whether it is inactive. Those are exactly the fields that have been in question, and none of them was visible in a listing before.
+
+It is a small thing, but it is the same lesson as the counts in the doctor line (decision 48) and as `qbo-show` itself (decision 46): **the cost of looking has to be lower than the cost of guessing, or guessing wins.** Three rounds of this were spent one record at a time.

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from finance_ops_agent.cli.main import main
+from finance_ops_agent.cli.main import _one_line, main
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "fake_run"
 
@@ -127,6 +127,43 @@ class TestTheShowCommand:
 
         for entity, field in SHOWABLE.values():
             assert entity and field
+
+    def test_the_brief_line_shows_what_has_been_in_question(self) -> None:
+        """What kind of thing it is, and whether it sits under anything: the
+        two facts the category hunt turned on."""
+        line = _one_line(
+            {
+                "Id": "22",
+                "Type": "Inventory",
+                "Name": "Subramanian Arumugam",
+                "FullyQualifiedName": "Subramanian Arumugam",
+            }
+        )
+        assert "22" in line
+        assert "Inventory" in line
+        assert "under" not in line  # it sits under nothing, and that shows
+
+    def test_a_parent_shows_even_when_only_its_id_came_back(self) -> None:
+        line = _one_line(
+            {"Id": "42", "Type": "Service", "Name": "Priya Shah", "ParentRef": {"value": "20"}}
+        )
+        assert "under id 20" in line
+
+    def test_a_parent_in_the_name_alone_still_shows(self) -> None:
+        line = _one_line(
+            {
+                "Id": "42",
+                "Type": "Service",
+                "Name": "Priya Shah",
+                "FullyQualifiedName": "Acme Corp:Priya Shah",
+            }
+        )
+        assert "under Acme Corp" in line
+
+    def test_an_inactive_record_is_marked(self) -> None:
+        """Inactive is how an engagement ends, so it has to be visible here."""
+        line = _one_line({"Id": "9", "Type": "Service", "Name": "Gone", "Active": False})
+        assert "(inactive)" in line
 
     def test_a_name_with_a_quote_in_it_cannot_break_out_of_the_query(self) -> None:
         """`O'Brien Holdings` is a company name, not the end of a string."""

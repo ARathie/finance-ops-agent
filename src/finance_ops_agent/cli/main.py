@@ -130,6 +130,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="the name to look it up by, or an id for a vendor; omit to list them all",
     )
     show.add_argument(
+        "--brief",
+        action="store_true",
+        help="one line per record instead of the whole thing, for looking down a"
+        " list of them: id, type, name, and the category it sits under",
+    )
+    show.add_argument(
         "--minorversion",
         default="",
         help="ask Intuit for a newer shape of the record, to see whether a field"
@@ -755,8 +761,31 @@ def _command_qbo_show(args: argparse.Namespace) -> int:
     if not rows:
         print(f"QuickBooks returned no {args.entity} for {name!r}.")
         return 1
+    if args.brief:
+        for row in rows:
+            print(_one_line(row))
+        print(f"\n{len(rows)} {args.entity}(s).")
+        return 0
     print(json_module.dumps(rows, indent=2, sort_keys=True))
     return 0
+
+
+def _one_line(row: dict[str, object]) -> str:
+    """One record, small enough to read twenty of.
+
+    The fields are the ones that have actually been in question: what kind of
+    thing it is, and whether it sits under anything.
+    """
+    parent = row.get("ParentRef") or {}
+    under = ""
+    if isinstance(parent, dict) and (parent.get("name") or parent.get("value")):
+        under = f"  under {parent.get('name') or 'id ' + str(parent['value'])}"
+    elif ":" in str(row.get("FullyQualifiedName") or ""):
+        under = f"  under {str(row['FullyQualifiedName']).rpartition(':')[0]}"
+    kind = str(row.get("Type") or "")
+    name = str(row.get("Name") or row.get("DisplayName") or "")
+    live = "" if row.get("Active", True) else "  (inactive)"
+    return f"{str(row.get('Id', '')):>5}  {kind:<13} {name}{under}{live}"
 
 
 def _send_test_email(sender: "SmtpSender", admin_email: str) -> "Check":
