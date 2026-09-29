@@ -1,9 +1,9 @@
 """The contacts check: does QuickBooks agree with the engagement list?
 
-Nothing uses QuickBooks' answer yet. This is the comparison that has to be
-clean before the timesheet addresses and the payment terms move across
-(docs/decisions.md #45), the same shape decision 37 used before the pay rate
-moved.
+A client's billing addresses and terms, and a payee's terms, are taken from
+QuickBooks now (docs/decisions.md #52), so this is the comparison that keeps a
+timesheet from waiting on a disagreement. A payee's address is still only
+compared (decision 45): it says who may send a timesheet.
 """
 
 from finance_ops_agent.cli.doctor import (
@@ -72,14 +72,43 @@ def test_a_different_email_fails_and_names_both() -> None:
     assert "ap@acme.example" in result.detail  # the engagement list
 
 
-def test_one_of_several_listed_addresses_is_agreement() -> None:
-    """The list holds every address a client sends invoices to; QuickBooks
-    holds one. Matching any of them is agreement, not a difference."""
+def test_a_client_address_on_only_one_side_fails() -> None:
+    """QuickBooks' addresses are the ones invoices go to now (decision 52), so
+    one of the list's addresses missing from QuickBooks is a client who would
+    stop getting the invoice there."""
     result = check(
         FakeCompany({"Acme Corporation": held(email="ap@acme.example")}),
         client(emails=["accounts@acme.example", "ap@acme.example"]),
     )
+    assert result.result is CheckResult.FAIL
+    assert "accounts@acme.example" in result.detail
+
+
+def test_several_addresses_typed_into_quickbooks_with_commas_agree() -> None:
+    result = check(
+        FakeCompany({"Acme Corporation": held(email="ap@acme.example, Accounts@acme.example")}),
+        client(emails=["accounts@acme.example", "ap@acme.example"]),
+    )
     assert result.result is CheckResult.PASS
+
+
+def test_one_of_several_payee_addresses_is_still_agreement() -> None:
+    """A payee's address is not used yet, so the looser rule still holds."""
+    payee = ExpectedParty(
+        what="payee",
+        name="Priya Shah",
+        lookup="7",
+        emails=["priya@example.com", "p.shah@example.com"],
+        payment_terms_days=15,
+    )
+    company = FakeCompany(
+        payees={
+            "7": AccountingParty(
+                ref="7", name="Priya Shah", email="priya@example.com", payment_terms_days=15
+            )
+        }
+    )
+    assert check(company, payee).result is CheckResult.PASS
 
 
 def test_the_comparison_ignores_case() -> None:

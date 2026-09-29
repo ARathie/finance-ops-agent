@@ -21,6 +21,7 @@ from finance_ops_agent.adapters.email.client import (
     open_smtp,
 )
 from finance_ops_agent.adapters.email.inbox import INBOX
+from finance_ops_agent.domain.checks import same_addresses, split_addresses
 from finance_ops_agent.domain.engagements import EngagementWorkbook
 from finance_ops_agent.domain.money import Money
 from finance_ops_agent.ports.accounting import AccountingParty
@@ -512,12 +513,11 @@ def check_quickbooks_contacts(
 ) -> Check:
     """Do QuickBooks' own customer and vendor records agree with the list?
 
-    Read and compared, not used: the addresses a timesheet may arrive from and
-    the terms that set a due date still come from the engagement list, and this
-    is what has to agree before either moves across (docs/decisions.md #45).
-    It is the same shape decision 37 used before the pay rate moved, for the
-    same reason -- a difference found here is found while someone is looking at
-    the engagement list, not when an invoice is due.
+    A client's billing addresses and terms, and a payee's terms, are used now
+    (docs/decisions.md #52), so a difference here is a timesheet that will
+    wait for Kevin; finding it now finds it while someone is looking at the
+    engagement list, not when an invoice is due. A payee's address is still
+    only compared (decision 45): it says who may send a timesheet.
 
     A blank field in QuickBooks is not a disagreement. It is one that has not
     been filled in, and saying so is how Kevin knows what is left to do.
@@ -546,11 +546,24 @@ def check_quickbooks_contacts(
                 empty.append(f"{party.name} (no record in QuickBooks)")
                 continue
             compared += 1
-            if not held.email:
+            held_emails = split_addresses(held.email)
+            if not held_emails:
                 empty.append(f"{party.name} (no email)")
-            elif party.emails and held.email.casefold() not in [
-                address.casefold() for address in party.emails
-            ]:
+            elif party.what == "client" and not same_addresses(held_emails, party.emails):
+                # A client's addresses are where the invoice goes, and QuickBooks'
+                # are the ones used (decision 52): every one has to be on both.
+                differences.append(
+                    f"QuickBooks sends {party.name}'s invoices to {', '.join(held_emails)}"
+                    f" and the engagement list says {', '.join(party.emails) or 'nowhere'}."
+                )
+            elif (
+                party.what == "payee"
+                and party.emails
+                and not {address.casefold() for address in held_emails}
+                & {address.casefold() for address in party.emails}
+            ):
+                # Not used yet: a payee's address says who may send a timesheet,
+                # which moves with the rest of the rules in the Notes box.
                 differences.append(
                     f"QuickBooks has {held.email} for {party.name} and the engagement"
                     f" list has {', '.join(party.emails)}."
@@ -565,9 +578,9 @@ def check_quickbooks_contacts(
         if differences:
             raise RuntimeError(
                 "QuickBooks and the engagement list do not agree about who to contact or"
-                " when payment is due. Nothing uses QuickBooks' answer yet, so nothing is"
-                " wrong today, but these have to agree before either moves across. "
-                + " ".join(differences)
+                " when payment is due. The agent uses QuickBooks' billing addresses and"
+                " terms, and holds a timesheet for your answer while the two disagree, so"
+                " make these agree before one arrives. " + " ".join(differences)
             )
         if any("no terms on the record" in said for said in empty):
             # Said once, not per record: if QuickBooks plainly shows terms that

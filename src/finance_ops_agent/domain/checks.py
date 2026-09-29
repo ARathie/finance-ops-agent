@@ -6,7 +6,7 @@ and sends one review email listing everything wrong with a timesheet.
 """
 
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import TypeVar
@@ -50,6 +50,21 @@ def names_match(one: str, other: str) -> bool:
     """Ignore case, punctuation, and the order of first and last name."""
     tokens_one, tokens_other = _name_tokens(one), _name_tokens(other)
     return bool(tokens_one) and tokens_one == tokens_other
+
+
+def split_addresses(field: str) -> list[str]:
+    """The addresses in one email field. QuickBooks lets several be typed into
+    a customer's email separated by commas; the engagement list uses `;`."""
+    return [part for part in re.split(r"[,;\s]+", field.strip()) if part]
+
+
+def same_addresses(one: Iterable[str], other: Iterable[str]) -> bool:
+    """The same set of addresses, whatever the case or the order.
+
+    Sets, not "any one matches": where invoices go is used, so an address on
+    one side and not the other is a client who gets the invoice from one
+    system and not from the other."""
+    return {address.casefold() for address in one} == {address.casefold() for address in other}
 
 
 def match_consultant(

@@ -492,3 +492,21 @@ That exposed one thing the code assumed: `fops qbo-connect` caught the sign-in o
 Considered and rejected: Intuit's OAuth Playground address as the redirect. It is Intuit's page rather than Icon's, and it does its own things with the code it receives.
 
 Decision 31's second condition is unchanged. Once Icon keeps its real books in QuickBooks Online, `fops qbo-test-invoice` there is a real invoice being created and removed. Use `--cleanup void` or none of it, and tell the bookkeeper first.
+
+## 52. Billing emails and terms come from QuickBooks; the rest of the list follows into its Notes box
+
+The aim is to stop keeping a spreadsheet at all. Most of it has already gone: the pairing, both rates, the payee, and which engagements are live come from QuickBooks (decisions 30, 36, 38, 42 and 43). Decision 45 read the customer's and vendor's own records and compared them with the list without using them, and `fops doctor` now reports that they agree for every one of Icon's clients and payees.
+
+Decision, step 1: **a client's billing emails and payment terms, and a payee's terms, are taken from QuickBooks** when an item is made, with the engagement list as the fallback and the cross-check, the same shape as the rates:
+
+- **Blank in QuickBooks means the list is used.** Not filled in is not "nowhere to send it" or "due on receipt".
+- **A disagreement uses QuickBooks' answer, is added to the item's review, and pauses it.** Who to send to is precisely what CLAUDE.md rule 2 says the code must not guess, so an address that differs holds the invoice rather than going out quietly.
+- **A client's addresses must be the same set on both sides.** Decision 45 counted any one address in common as agreement, which was right while nothing used QuickBooks' answer. Now it would drop the others without a word. Several addresses go in QuickBooks' one email box separated by commas; both the run and `fops doctor` read them that way. A **payee's** email keeps the looser rule because it is still not used: it says who may send a timesheet, which is the most dangerous field to move and goes with step 3.
+- **The printed legal name is QuickBooks' company name**, falling back to the display name and then the list. In QuickBooks mode the invoice PDF is QuickBooks' own, so this only changes what the agent's own emails and records call the client.
+- **A record QuickBooks cannot serve leaves the list in charge**, logged, and does not stop the run (decision 38). The invoice itself is what refuses a customer that does not exist.
+
+**Step 2** removes the columns that are now only cross-checks, after one full cycle has run with QuickBooks deciding (decision 42's condition).
+
+**Step 3**, agreed and not built: what QuickBooks has no field for -- invoice code, delivery (email or portal), CC addresses, email domains, names on timesheets, the addresses consultants send timesheets from, how Icon pays, send automatically, and a billing schedule other than monthly -- goes in the **Notes** box of the customer, vendor or product as labelled lines (`Invoice code: MT`). Kevin already works in QuickBooks; a second place to edit is what the whole move is escaping. Considered and rejected: the agent keeping them and Kevin editing by email (a second place again), and QuickBooks custom fields (QuickBooks Advanced only, with partial API support). Free text is easy to mistype, so every line must parse or `fops doctor` fails naming the record and the line, and an unreadable line is treated as missing, never guessed at. The timesheet senders need the strictest check, since a wrong one either refuses a real timesheet or accepts somebody else's.
+
+The "Rates from" history does not move. QuickBooks holds only today's rate, and the rate is already taken when the timesheet is read (decision 43).

@@ -980,7 +980,7 @@ class TestCrashDuringAWholeRun:
 
         # Run 1: nothing there yet, so it creates - then dies before the
         # billing email. Run 2: the private note is found, so it must not create.
-        replay = replay_from("create_ok", "find_existing", "engagements")
+        replay = replay_from("create_ok", "find_existing", "engagements", "customer_record")
         accounting, _, _ = build(replay, tmp_path)
         env = _auto_env(tmp_path, accounting)
 

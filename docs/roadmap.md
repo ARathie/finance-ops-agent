@@ -208,6 +208,18 @@ Done when:
 - [ ] **Needs a person:** after at least three clean ask-first cycles for an engagement, Kevin sets "Send automatically = yes" on its row and `FOPS_MODE=auto` on the server; the next clean timesheet for it goes out without an approval email, with Kevin on CC.
 - [ ] **Needs a person:** the stop button is proven live: `FOPS_MODE=dry_run` is set, a timesheet arrives, nothing is sent, Kevin gets the preview; then the mode is restored.
 
+## PR 18 — Off the spreadsheet: QuickBooks holds everything
+
+Per decision 52. Step 1 takes billing emails, payment terms and pay timing from QuickBooks' customer and vendor records; step 2 drops the columns that are only cross-checks after a clean cycle; step 3 moves what QuickBooks has no field for into the Notes box as labelled lines. When it is done, `engagements.xlsx` is no longer read.
+
+Done when:
+
+- [x] Step 1: a client's billing emails and terms and a payee's terms come from QuickBooks, blank falls back to the list, a disagreement is used and paused for Kevin, a record QuickBooks cannot serve does not stop the run, and `fops doctor` requires a client's addresses to be the same set on both sides (tested, no network).
+- [ ] **Needs a person:** every client's billing addresses are in its QuickBooks customer email (comma-separated), and `fops doctor` passes **quickbooks contacts** with no disagreements.
+- [ ] Step 3: the Notes-box format, its parser and a doctor check naming each unreadable line; the timesheet senders, invoice code, delivery, CC, domains, names on timesheets, paid by, send automatically and non-monthly schedules read from it with the workbook as fallback.
+- [ ] **Needs a person:** Kevin fills in the Notes boxes and `fops doctor` passes with no fallback to the workbook.
+- [ ] Step 2: after one full cycle with QuickBooks deciding, the cross-check columns and then the workbook itself stop being read.
+
 ## Later, if wanted
 
 Tracking consultant and vendor payments and sending reminders (out of scope for now); one invoice covering several consultants; vendor bills in QuickBooks; QuickBooks webhooks instead of the daily check; a web page for reviews; special handling for particular time systems; a Postgres `Store` adapter if the agent ever moves to a serverless platform (decision 22).

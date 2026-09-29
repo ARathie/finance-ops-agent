@@ -13,9 +13,9 @@ from finance_ops_agent.domain.items import InvoiceRecord, OutgoingRecord
 from finance_ops_agent.domain.money import Money
 from finance_ops_agent.domain.reading import ReplyAnswer, ReplyAnswerKind, ReplyReading
 from finance_ops_agent.domain.statuses import ItemStatus
-from finance_ops_agent.ports.accounting import EngagementRates
+from finance_ops_agent.ports.accounting import AccountingParty, EngagementRates
 from finance_ops_agent.ports.sender import NotSent, RecipientRefused
-from tests.scenarios.conftest import PRIYA, ScenarioEnv, engagement_row, reading
+from tests.scenarios.conftest import PRIYA, ScenarioEnv, client_row, engagement_row, reading
 
 AUG_START, AUG_END = date(2026, 8, 1), date(2026, 8, 31)
 
@@ -960,6 +960,114 @@ class TestWhatIconPays:
         item = env.the_item()
         assert item.status is ItemStatus.READY
         assert item.snapshot.pay_rate_cents == 10_000  # the workbook's
+
+
+class TestContactsAndTermsFromQuickBooks:
+    """Where invoices go, how long the client has to pay, and how long Icon has
+    to pay the payee come from QuickBooks' customer and vendor records where
+    they say, and from the engagement list where they are blank (decision 52).
+    A disagreement uses QuickBooks' answer and waits for Kevin, as the rates
+    do."""
+
+    def _customer(self, email: str = "ap@acme.example", days: int | None = 30) -> AccountingParty:
+        return AccountingParty(
+            ref="58",
+            name="Acme Corporation",
+            company="Acme Corporation Inc.",
+            email=email,
+            payment_terms_days=days,
+        )
+
+    def test_agreement_uses_quickbooks_and_says_nothing(self, env: ScenarioEnv) -> None:
+        env.accounting.customers["Acme Corporation"] = self._customer()
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        assert item.snapshot.billing_emails == ["ap@acme.example"]
+        assert item.snapshot.payment_terms_days == 30
+        assert item.snapshot.client_legal_name == "Acme Corporation Inc."  # QuickBooks'
+        assert item.snapshot.rate_disagreement == ""
+        assert item.status is ItemStatus.READY
+
+    def test_several_addresses_in_quickbooks_are_all_used(self, env: ScenarioEnv) -> None:
+        env.workbook.clients[0] = client_row(
+            2, **{"Billing email": "ap@acme.example; accounts@acme.example"}
+        )
+        env.accounting.customers["Acme Corporation"] = self._customer(
+            email="ap@acme.example, accounts@acme.example"
+        )
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        assert item.snapshot.billing_emails == ["ap@acme.example", "accounts@acme.example"]
+        assert item.snapshot.rate_disagreement == ""
+
+    def test_a_different_address_is_used_told_and_pauses_the_item(self, env: ScenarioEnv) -> None:
+        """Who to send to is exactly what the code must not guess (CLAUDE.md
+        rule 2), so the invoice waits for Kevin."""
+        env.accounting.customers["Acme Corporation"] = self._customer(email="billing@acme.example")
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        assert item.snapshot.billing_emails == ["billing@acme.example"]
+        review = next(r for r in env.store.open_reviews() if "invoices to" in r.message)
+        assert "billing@acme.example" in review.message  # QuickBooks
+        assert "ap@acme.example" in review.message  # the engagement list
+        assert item.status is not ItemStatus.READY
+
+    def test_different_terms_are_used_and_told(self, env: ScenarioEnv) -> None:
+        env.accounting.customers["Acme Corporation"] = self._customer(days=45)
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        assert item.snapshot.payment_terms_days == 45
+        assert any("45 day(s) to pay" in r.message for r in env.store.open_reviews())
+
+    def test_blank_fields_in_quickbooks_leave_the_engagement_list_in_charge(
+        self, env: ScenarioEnv
+    ) -> None:
+        env.accounting.customers["Acme Corporation"] = self._customer(email="", days=None)
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        assert item.snapshot.billing_emails == ["ap@acme.example"]
+        assert item.snapshot.payment_terms_days == 30
+        assert item.snapshot.rate_disagreement == ""
+
+    def test_the_payees_terms_set_when_icon_pays(self, env: ScenarioEnv) -> None:
+        env.accounting.rates[("Priya Shah", "Acme Corp")] = EngagementRates(
+            ref="21", bill_rate_cents=14_000, pay_rate_cents=None, payee="", payee_ref="7"
+        )
+        env.accounting.payees["7"] = AccountingParty(
+            ref="7", name="Priya Shah", email="", payment_terms_days=20
+        )
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        assert item.snapshot.pay_timing_days == 20  # QuickBooks'; the list says 15
+        assert any("20 day(s) to pay Priya Shah" in r.message for r in env.store.open_reviews())
+
+    def test_a_customer_quickbooks_cannot_serve_does_not_stop_the_run(
+        self, env: ScenarioEnv
+    ) -> None:
+        from finance_ops_agent.ports.accounting import AccountingFailed
+
+        def refuse(name: str) -> AccountingParty | None:
+            raise AccountingFailed("no customer called that")
+
+        env.accounting.customer = refuse  # type: ignore[method-assign]
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        assert item.status is ItemStatus.READY
+        assert item.snapshot.billing_emails == ["ap@acme.example"]
 
 
 class TestARenamedEngagement:

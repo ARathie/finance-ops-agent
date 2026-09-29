@@ -22,7 +22,7 @@ from finance_ops_agent.application import summary as summary_steps
 from finance_ops_agent.application.completion import complete_if_covered
 from finance_ops_agent.application.context import Mode, RunDeps, RunReport, Settings
 from finance_ops_agent.domain import checks, emails
-from finance_ops_agent.domain.checks import Finding
+from finance_ops_agent.domain.checks import Finding, same_addresses, split_addresses
 from finance_ops_agent.domain.emails import EmailAttachment, TimesheetSummary
 from finance_ops_agent.domain.engagements import (
     Client,
@@ -50,6 +50,7 @@ from finance_ops_agent.domain.review import ReviewCode
 from finance_ops_agent.domain.statuses import ItemStatus
 from finance_ops_agent.ports.accounting import (
     AccountingFailed,
+    AccountingParty,
     AccountingSystem,
     EngagementRates,
 )
@@ -255,18 +256,53 @@ def build_snapshot(
             f" {payee}. I am using QuickBooks' answer. Make them agree."
         )
         payee = rates.payee
+    # Where invoices go, how long the client has, and how long Icon has to pay:
+    # QuickBooks' customer and vendor records where they say, the engagement
+    # list where they are blank, and Kevin told where the two disagree
+    # (decision 52).
+    billing_emails = list(client.billing_emails)
+    payment_terms_days = client.payment_terms_days
+    legal_name = client.legal_name
+    held = _party_from_accounting(accounting, "customer", client.quickbooks_customer or legal_name)
+    if held is not None:
+        legal_name = held.company or held.name or legal_name
+        held_emails = split_addresses(held.email)
+        if held_emails and not same_addresses(held_emails, billing_emails):
+            said.append(
+                f"QuickBooks sends {client.name}'s invoices to {', '.join(held_emails)} and"
+                f" the engagement list says {', '.join(billing_emails) or 'nowhere'}. I am"
+                " using QuickBooks' addresses. Make them agree."
+            )
+        billing_emails = held_emails or billing_emails
+        if held.payment_terms_days is not None:
+            if held.payment_terms_days != payment_terms_days:
+                said.append(
+                    f"QuickBooks gives {client.name} {held.payment_terms_days} day(s) to pay"
+                    f" and the engagement list says {payment_terms_days}. I am using"
+                    " QuickBooks' terms. Make them agree."
+                )
+            payment_terms_days = held.payment_terms_days
+    paid_to = _party_from_accounting(accounting, "payee", rates.payee_ref if rates else "")
+    if paid_to is not None and paid_to.payment_terms_days is not None:
+        if paid_to.payment_terms_days != pay_timing:
+            said.append(
+                f"QuickBooks gives Icon {paid_to.payment_terms_days} day(s) to pay {payee}"
+                f" and the engagement list says {pay_timing}. I am using QuickBooks'"
+                " terms. Make them agree."
+            )
+        pay_timing = paid_to.payment_terms_days
     return EngagementSnapshot(
         bill_rate_cents=bill_rate_cents,
         pay_rate_cents=pay_rate_cents,
-        payment_terms_days=client.payment_terms_days,
+        payment_terms_days=payment_terms_days,
         pay_timing_days=pay_timing,
-        billing_emails=list(client.billing_emails),
+        billing_emails=billing_emails,
         cc_emails=list(client.cc_emails),
         payee=payee,
         paid_by=paid_by.value,
         engagement_row_number=rate_row.row_number,
         role=rate_row.role,
-        client_legal_name=client.legal_name,
+        client_legal_name=legal_name,
         quickbooks_customer=client.quickbooks_customer,
         client_invoice_code=client.invoice_code,
         consultant_code=_consultant_code(workbook, rate_row),
@@ -300,6 +336,26 @@ def _rates_from_accounting(
             "could not ask the accounting system about the rates",
             consultant=rate_row.consultant,
             client=rate_row.client,
+            said=str(error)[:200],
+        )
+        return None
+
+
+def _party_from_accounting(
+    accounting: "AccountingSystem | None", which: str, lookup: str
+) -> "AccountingParty | None":
+    """A customer or payee record, or None where the accounting system cannot
+    say. Like the rates, a record QuickBooks cannot find or cannot serve right
+    now leaves the engagement list in charge rather than stopping the run: the
+    invoice itself is what refuses a customer that does not exist."""
+    if accounting is None or not lookup:
+        return None
+    try:
+        return accounting.customer(lookup) if which == "customer" else accounting.payee(lookup)
+    except AccountingFailed as error:
+        logs.log(
+            "could not ask the accounting system about a contact",
+            which=which,
             said=str(error)[:200],
         )
         return None

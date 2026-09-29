@@ -229,16 +229,22 @@ live, as it did before
 
 ---
 
-## 5. Contacts and payment terms (being checked, not used yet)
+## 5. Contacts and payment terms
 
-The agent doesn't take these from QuickBooks yet — it compares them with the
-engagement list so the two can be made to agree first. Filling them in costs
-nothing now and is what lets them move later.
+The agent takes these from QuickBooks now. Where a field is blank it uses the
+engagement list instead, and where the two disagree it uses QuickBooks, holds
+the timesheet, and emails you both answers. Filling them in is what lets the
+engagement list's columns go.
 
 - **On each customer:** the email invoices go to, and the payment terms (Net 30
-  and so on).
-- **On each vendor** — the one named on a product's purchase side: their email,
-  and the terms that say how long Icon has to pay them.
+  and so on). **Every** address the client's invoices go to has to be here:
+  type several into the email box separated by commas. An address the
+  engagement list has and QuickBooks doesn't is an address that would stop
+  getting the invoice, so the check treats it as a disagreement.
+- **On each vendor** — the one named on a product's purchase side: the terms
+  that say how long Icon has to pay them, which set the due date in your
+  payment instruction. Their email is still only compared, not used, because
+  it decides who may send a timesheet; that moves later.
 
 Terms are their own list in QuickBooks (**Settings → All lists → Terms**). A
 customer or vendor can point at one of its own — **Customer → Edit → Payments →
@@ -289,9 +295,10 @@ A real difference fails and names both:
 
 ```
 FAIL quickbooks contacts: QuickBooks and the engagement list do not agree about
-who to contact or when payment is due. Nothing uses QuickBooks' answer yet, so
-nothing is wrong today, but these have to agree before either moves across.
-QuickBooks gives MasTec 45 day(s) to pay and the engagement list says 30.
+who to contact or when payment is due. The agent uses QuickBooks' billing
+addresses and terms, and holds a timesheet for your answer while the two
+disagree, so make these agree before one arrives. QuickBooks gives MasTec 45
+day(s) to pay and the engagement list says 30.
 ```
 
 ## 6. The invoice template
