@@ -15,9 +15,10 @@ Icon uses QuickBooks Desktop today and plans to move to QuickBooks Online (QBO).
 1. Icon finishes the Desktop → Online move. The Customers list in QBO must contain every client, with names matching the "QuickBooks customer" column of the engagement list. The agent never creates customers.
 2. **One product per consultant**, named exactly as the Consultants sheet names them, with that consultant's hourly bill rate on it. The rate on the product is what the client is billed (decision 30); a consultant with no product, or a product with no rate, is refused rather than guessed at. Create the payment terms used (Net 30 etc.).
 3. Turn on **Settings -> Account and settings -> Sales -> Sales form content -> Custom transaction numbers**. Without it QuickBooks numbers invoices from its own counter and ignores the number the agent sends; the agent checks the number that comes back and voids anything numbered otherwise (decision 27).
-4. Create an app in the Intuit developer portal (accounting scope). Use its sandbox company first. Store the client id and secret in `.env`.
-5. Run `fops qbo-connect`: it prints and opens the Intuit sign-in page, Kevin (or the developer, with Kevin present) signs in and approves, and a one-shot loopback server on `http://localhost:8723/callback` (register that redirect URI in the Intuit app; `--port` changes it) stores the realm id and tokens in `data/qbo_tokens.json` with owner-only permissions. The `state` value is checked, so another tab's redirect cannot be mistaken for this one.
-6. `fops doctor` then reports two more checks: **quickbooks connection** (connected, and the refresh token is not near expiry) and **quickbooks customers** (every active client's "QuickBooks customer" name — or its legal name where that column is blank — exists in QuickBooks), and **quickbooks products** (every active consultant has a product with a rate on it). In manual mode they are skipped with a line saying so.
+4. Create an app in the Intuit developer portal (accounting scope). Icon connects it with the **production** keys, straight to its own company (decision 36). Store the client id and secret in `.env` with `QBO_ENVIRONMENT=production`.
+5. Register the redirect URI. A production app may only redirect to an https address that is not localhost. Publish `docs/public-site/callback.html` alongside the other public pages, add its address under the app's production **Redirect URIs**, and put the same address in `QBO_REDIRECT_URI`. A sandbox app can instead leave `QBO_REDIRECT_URI` blank and register `http://localhost:8723/callback`; `--port` changes the port.
+6. Run `fops qbo-connect`. It prints and opens the Intuit sign-in page, and Kevin (or the developer, with Kevin present) signs in and approves. With `QBO_REDIRECT_URI` set, the browser lands on the callback page and the person pastes the address it shows into the terminal. With it blank, a one-shot listener on localhost catches the redirect. Either way the `state` value is checked, so another sign-in's redirect cannot be mistaken for this one, and the realm id and tokens go in `data/qbo_tokens.json` with owner-only permissions. Production with no `QBO_REDIRECT_URI` is refused before anything opens.
+7. `fops doctor` then reports three more checks: **quickbooks connection** (connected, to the kind of company `QBO_ENVIRONMENT` names, and the refresh token is not near expiry) and **quickbooks customers** (every active client's "QuickBooks customer" name — or its legal name where that column is blank — exists in QuickBooks), and **quickbooks products** (every active consultant has a product with a rate on it). In manual mode they are skipped with a line saying so.
 
 ### Tokens
 
@@ -49,9 +50,9 @@ Once a day: for every invoice the agent created that is not yet paid, `GET /v3/c
 
 When Kevin cancels an item after the invoice was created, or accepts a corrected timesheet after the invoice was sent: the invoice is **renamed first** with a sparse update (`POST /v3/company/{realmId}/invoice` with `Id`, `SyncToken`, `sparse: true`, `DocNumber` = `<number>-VOID`) and **then** voided with `POST /v3/company/{realmId}/invoice?operation=void` and the sync token the rename handed back. The rename is what gives the number back, since QuickBooks will not reuse one a voided invoice still holds (decision 34); a rename that fails is logged and the void goes ahead anyway. The replacement invoice is a new create whose `PrivateNote` notes which invoice it replaces.
 
-### Sandbox first
+### Sandbox or production
 
-All development and the first ask-first runs use a sandbox company (separate realm id and tokens). Switching to production is a settings change plus `fops qbo-connect` against the real company.
+Tests never touch either: they replay recorded responses. Live work uses the production keys against Icon's own company (decisions 31 and 36), because the sandbox's sample data is nothing like Icon's setup. Switching between the two is a settings change (`QBO_ENVIRONMENT`, the matching keys, `QBO_REDIRECT_URI`) plus `fops qbo-connect`. `fops doctor` fails until the stored connection matches the setting.
 
 ## Proving the create path: `fops qbo-test-invoice`
 
@@ -87,4 +88,4 @@ Recorded JSON responses in `tests/fixtures/qbo/`, replayed through a real `httpx
 
 Two facts worth keeping straight in tests and in code: the invoice **number** (`DocNumber`) is what Kevin and the client see, and the **external id** (`Id`) is what QuickBooks and the agent's own invoice rows key on. In manual mode they happen to be the same string; in QuickBooks Online they are not. The number itself is the agent's in both modes (decision 27), so it reads the same either side of the move.
 
-A sandbox smoke test behind `FOPS_LIVE_TESTS=1` is still to come; the first real exercise is ask first mode against the sandbox company (see the roadmap).
+The first real exercise is `fops qbo-test-invoice` against Icon's own company, with the production keys (decision 36; see the roadmap, PR 16).

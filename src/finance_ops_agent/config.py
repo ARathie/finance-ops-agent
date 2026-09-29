@@ -174,6 +174,8 @@ class QuickBooksSettings:
     client_id: str
     client_secret: str
     environment: str  # sandbox | production
+    # Blank = the loopback listener, which only a sandbox app may use (decision 36).
+    redirect_uri: str = ""
 
     @classmethod
     def from_env(cls) -> "QuickBooksSettings":
@@ -182,10 +184,17 @@ class QuickBooksSettings:
             raise MissingSettingError(
                 f"QBO_ENVIRONMENT should be sandbox or production, not {environment!r}"
             )
+        redirect_uri = os.environ.get("QBO_REDIRECT_URI", "").strip()
+        if redirect_uri and not redirect_uri.startswith("https://"):
+            raise MissingSettingError(
+                f"QBO_REDIRECT_URI must be an https address, not {redirect_uri!r};"
+                " leave it blank to use the localhost listener with a sandbox app"
+            )
         return cls(
             client_id=_required("QBO_CLIENT_ID"),
             client_secret=_required("QBO_CLIENT_SECRET"),
             environment=environment,
+            redirect_uri=redirect_uri,
         )
 
 

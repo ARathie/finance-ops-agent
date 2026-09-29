@@ -268,3 +268,19 @@ This needed `inbox.move` to look beyond the inbox: it searched `INBOX` only, so 
 - "What is waiting on approval" is already answered, by `fops status`, the tracking sheet, and the Monday summary.
 
 The folder remains a courtesy for a person looking at the mailbox. The database is the record.
+
+## 36. Production QuickBooks keys from the start, signed in by pasting the address back
+
+Decision 31 let the first live exercise use Icon's own QuickBooks Online company instead of the sandbox. This goes one step further: the agent is connected with the **production** app keys now, and the sandbox is not used for anything beyond the recorded responses the tests replay. Trying to prove things in the sandbox kept running into Intuit's sample data -- customers, products and forms laid out in ways Icon's company is not and will not be -- so passes and failures there said little about Icon's own setup. Icon is not using QuickBooks Online for its books yet, and `fops qbo-test-invoice` removes what it makes, so the window decision 31 describes still holds.
+
+That exposed one thing the code assumed: `fops qbo-connect` caught the sign-in on `http://localhost:8723/callback`, and **Intuit does not allow a production app to redirect to localhost**, to plain http, or to an IP address. Decision:
+
+- **`QBO_REDIRECT_URI`** names an https redirect address. When it is set, `fops qbo-connect` prints the sign-in address, the browser lands on that page after Kevin approves, and the person **pastes the address it landed on** back into the terminal. The `state` check is exactly the same as before: an address from another sign-in is refused and nothing is stored.
+- The page is **`callback.html` on Icon's public site** (`docs/public-site/`), the same site Intuit already required for the licence and privacy pages. It shows its own address with a copy button and does nothing else. It runs no scripts from anywhere else, sends no referrer, and stores nothing. The code in the address is single-use, expires within minutes, and is useless without the client secret, which never leaves `.env`.
+- Blank `QBO_REDIRECT_URI` keeps the localhost listener, for a sandbox app. With `QBO_ENVIRONMENT=production` and no `QBO_REDIRECT_URI`, the command refuses before opening anything and says what to set. Otherwise Intuit would show its own unhelpful error page after the sign-in.
+- Pasting works just as well over SSH on the server (PR 14), where a browser pointed at the server's localhost was never going to work anyway.
+- **`fops doctor` fails** when the stored connection is to a different kind of company than `QBO_ENVIRONMENT` names. Sandbox tokens cannot be refreshed with production keys, and a line reading "connected" there would have been untrue.
+
+Considered and rejected: Intuit's OAuth Playground address as the redirect. It is Intuit's page rather than Icon's, and it does its own things with the code it receives.
+
+Decision 31's second condition is unchanged. Once Icon keeps its real books in QuickBooks Online, `fops qbo-test-invoice` there is a real invoice being created and removed. Use `--cleanup void` or none of it, and tell the bookkeeper first.

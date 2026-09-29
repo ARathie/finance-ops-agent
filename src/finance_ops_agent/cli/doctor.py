@@ -161,8 +161,9 @@ def check_database(describe: Callable[[], str]) -> Check:
     return _run("database", describe)
 
 
-def check_quickbooks_tokens(store: object) -> Check:
-    """Are we connected, and is the refresh token still healthy?"""
+def check_quickbooks_tokens(store: object, environment: str | None = None) -> Check:
+    """Are we connected, to the kind of company QBO_ENVIRONMENT names, and is
+    the refresh token still healthy?"""
     from finance_ops_agent.adapters.quickbooks.tokens import (
         NotConnected,
         TokenStore,
@@ -175,6 +176,15 @@ def check_quickbooks_tokens(store: object) -> Check:
         tokens = store.load()
     except NotConnected as error:
         return Check(name, CheckResult.FAIL, str(error))
+    if environment is not None and tokens.environment != environment:
+        # Sandbox tokens belong to the sandbox keys; the production keys cannot
+        # refresh them, and the agent would be talking to the wrong company.
+        return Check(
+            name,
+            CheckResult.FAIL,
+            f"QBO_ENVIRONMENT is {environment} but the stored connection is to the"
+            f" {tokens.environment} company {tokens.realm_id}. Run `fops qbo-connect`.",
+        )
     warning = tokens.refresh_token_warning(utcnow())
     if warning:
         return Check(name, CheckResult.FAIL, warning)

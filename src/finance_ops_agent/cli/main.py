@@ -530,7 +530,7 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
     except MissingSettingError as error:
         return [Check("quickbooks", CheckResult.FAIL, str(error))]
     store = TokenStore(config.qbo_token_path)
-    results = [check_quickbooks_tokens(store)]
+    results = [check_quickbooks_tokens(store, settings.environment)]
     if results[0].result is CheckResult.FAIL:
         return results
     client = QuickBooksClient(store, settings.client_id, settings.client_secret)
@@ -750,6 +750,7 @@ def _command_qbo_connect(args: argparse.Namespace) -> int:
             settings.client_secret,
             settings.environment,
             port=args.port or DEFAULT_PORT,
+            redirect_uri=settings.redirect_uri or None,
         )
     except QuickBooksReconnect as error:
         print(f"Could not connect: {error}")

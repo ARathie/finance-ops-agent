@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Back from QuickBooks — Icon Technologies Billing Agent</title>
+<style>
+  :root { color-scheme: light dark; --ink: #1a1a1a; --paper: #ffffff; --quiet: #5a5a5a; --rule: #e0e0e0; }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink: #e8e8e8; --paper: #161616; --quiet: #a0a0a0; --rule: #333; }
+  }
+  body { background: var(--paper); color: var(--ink); margin: 0;
+         font: 17px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  main { max-width: 42rem; margin: 0 auto; padding: 3rem 16px 5rem; }
+  h1 { font-size: 1.7rem; line-height: 1.25; margin: 0 0 .25rem; }
+  h2 { font-size: 1.15rem; margin: 2.25rem 0 .5rem; }
+  .date { color: var(--quiet); margin: 0 0 2rem; font-size: .95rem; }
+  ul { padding-left: 1.25rem; }
+  li { margin: .4rem 0; }
+  hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5rem 0; }
+  footer { color: var(--quiet); font-size: .95rem; }
+  a { color: inherit; }
+  textarea { width: 100%; box-sizing: border-box; font: 14px/1.4 ui-monospace, Menlo, monospace; padding: .6rem;
+             color: var(--ink); background: var(--paper); border: 1px solid var(--rule); border-radius: 6px; }
+  button { font: inherit; padding: .4rem 1rem; margin-top: .5rem; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>QuickBooks sent you back</h1>
+<p class="date"><a href="index.html">About</a> · <a href="connect.html">Connecting</a> · <a href="disconnect.html">Disconnecting</a> · <a href="eula.html">Licence</a> · <a href="privacy.html">Privacy</a></p>
+
+<p>If you are connecting Icon Technologies' billing agent: copy the <strong>whole address</strong> of this page and paste it into the terminal where <code>fops qbo-connect</code> is waiting. It is below as well, ready to copy.</p>
+
+<textarea id="address" rows="5" readonly aria-label="The address of this page"></textarea>
+<button type="button" id="copy">Copy</button>
+
+<p>The address carries a one-time sign-in code. It is useless without the agent's own secret key and stops working within minutes, but it is still not something to paste anywhere except that terminal. Once it is pasted you can close this tab.</p>
+
+<p>This page does nothing else: it loads nothing from anywhere, keeps nothing, and sends nothing. If you did not expect to land here, close it.</p>
+
+<hr>
+<footer>
+<p>Icon Technologies<br>
+5755 North Point Pkwy, Suite 28<br>
+Alpharetta, GA 30022<br>
+<a href="mailto:kevin@icon-technologies.com">kevin@icon-technologies.com</a></p>
+</footer>
+
+</main>
+<script>
+  var box = document.getElementById("address");
+  box.value = window.location.href;
+  document.getElementById("copy").addEventListener("click", function () {
+    box.select();
+    if (navigator.clipboard) { navigator.clipboard.writeText(box.value); } else { document.execCommand("copy"); }
+    this.textContent = "Copied";
+  });
+</script>
+</body>
+</html>

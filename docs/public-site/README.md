@@ -1,11 +1,12 @@
 # The public site Intuit asks for
 
-Intuit will not issue production QuickBooks credentials without a public licence agreement, a public privacy policy, and a set of customer-facing URLs — even for an application that has no customers and no web interface, as this one does not. These five pages are the smallest honest answer to that: they say what the agent is, how it is connected and disconnected, and what it does with information.
+Intuit will not issue production QuickBooks credentials without a public licence agreement, a public privacy policy, and a set of customer-facing URLs — even for an application that has no customers and no web interface, as this one does not. These six pages are the smallest honest answer to that: they say what the agent is, how it is connected and disconnected, and what it does with information.
 
 | File | What it is for |
 |---|---|
 | `index.html` | The launch URL. Says plainly that this is internal software with nothing to sign in to. |
 | `connect.html` | The connect/reconnect URL. Describes `fops qbo-connect`. |
+| `callback.html` | The production redirect URI. Intuit sends the browser here after sign-in; it shows its own address for pasting into `fops qbo-connect` (decision 36). |
 | `disconnect.html` | The disconnect URL. How to end the connection from either side. |
 | `eula.html` | The end-user licence agreement. |
 | `privacy.html` | The privacy policy. The substantive one. |
@@ -20,6 +21,7 @@ With the site at `https://<account>.github.io/icon-legal/`:
 - **Connect/Reconnect URL:** `https://<account>.github.io/icon-legal/connect.html`
 - **EULA URL:** `https://<account>.github.io/icon-legal/eula.html`
 - **Privacy policy URL:** `https://<account>.github.io/icon-legal/privacy.html`
+- **Redirect URI** (Keys & credentials → Production → Redirect URIs): `https://<account>.github.io/icon-legal/callback.html`, and the same address as `QBO_REDIRECT_URI` in `.env`. It has to match character for character.
 
 On Icon's own domain instead, the host domain is `icon-technologies.com` and the six URLs follow the same shape. Write whichever set is live into `docs/open-questions.md`.
 

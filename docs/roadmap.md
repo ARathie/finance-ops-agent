@@ -187,12 +187,16 @@ Done when:
 
 ## PR 16 — QuickBooks Online, live
 
-The code exists (PR 9). This needs an Intuit developer app and a sandbox company, and then Icon's move from QuickBooks Desktop to Online. Manual mode keeps working meanwhile.
+The code exists (PR 9). This needs an Intuit developer app, and then Icon's move from QuickBooks Desktop to Online. Manual mode keeps working meanwhile.
+
+Production keys straight away, no sandbox (decision 36). Code: `QBO_REDIRECT_URI` and the paste-the-address sign-in a production app needs, since Intuit refuses localhost redirects for production; `callback.html` on the public site; `fops doctor` fails when the stored connection is sandbox but the setting says production.
 
 Done when:
 
 - [ ] `fops qbo-test-invoice` creates one invoice, checks its number and total, saves the PDF and removes it again, with no mailbox and no email (tested against recorded responses, including a number QuickBooks already has).
-- [ ] **Needs a person:** the Intuit app is created; **Custom transaction numbers** is turned on in the sandbox company (Settings -> Account and settings -> Sales), or QuickBooks ignores Kevin's numbering (decision 29); every active consultant has a product with their bill rate on it, named as the Consultants sheet names them (decision 30); `fops qbo-connect` against the company being tested (Icon's own, while it is not yet in use -- decision 31); `fops doctor` passes the QuickBooks checks; `fops qbo-test-invoice` creates one invoice whose number is the one the agent asked for and whose total equals the agent's to the cent, and the PDF it saves shows the customised template with period ending, description, hours, rate and amount.
+- [x] `fops qbo-connect` signs in to a production app by pasting the redirect address, refuses production without `QBO_REDIRECT_URI` before opening anything, and refuses a pasted address from another sign-in; `fops doctor` fails on sandbox tokens under production settings (tested, no network).
+- [ ] **Needs a person:** `callback.html` is published with the other public pages, its address is under the app's **production** Redirect URIs and in `QBO_REDIRECT_URI`, the production client id and secret are in `.env` with `QBO_ENVIRONMENT=production`, and `fops qbo-connect` stores a connection that `fops doctor` reports as "connected to the production company".
+- [ ] **Needs a person:** the Intuit app is created; **Custom transaction numbers** is turned on in the company being tested (Settings -> Account and settings -> Sales), or QuickBooks ignores Kevin's numbering (decision 29); every active consultant has a product with their bill rate on it, named as the Consultants sheet names them (decision 30); `fops qbo-connect` against the company being tested (Icon's own, while it is not yet in use -- decision 31); `fops doctor` passes the QuickBooks checks; `fops qbo-test-invoice` creates one invoice whose number is the one the agent asked for and whose total equals the agent's to the cent, and the PDF it saves shows the customised template with period ending, description, hours, rate and amount.
 - [ ] **Needs a person:** after Icon's move to QuickBooks Online: **Custom transaction numbers** is on in the real company too; the customer names in QuickBooks match the engagement list's "QuickBooks customer" column; `fops qbo-connect` against the real company; `FOPS_ACCOUNTING=quickbooks`; the first live cycle's invoices are reviewed by Kevin in QuickBooks; the daily paid check marks a real paid invoice `client_paid`.
 
 ## PR 17 — Automatic mode, engagement by engagement
