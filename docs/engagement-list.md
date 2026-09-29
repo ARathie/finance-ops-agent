@@ -94,6 +94,8 @@ Only two cells in this whole workbook ever cause an email to leave for someone o
 
 So while the agent is being tested, putting a tester's own address in those two cells means nothing can reach a real client even by accident. `dry_run` already guarantees that; this is the second lock, and the roadmap's PR 15 has the box for taking it off again.
 
+**In QuickBooks mode the billing email is QuickBooks' customer email, not this cell** (decision 52). A stand-in here with the real address in QuickBooks is a disagreement: the agent uses QuickBooks' real address, and the only thing holding the invoice is the review it raises. So for a test cycle the stand-in goes in **both** places, or the second lock is not there. The CC email is still only this cell.
+
 Two places **not** to put a stand-in address:
 
 - **Consultants -> Email.** Nothing is ever sent there; it is how the agent recognises an arriving timesheet. An address here claims every timesheet sent from it for that one consultant, ahead of the name on the document, so a tester's address here would file everybody's forwarded timesheets under whichever consultant appears first. Leave the consultant's real address, or leave it blank and forward instead (decision 25).
