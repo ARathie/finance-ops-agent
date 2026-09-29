@@ -210,6 +210,8 @@ class Config:
     accounting: str  # manual | quickbooks
     # Addresses that may forward someone else's timesheet in (decision 25).
     timesheet_forwarders: tuple[str, ...]
+    # list | quickbooks: where the engagements come from (decision 53).
+    engagements_from: str = "list"
 
     @property
     def qbo_token_path(self) -> Path:
@@ -230,6 +232,16 @@ class Config:
             raise MissingSettingError(
                 f"FOPS_ACCOUNTING should be manual or quickbooks, not {accounting!r}"
             )
+        engagements_from = os.environ.get("FOPS_ENGAGEMENTS", "list").strip() or "list"
+        if engagements_from not in ("list", "quickbooks"):
+            raise MissingSettingError(
+                f"FOPS_ENGAGEMENTS should be list or quickbooks, not {engagements_from!r}"
+            )
+        if engagements_from == "quickbooks" and accounting != "quickbooks":
+            raise MissingSettingError(
+                "FOPS_ENGAGEMENTS=quickbooks needs FOPS_ACCOUNTING=quickbooks: there is"
+                " no QuickBooks to build the engagements from in manual mode"
+            )
         return cls(
             mode=mode,
             # No default: period boundaries and due dates depend on it
@@ -242,4 +254,5 @@ class Config:
             model=os.environ.get("FOPS_MODEL", "claude-opus-5"),
             accounting=accounting,
             timesheet_forwarders=_forwarders(),
+            engagements_from=engagements_from,
         )

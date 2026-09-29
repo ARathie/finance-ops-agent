@@ -21,6 +21,7 @@ from finance_ops_agent.application import replies as reply_steps
 from finance_ops_agent.application import summary as summary_steps
 from finance_ops_agent.application.completion import complete_if_covered
 from finance_ops_agent.application.context import Mode, RunDeps, RunReport, Settings
+from finance_ops_agent.application.from_quickbooks import workbook_from_accounting
 from finance_ops_agent.domain import checks, emails
 from finance_ops_agent.domain.checks import Finding, same_addresses, split_addresses
 from finance_ops_agent.domain.emails import EmailAttachment, TimesheetSummary
@@ -31,6 +32,7 @@ from finance_ops_agent.domain.engagements import (
     Delivery,
     Engagement,
     EngagementWorkbook,
+    ListRowProblem,
     Vendor,
     parse_workbook,
 )
@@ -65,7 +67,7 @@ __all__ = ["Mode", "RunDeps", "RunReport", "Settings", "run_once"]
 def run_once(deps: RunDeps, report: RunReport | None = None) -> RunReport:
     report = report or RunReport()
     logs.log("run started", mode=deps.settings.mode.value)
-    workbook = parse_workbook(deps.engagement_list.load())
+    workbook = _engagements(deps, report)
     _report_list_problems(deps, workbook, report)
     _create_expected_items(deps, workbook, report)
     _ingest_mailbox(deps, workbook, report)
@@ -108,11 +110,35 @@ def _open_review(deps: RunDeps, report: RunReport, item_id: int | None, finding:
         logs.log("review opened", item_id=item_id, code=finding.code.value)
 
 
+def _engagements(deps: RunDeps, report: RunReport) -> EngagementWorkbook:
+    """The engagement list this run works from.
+
+    Built from QuickBooks where the setting says so (decision 53). If
+    QuickBooks cannot be asked, the spreadsheet or its imported copy stands in
+    for this run, and the run says so: a QuickBooks outage must not stop mail
+    being read (decision 38), and it must not read as Icon having no work.
+    """
+    if deps.settings.engagements_from == "quickbooks":
+        try:
+            return workbook_from_accounting(deps.accounting)
+        except AccountingFailed as error:
+            logs.log("could not build the engagements from quickbooks", said=str(error)[:200])
+            report.note(
+                "QuickBooks could not be asked for the engagements, so this run used the"
+                " engagement list instead"
+            )
+    return parse_workbook(deps.engagement_list.load())
+
+
+def describe_problem(problem: ListRowProblem) -> str:
+    """Where a problem is, as Kevin would go and find it."""
+    if problem.row_number == 0:
+        return f"{problem.sheet}: {problem.message}"
+    return f"{problem.sheet} sheet, row {problem.row_number}: {problem.message}"
+
+
 def _report_list_problems(deps: RunDeps, workbook: EngagementWorkbook, report: RunReport) -> None:
-    problems = [
-        f"{problem.sheet} sheet, row {problem.row_number}: {problem.message}"
-        for problem in workbook.problems
-    ]
+    problems = [describe_problem(problem) for problem in workbook.problems]
     for message in problems:
         _open_review(deps, report, None, Finding(ReviewCode.LIST_ROW_PROBLEM, message))
     if problems:
@@ -444,6 +470,13 @@ def _which_engagements_are_live(
     picks the answer up. Being unable to ask must never look like Icon having
     stopped working.
     """
+    if deps.settings.engagements_from == "quickbooks":
+        # Built from QuickBooks' live products in the first place, so every
+        # engagement here is live and every live product that could not be
+        # built has already been reported with the reason.
+        return LiveEngagements(
+            live=list(dict.fromkeys((row.consultant, row.client) for row in workbook.engagements))
+        )
     listed: list[tuple[str, str]] = []
     try:
         listed = [

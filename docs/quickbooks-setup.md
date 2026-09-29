@@ -315,6 +315,85 @@ Two of those are QuickBooks fields with your labels on them:
 **If it is wrong:** nothing fails — the invoice just comes out looking wrong.
 Worth looking at one real PDF after any edit to the template.
 
+## 7. Everything else, so the spreadsheet can go
+
+A few things the agent needs have no field of their own in QuickBooks, so they
+are written as short lines: the label, a colon, the value. One per line,
+anywhere in the box. Anything else you write there is yours and is ignored, so
+your own notes can stay.
+
+**On each customer, in its Notes box** (Customer → Edit → Notes):
+
+```
+Invoice code: MT
+```
+
+The two letters in every invoice number for that client. Required: without it
+the client's invoices cannot be numbered.
+
+**On each product, in "Description on purchase forms"** (the box in the purchase
+section, under "I purchase this product/service from a vendor"). Products have
+no Notes box, and this one never appears on a client's invoice:
+
+```
+Start: 2026-02-01
+```
+
+The first day of the engagement, so the agent knows which month to expect a
+timesheet for first. Required. `2/1/2026` works too.
+
+**On each vendor, the email** (the ordinary email box, not Notes): the address
+that consultant's timesheets come from. A timesheet from that address is
+theirs. Several addresses go in the one box separated by commas. If one vendor
+supplies two consultants from the same address, the name on the timesheet
+decides which of them it is, and if it doesn't, you are asked.
+
+**The category a product sits under must be named exactly as its customer** —
+the display name or the company name. That is how the agent knows which
+customer an engagement bills.
+
+Lines you only need if something is unusual. Leave them out and the default
+holds:
+
+| Line | Where | Default |
+|---|---|---|
+| `Delivery: portal` | customer Notes | email: the agent sends the invoice |
+| `CC: jane@client.com` | customer Notes | nobody but you on copy |
+| `Schedule: weekly` (or `twice a month`, `every two weeks`) | product purchase description | monthly |
+| `First period: 2026-02-02` | product purchase description | only needed with weekly or every two weeks |
+| `Send automatically: yes` | product purchase description | no: every invoice asks you first |
+
+How Icon pays (bank transfer) is the same for everyone and is not written
+anywhere.
+
+The agent reads all of this from QuickBooks instead of the spreadsheet once the
+setting `FOPS_ENGAGEMENTS=quickbooks` is on. Doctor checks it either way, so it
+can be filled in and proved first. When everything is in place:
+
+```
+ok   quickbooks setup: QuickBooks alone describes all 4 engagement(s) for 2 client(s)
+```
+
+While timesheets are still being forwarded, a vendor with no email is a to-do,
+not a failure:
+
+```
+ok   quickbooks setup: QuickBooks alone describes all 4 engagement(s) for 2
+client(s); still to do before timesheets stop being forwarded: an email on the
+vendor for Manoj Koottappilly, Sridhar Doraiswamy
+```
+
+A missing or unreadable line fails and names the record:
+
+```
+FAIL quickbooks setup: These stop QuickBooks describing every engagement on its
+own: customer MasTec North America, Inc.: no "Invoice code:" line, so its
+invoices cannot be numbered.
+```
+
+A line the agent recognises but cannot read — `Start: February` — is never
+guessed at. It is reported the same way.
+
 ---
 
 ## When something here changes

@@ -635,3 +635,48 @@ def check_claude_api(model: str, describe: Callable[[str], str] | None = None) -
     """The credentials that read timesheets (docs/integrations/claude-extraction.md)."""
     ask = describe or _describe_claude_model
     return _run("claude api", lambda: ask(model))
+
+
+def check_quickbooks_setup(
+    build: Callable[[], EngagementWorkbook], forwarders: tuple[str, ...]
+) -> Check:
+    """Could the engagements be built from QuickBooks alone? (decision 53)
+
+    Run whatever FOPS_ENGAGEMENTS says, so the Notes lines can be filled in and
+    proved before anything depends on them. Every problem names the record and
+    the line to fix; a vendor with no email is a to-do rather than a failure
+    while timesheets are forwarded, and a failure once they are not.
+    """
+    from finance_ops_agent.application.from_quickbooks import vendors_without_email
+
+    name = "quickbooks setup"
+
+    def run() -> str:
+        built = build()
+        if built.problems:
+            raise RuntimeError(
+                "These stop QuickBooks describing every engagement on its own: "
+                + " ".join(f"{problem.message}." for problem in built.problems)
+            )
+        unrecognised = vendors_without_email(built)
+        if unrecognised and not forwarders:
+            raise RuntimeError(
+                "no timesheet can be recognised for "
+                + ", ".join(unrecognised)
+                + ": their vendor in QuickBooks has no email, and nobody is set up to"
+                " forward timesheets. Put the address their timesheets come from on"
+                " the vendor."
+            )
+        clients = len({engagement.client for engagement in built.engagements})
+        said = (
+            f"QuickBooks alone describes all {len(built.engagements)} engagement(s) for"
+            f" {clients} client(s)"
+        )
+        if unrecognised:
+            said += (
+                "; still to do before timesheets stop being forwarded: an email on the"
+                " vendor for " + ", ".join(unrecognised)
+            )
+        return said
+
+    return _run(name, run)

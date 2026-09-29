@@ -1666,3 +1666,29 @@ class TestAskingForANewerShapeOfTheRecord:
         )
         assert client.company_url("/query?query=SELECT").endswith("&minorversion=75")
         assert client.company_url("/invoice").endswith("?minorversion=75")
+
+
+class TestTheEngagementsFromQuickBooksAlone:
+    """The real adapter, reading a company set up for decision 53: the product's
+    purchase description and the customer's Notes box carry the lines."""
+
+    def test_the_engagement_list_is_built_from_the_recorded_company(self, tmp_path: Path) -> None:
+        from finance_ops_agent.application.from_quickbooks import workbook_from_accounting
+
+        accounting, _, _ = build(replay_from("from_quickbooks"), tmp_path)
+        built = workbook_from_accounting(accounting)
+
+        (engagement,) = built.engagements
+        assert (engagement.consultant, engagement.client) == ("Priya Shah", "Acme Corp")
+        assert engagement.start_date == date(2026, 8, 1)
+        (client,) = built.clients
+        assert client.invoice_code == "AC"
+        assert client.legal_name == "Acme Corporation"
+        assert client.payment_terms_days == 30
+        (consultant,) = built.consultants
+        assert consultant.emails == ("priya@example.com",)
+        assert consultant.pay_timing_days == 15
+        # Dana's product has no Start line: left out, and named.
+        (problem,) = built.problems
+        assert "Dana Cruz" in problem.message
+        assert "Start:" in problem.message

@@ -2,6 +2,8 @@
 
 The engagement list is the spreadsheet Kevin keeps with every client, consultant, vendor company, and engagement. The agent reads it at the start of every run. It is the **only** place the agent takes rates, billing contacts, and payment terms from. Nothing in an email or on a timesheet can override it.
 
+**On its way out.** With `FOPS_ENGAGEMENTS=quickbooks` the agent builds all of this from QuickBooks instead: products, customers, vendors, and a few `Label: value` lines (decision 53, `quickbooks-setup.md` section 7). This workbook is then read only if QuickBooks cannot be asked.
+
 **Where it lives.** Until `fops engagements import` is run it is this file. After that the agent keeps its own copy and does not open the file again (decision 40); `fops engagements` says which, and `fops engagements forget` puts it back on the file. The columns below are the same either way.
 
 File: `engagements.xlsx` (location set in the agent's settings; a CSV export of each sheet works too). Kevin edits it in Excel like any other spreadsheet. The agent never writes to it.

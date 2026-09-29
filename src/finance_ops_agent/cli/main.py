@@ -411,6 +411,7 @@ def _real_deps(mode_override: "Mode | None" = None, since: "date | None" = None)
             mode=effective_mode(config.mode, mode_override),
             agent_mailbox=config.agent_mailbox,
             timesheet_forwarders=config.timesheet_forwarders,
+            engagements_from=config.engagements_from,
         ),
         sender=SmtpSender(account, config.agent_mailbox, clock.now),
         accounting=_accounting(config, store, renderer, clock.today()),
@@ -500,7 +501,8 @@ def _command_doctor(args: argparse.Namespace) -> int:
         Check(
             "settings",
             CheckResult.PASS,
-            f"mode {config.mode}, timezone {config.timezone}, accounting {config.accounting}",
+            f"mode {config.mode}, timezone {config.timezone}, accounting {config.accounting},"
+            f" engagements from {config.engagements_from}",
         )
     )
 
@@ -517,11 +519,18 @@ def _command_doctor(args: argparse.Namespace) -> int:
 
     from finance_ops_agent.adapters.stored.engagement_list import imported
 
-    results.append(
-        checks.check_engagement_list(
-            load_list, config.engagement_list, stored=imported(_open_store(config.data_dir))
-        )
+    listed = checks.check_engagement_list(
+        load_list, config.engagement_list, stored=imported(_open_store(config.data_dir))
     )
+    if config.engagements_from == "quickbooks" and listed.result is CheckResult.FAIL:
+        # Only the stand-in for a run QuickBooks cannot answer (decision 53).
+        listed = Check(
+            listed.name,
+            CheckResult.SKIP,
+            "not used: the engagements come from QuickBooks, and the list only stands"
+            f" in if QuickBooks cannot be asked ({listed.detail})",
+        )
+    results.append(listed)
 
     def describe_database() -> str:
         store = _open_store(config.data_dir)
@@ -583,6 +592,7 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
     from finance_ops_agent.adapters.quickbooks.client import QuickBooksClient
     from finance_ops_agent.adapters.quickbooks.online import QuickBooksOnline
     from finance_ops_agent.adapters.quickbooks.tokens import TokenStore
+    from finance_ops_agent.application.from_quickbooks import workbook_from_accounting
     from finance_ops_agent.cli.doctor import (
         Check,
         CheckResult,
@@ -593,6 +603,7 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
         check_quickbooks_engagements,
         check_quickbooks_pay,
         check_quickbooks_products,
+        check_quickbooks_setup,
         check_quickbooks_tokens,
     )
     from finance_ops_agent.config import MissingSettingError, QuickBooksSettings
@@ -708,6 +719,11 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
     results.append(check_quickbooks_products(accounting, wanted_engagements))
     results.append(check_quickbooks_pay(accounting, wanted_engagements))
     results.append(check_quickbooks_contacts(accounting, wanted_contacts))
+    results.append(
+        check_quickbooks_setup(
+            lambda: workbook_from_accounting(accounting), config.timesheet_forwarders
+        )
+    )
     return results
 
 

@@ -510,3 +510,27 @@ Decision, step 1: **a client's billing emails and payment terms, and a payee's t
 **Step 3**, agreed and not built: what QuickBooks has no field for -- invoice code, delivery (email or portal), CC addresses, email domains, names on timesheets, the addresses consultants send timesheets from, how Icon pays, send automatically, and a billing schedule other than monthly -- goes in the **Notes** box of the customer, vendor or product as labelled lines (`Invoice code: MT`). Kevin already works in QuickBooks; a second place to edit is what the whole move is escaping. Considered and rejected: the agent keeping them and Kevin editing by email (a second place again), and QuickBooks custom fields (QuickBooks Advanced only, with partial API support). Free text is easy to mistype, so every line must parse or `fops doctor` fails naming the record and the line, and an unreadable line is treated as missing, never guessed at. The timesheet senders need the strictest check, since a wrong one either refuses a real timesheet or accepts somebody else's.
 
 The "Rates from" history does not move. QuickBooks holds only today's rate, and the rate is already taken when the timesheet is read (decision 43).
+
+## 53. QuickBooks alone can describe every engagement
+
+Decision 52 set the direction: what QuickBooks has no field for goes in as labelled lines. Going through the fields one by one with Icon settled what that means in practice, and it is much less than the spreadsheet had.
+
+**What Kevin writes:**
+
+- **`Invoice code: MT`** in each customer's Notes box. Nothing else in QuickBooks says which two letters a client gets, and an invoice cannot be numbered without them.
+- **`Start: 2026-02-01`** on each product. **Products have no Notes box** in QuickBooks' API, so this goes in the product's **"Description on purchase forms"** (`PurchaseDesc`). It never prints on a client's invoice. The sales description was rejected for that reason: QuickBooks copies it onto an invoice line whenever someone picks the product by hand. The product's creation date was rejected as a default because Kevin set the products up months after most engagements began, and a wrong start either chases timesheets that were billed by hand or refuses a late one as outside the engagement.
+- **Nothing for the timesheet sender.** The vendor on each product's purchase side already has an email box, and that is the address the consultant's timesheets come from. Icon files a vendor per consultant, with the firm in the company name (decision 46), so the address names the person. Where one vendor address does belong to two consultants, the sender narrows the choice to those two and the name on the timesheet picks between them. If it cannot, Kevin is asked. Before this, `match_consultant` took the first consultant with a matching address, which was harmless only while no two consultants shared one.
+- **The category is named as its customer**, display name or company name. There is no other link from a product to the customer it bills. A category that finds no customer is a problem that says to rename it.
+
+**Hardcoded, with a line available for when it is needed:** delivery by email (`Delivery: portal`), no CC (`CC:`), monthly billing (`Schedule:` with `First period:`), never automatic (`Send automatically: yes`). Icon uses none of these today. **Paid by bank transfer**, for everyone, with no line.
+
+**Dropped:** email domains (a client's mail becomes a review rather than being quietly filed), other names and names on timesheets (QuickBooks' own customer names are tried; a timesheet that fails to match becomes a review), initials (worked out from the name), role (only on the manual-mode PDF), end date (inactive product), and the columns no code read at all: billing contact, time system, notes, end client.
+
+**How it is switched on.** `FOPS_ENGAGEMENTS=quickbooks` makes a run build its engagement list from QuickBooks (`application/from_quickbooks.py`) into the same `EngagementWorkbook` the spreadsheet parses to, so no rule downstream changes. The default stays `list`. `fops doctor`'s **quickbooks setup** check builds it whatever the setting, so the lines can be filled in and proved before anything depends on them.
+
+- **What cannot be built is a problem naming the record**, and the engagement is left out, as a bad spreadsheet row is. Problems carry sheet `QuickBooks` and row 0, and are shown without a row number.
+- **A line with a known label and an unreadable value is a problem, never a guess.** An unknown label is Kevin's own note and is ignored, so the box stays usable for anything else. A known label written twice with different values is refused.
+- **QuickBooks that cannot be asked** makes the run use the engagement list, with a line saying so. An outage must not stop mail being read (decision 38), and must never read as Icon having no engagements. A connection that needs renewing is raised rather than treated as one customer's problem.
+- **A vendor with no email is a to-do, not a failure, while timesheets are forwarded** (decision 25), and a failure once nobody forwards: no timesheet could be recognised for that consultant.
+
+Rates history ("Rates from") does not come across: the product holds today's rate, taken when the timesheet is read (decision 43), and the start date stands in for "rates from".

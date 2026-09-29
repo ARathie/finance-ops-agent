@@ -158,6 +158,8 @@ def _engagement_from(
         bill_rate_cents=None if price is None else _cents(price),
         pay_rate_cents=None if cost is None else _cents(cost),
         payee=_clean(vendor.get("name")) if isinstance(vendor, dict) else "",
+        payee_ref=str(vendor.get("value") or "") if isinstance(vendor, dict) else "",
+        notes=str(row.get("PurchaseDesc") or ""),
     )
 
 
@@ -553,6 +555,7 @@ class QuickBooksOnline:
             email=_clean(email.get("Address")) if isinstance(email, dict) else "",
             payment_terms_days=days,
             terms_note=note,
+            notes=str(row.get("Notes") or ""),
         )
 
     def customer(self, name: str) -> AccountingParty | None:

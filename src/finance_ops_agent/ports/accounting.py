@@ -68,6 +68,13 @@ class AccountingEngagement:
     bill_rate_cents: int | None
     pay_rate_cents: int | None
     payee: str
+    # The vendor on the product's purchase side, by id: who Icon pays, and
+    # whose email a timesheet comes from (docs/decisions.md #53).
+    payee_ref: str = ""
+    # The product's "Description on purchase forms", where Kevin writes the
+    # engagement's own lines such as `Start: 2026-02-01`. Products have no
+    # Notes box; this one never reaches a client.
+    notes: str = ""
 
 
 @dataclass(frozen=True)
@@ -107,6 +114,9 @@ class AccountingParty:
     # Why there are no terms, where there are none. "The company has no such
     # term" and "this record does not name one" need different fixes.
     terms_note: str = ""
+    # The record's Notes box as typed, lines and all: where Kevin writes a
+    # client's `Invoice code:` and the like (docs/decisions.md #53).
+    notes: str = ""
 
 
 @dataclass(frozen=True)

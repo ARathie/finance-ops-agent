@@ -1,0 +1,179 @@
+{
+  "description": "A company set up to be read without the engagement list (decision 53): Priya's product carries a Start line in its purchase description and the customer an Invoice code in its Notes; Dana's product has no Start line.",
+  "exchanges": [
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20%2A%20FROM%20Item%20WHERE%20Active%20%3D%20true%20STARTPOSITION%201%20MAXRESULTS%201000",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {
+            "Item": [
+              {
+                "Id": "20",
+                "Name": "Acme Corp",
+                "FullyQualifiedName": "Acme Corp",
+                "Type": "Category"
+              },
+              {
+                "Id": "42",
+                "Name": "Priya Shah",
+                "FullyQualifiedName": "Acme Corp:Priya Shah",
+                "Type": "Service",
+                "UnitPrice": 140.0,
+                "PurchaseCost": 100.0,
+                "PrefVendorRef": {
+                  "value": "7",
+                  "name": "Priya Shah"
+                },
+                "PurchaseDesc": "Start: 2026-08-01\nPriya's contract is in the shared drive."
+              },
+              {
+                "Id": "43",
+                "Name": "Dana Cruz",
+                "FullyQualifiedName": "Acme Corp:Dana Cruz",
+                "Type": "Service",
+                "UnitPrice": 140.0,
+                "PurchaseCost": 100.0,
+                "PrefVendorRef": {
+                  "value": "8",
+                  "name": "Dana Cruz"
+                }
+              },
+              {
+                "Id": "51",
+                "Name": "Consulting",
+                "FullyQualifiedName": "Consulting",
+                "Type": "Service",
+                "UnitPrice": 0.0
+              }
+            ]
+          }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20Id%2C%20DisplayName%20FROM%20Customer%20WHERE%20DisplayName%20%3D%20%27Acme%20Corp%27",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {
+            "Customer": [
+              {
+                "Id": "58",
+                "DisplayName": "Acme Corp"
+              }
+            ]
+          }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20%2A%20FROM%20Customer%20WHERE%20Id%20%3D%20%2758%27",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {
+            "Customer": [
+              {
+                "Id": "58",
+                "DisplayName": "Acme Corp",
+                "CompanyName": "Acme Corporation",
+                "PrimaryEmailAddr": {
+                  "Address": "ap@acme.example"
+                },
+                "SalesTermRef": {
+                  "value": "3",
+                  "name": "Net 30"
+                },
+                "Notes": "Invoice code: AC\nAP want the PO number on everything."
+              }
+            ]
+          }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20%2A%20FROM%20Term",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {
+            "Term": [
+              {
+                "Id": "3",
+                "Name": "Net 30",
+                "DueDays": 30
+              },
+              {
+                "Id": "4",
+                "Name": "Net 15",
+                "DueDays": 15
+              }
+            ]
+          }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20%2A%20FROM%20Vendor%20WHERE%20Id%20%3D%20%277%27",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {
+            "Vendor": [
+              {
+                "Id": "7",
+                "DisplayName": "Priya Shah",
+                "PrimaryEmailAddr": {
+                  "Address": "priya@example.com"
+                },
+                "TermRef": {
+                  "value": "4",
+                  "name": "Net 15"
+                }
+              }
+            ]
+          }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20%2A%20FROM%20Vendor%20WHERE%20Id%20%3D%20%278%27",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {
+            "Vendor": [
+              {
+                "Id": "8",
+                "DisplayName": "Dana Cruz",
+                "TermRef": {
+                  "value": "3",
+                  "name": "Net 30"
+                }
+              }
+            ]
+          }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    }
+  ]
+}

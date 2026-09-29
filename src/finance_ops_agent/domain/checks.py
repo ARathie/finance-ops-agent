@@ -70,20 +70,40 @@ def same_addresses(one: Iterable[str], other: Iterable[str]) -> bool:
 def match_consultant(
     sender: str, reading: TimesheetReading, consultants: list[Consultant]
 ) -> tuple[Consultant | None, list[Finding]]:
-    """The sender's address decides; failing that, the name on the timesheet."""
+    """The sender's address decides; failing that, the name on the timesheet.
+
+    One address can belong to more than one consultant: a vendor firm that
+    supplies two people and sends both their timesheets from its own address
+    (docs/decisions.md #53). Then the name on the timesheet chooses between
+    those, and only those. Taking the first one would file one person's hours
+    under another's name.
+    """
     sender_key = sender.strip().casefold()
-    for consultant in consultants:
-        if sender_key in (email.casefold() for email in consultant.emails):
-            return consultant, []
+    by_sender = [
+        consultant
+        for consultant in consultants
+        if sender_key in (email.casefold() for email in consultant.emails)
+    ]
+    if len(by_sender) == 1:
+        return by_sender[0], []
     name = reading.consultant_name.value
     if name:
         matches = [
             consultant
-            for consultant in consultants
+            for consultant in (by_sender or consultants)
             if any(names_match(name, known) for known in (consultant.name, *consultant.other_names))
         ]
         if len(matches) == 1:
             return matches[0], []
+    if by_sender:
+        return None, [
+            Finding(
+                ReviewCode.CONSULTANT_UNKNOWN,
+                f"This came from {sender.strip()}, which is the address for "
+                + ", ".join(consultant.name for consultant in by_sender)
+                + ", and the name on the timesheet does not tell me which of them it is.",
+            )
+        ]
     return None, [
         Finding(ReviewCode.CONSULTANT_UNKNOWN, "I can't tell which consultant this is for.")
     ]

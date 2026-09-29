@@ -216,8 +216,10 @@ Done when:
 
 - [x] Step 1: a client's billing emails and terms and a payee's terms come from QuickBooks, blank falls back to the list, a disagreement is used and paused for Kevin, a record QuickBooks cannot serve does not stop the run, and `fops doctor` requires a client's addresses to be the same set on both sides (tested, no network).
 - [ ] **Needs a person:** every client's billing addresses are in its QuickBooks customer email (comma-separated), and `fops doctor` passes **quickbooks contacts** with no disagreements.
-- [ ] Step 3: the Notes-box format, its parser and a doctor check naming each unreadable line; the timesheet senders, invoice code, delivery, CC, domains, names on timesheets, paid by, send automatically and non-monthly schedules read from it with the workbook as fallback.
-- [ ] **Needs a person:** Kevin fills in the Notes boxes and `fops doctor` passes with no fallback to the workbook.
+- [x] Step 3 (decision 53): `FOPS_ENGAGEMENTS=quickbooks` builds the whole engagement list from QuickBooks -- `Invoice code:` in customer Notes, `Start:` in the product's purchase description, the vendor's email as the timesheet sender, defaults for the rest; a line that cannot be read is a problem naming the record, never a guess; one address for two consultants lets the name decide or asks; an outage falls back to the list; doctor's **quickbooks setup** check (tested, no network).
+- [ ] **Needs a person:** each customer has its `Invoice code:` line, each product its `Start:` line, each category is named as its customer, and `fops doctor` shows `ok   quickbooks setup`.
+- [ ] **Needs a person:** each vendor's email is the address that consultant's timesheets come from, and the setup line has no "still to do".
+- [ ] **Needs a person:** `FOPS_ENGAGEMENTS=quickbooks` is set, `fops doctor` passes, and a forwarded timesheet goes through `fops dry-run` with the right client, hours and amount.
 - [ ] Step 2: after one full cycle with QuickBooks deciding, the cross-check columns and then the workbook itself stop being read.
 
 ## Later, if wanted
