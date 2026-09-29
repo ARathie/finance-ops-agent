@@ -1,12 +1,19 @@
 """`fops qbo-connect`: the one-time QuickBooks sign-in.
 
-Opens Intuit's sign-in page, waits on a loopback callback for the redirect,
-exchanges the code, and stores the realm id and the first token pair. Run with
-Kevin present: he is the one who approves the connection to Icon's company.
+Opens Intuit's sign-in page, reads the redirect, exchanges the code, and stores
+the realm id and the first token pair. Run with Kevin present: he is the one
+who approves the connection to Icon's company.
+
+The redirect is read one of two ways. A sandbox app may redirect to
+`http://localhost`, where a one-shot listener catches it. A production app may
+not -- Intuit accepts only an https address that is not localhost -- so the
+browser lands on a static page on Icon's public site and the person pastes the
+address it shows back into the terminal (docs/decisions.md #51).
 """
 
 import secrets
 import webbrowser
+from collections.abc import Callable
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlencode, urlparse
@@ -43,6 +50,26 @@ def authorize_url(client_id: str, redirect_uri: str, state: str) -> str:
         }
     )
     return f"{AUTHORIZE_URL}?{query}"
+
+
+def is_loopback(redirect_uri: str) -> bool:
+    return urlparse(redirect_uri).hostname in ("localhost", "127.0.0.1")
+
+
+def parse_redirect(address: str) -> Callback:
+    """What a pasted redirect address says. Anything unreadable is simply empty,
+    and the checks in `connect` refuse it."""
+    query = parse_qs(urlparse(address.strip()).query)
+    return Callback(
+        code=(query.get("code") or [""])[0],
+        realm_id=(query.get("realmId") or [""])[0],
+        state=(query.get("state") or [""])[0],
+        error=(query.get("error") or [""])[0],
+    )
+
+
+def ask_for_redirect(prompt: str) -> str:
+    return input(prompt)
 
 
 def wait_for_callback(port: int, expected_state: str) -> Callback:
@@ -84,8 +111,17 @@ def connect(
     port: int = DEFAULT_PORT,
     open_browser: bool = True,
     http: httpx.Client | None = None,
+    redirect_uri: str | None = None,
+    read_pasted: Callable[[str], str] = ask_for_redirect,
 ) -> Tokens:
-    redirect_uri = f"http://localhost:{port}/callback"
+    redirect_uri = redirect_uri or f"http://localhost:{port}/callback"
+    if environment == "production" and is_loopback(redirect_uri):
+        # Intuit would show its own error page after the sign-in; say it first.
+        raise QuickBooksReconnect(
+            "a production QuickBooks app cannot redirect to localhost. Set QBO_REDIRECT_URI"
+            " to the https callback page on Icon's public site (the same address registered"
+            " under the app's production redirect URIs) and run this again"
+        )
     state = secrets.token_urlsafe(16)
     url = authorize_url(client_id, redirect_uri, state)
     print("Sign in to QuickBooks and approve the connection:")
@@ -94,7 +130,15 @@ def connect(
     if open_browser:
         webbrowser.open(url)
 
-    callback = wait_for_callback(port, state)
+    if is_loopback(redirect_uri):
+        callback = wait_for_callback(port, state)
+    else:
+        callback = parse_redirect(
+            read_pasted(
+                "When the browser shows the page that says QuickBooks sent you back,"
+                " copy the whole address from its address bar and paste it here:\n> "
+            )
+        )
     if callback.error:
         raise QuickBooksReconnect(f"QuickBooks reported: {callback.error}")
     if not callback.code:

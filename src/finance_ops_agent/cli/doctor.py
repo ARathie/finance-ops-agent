@@ -11,6 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import Protocol
 
 from finance_ops_agent.adapters.email.client import (
     Folders,
@@ -20,6 +21,10 @@ from finance_ops_agent.adapters.email.client import (
     open_smtp,
 )
 from finance_ops_agent.adapters.email.inbox import INBOX
+from finance_ops_agent.domain.checks import same_addresses, split_addresses
+from finance_ops_agent.domain.engagements import EngagementWorkbook
+from finance_ops_agent.domain.money import Money
+from finance_ops_agent.ports.accounting import AccountingParty
 
 
 class CheckResult(StrEnum):
@@ -39,11 +44,37 @@ class Check:
         return f"{mark[self.result]} {self.name}: {self.detail}"
 
 
+# Long enough for a check that names one line per engagement, since silently
+# dropping the last few would hide exactly what someone needs to fix.
+MAX_DETAIL = 4000
+
+
+# What Kevin has to have set up in QuickBooks, in his words. Every QuickBooks
+# check here is the machine-readable half of a section in that document, so the
+# two are changed together (CLAUDE.md, definition of done).
+SETUP_DOC = "docs/quickbooks-setup.md"
+
+
+def setup_pointer(failures: list[Check]) -> str | None:
+    """Where to go and fix a QuickBooks check, said once.
+
+    Each message already says what is wrong; none of them says where the thing
+    to change lives, and repeating that inside a dozen messages would only make
+    them longer to read.
+    """
+    if not any(check.name.startswith("quickbooks") for check in failures):
+        return None
+    return f"What QuickBooks needs to have in it: {SETUP_DOC}"
+
+
 def _run(name: str, check: Callable[[], str]) -> Check:
     try:
         return Check(name, CheckResult.PASS, check())
     except Exception as error:  # a doctor reports, it never crashes
-        return Check(name, CheckResult.FAIL, str(error)[:300])
+        said = str(error)
+        if len(said) > MAX_DETAIL:
+            said = said[:MAX_DETAIL] + " …and more, cut short here"
+        return Check(name, CheckResult.FAIL, said)
 
 
 def check_mailbox_is_the_agents(account: MailAccount, agent_mailbox: str) -> Check:
@@ -139,17 +170,24 @@ def check_timesheet_forwarders(forwarders: tuple[str, ...], mode: str) -> Check:
     )
 
 
-def check_engagement_list(load: Callable[[], tuple[int, list[str]]], path: Path) -> Check:
-    """Say which file was read, not only what was in it.
+def check_engagement_list(
+    load: Callable[[], tuple[int, list[str]]], path: Path, stored: bool = False
+) -> Check:
+    """Say where it was read from, not only what was in it.
 
     `FOPS_ENGAGEMENT_LIST` is usually a relative path, so the file depends on
     the folder the command was run in, and a copy edited somewhere else looks
     exactly like a change that did not take. The resolved path settles it.
+
+    Once the list has been imported the agent reads its own store and does not
+    open that file at all (decision 40), and someone editing the workbook and
+    seeing nothing change deserves to be told so by name.
     """
 
     def run() -> str:
         rows, problems = load()
-        where = f"{rows} engagement row(s) from {path.resolve()}"
+        source = "the agent's own store" if stored else str(path.resolve())
+        where = f"{rows} engagement row(s) from {source}"
         if problems:
             raise MailboxProblem(f"{where}, but {len(problems)} problem(s): {problems[0]}")
         return f"{where}, no problems"
@@ -161,8 +199,9 @@ def check_database(describe: Callable[[], str]) -> Check:
     return _run("database", describe)
 
 
-def check_quickbooks_tokens(store: object) -> Check:
-    """Are we connected, and is the refresh token still healthy?"""
+def check_quickbooks_tokens(store: object, environment: str | None = None) -> Check:
+    """Are we connected, to the kind of company QBO_ENVIRONMENT names, and is
+    the refresh token still healthy?"""
     from finance_ops_agent.adapters.quickbooks.tokens import (
         NotConnected,
         TokenStore,
@@ -175,6 +214,15 @@ def check_quickbooks_tokens(store: object) -> Check:
         tokens = store.load()
     except NotConnected as error:
         return Check(name, CheckResult.FAIL, str(error))
+    if environment is not None and tokens.environment != environment:
+        # Sandbox tokens belong to the sandbox keys; the production keys cannot
+        # refresh them, and the agent would be talking to the wrong company.
+        return Check(
+            name,
+            CheckResult.FAIL,
+            f"QBO_ENVIRONMENT is {environment} but the stored connection is to the"
+            f" {tokens.environment} company {tokens.realm_id}. Run `fops qbo-connect`.",
+        )
     warning = tokens.refresh_token_warning(utcnow())
     if warning:
         return Check(name, CheckResult.FAIL, warning)
@@ -215,10 +263,25 @@ def check_quickbooks_customers(accounting: object, wanted: Callable[[], list[str
     return _run(name, run)
 
 
-def check_quickbooks_products(accounting: object, wanted: Callable[[], list[str]]) -> Check:
-    """Every consultant the agent may invoice for must have their own product
-    in QuickBooks, with their rate on it: that rate is what is billed
-    (docs/decisions.md #30)."""
+@dataclass(frozen=True)
+class ExpectedProduct:
+    """One engagement, as the engagement list has it, for checking against
+    what QuickBooks holds."""
+
+    consultant: str
+    client: str
+    clients: list[str]  # the names that client might be filed under
+    bill_rate_cents: int
+    pay_rate_cents: int
+    payee: str
+
+
+def check_quickbooks_products(
+    accounting: object, wanted: Callable[[], list[ExpectedProduct]]
+) -> Check:
+    """Every engagement the agent may invoice must have a product in
+    QuickBooks, under a category named for the client, with the rate on it:
+    that rate is what is billed (docs/decisions.md #30 and #36)."""
     from finance_ops_agent.adapters.quickbooks.online import QuickBooksOnline
 
     name = "quickbooks products"
@@ -227,14 +290,309 @@ def check_quickbooks_products(accounting: object, wanted: Callable[[], list[str]
     def run() -> str:
         names = wanted()
         problems: list[str] = []
-        for consultant in names:
+        for expected in names:
             try:
-                accounting.product_for(consultant)
+                product = accounting.product_for(expected.consultant, expected.clients)
             except Exception as error:
-                problems.append(f"{consultant}: {error}")
+                problems.append(f"{expected.consultant}: {error}")
+                continue
+            # A bill rate that disagrees is not a warning: the invoice would be
+            # made, found to disagree, and voided (decision 30).
+            if product.unit_price_cents != expected.bill_rate_cents:
+                problems.append(
+                    f"{expected.consultant} at {expected.client}:"
+                    f" {product.name} bills ${Money(product.unit_price_cents)} an hour"
+                    f" and the engagement list says ${Money(expected.bill_rate_cents)}."
+                )
         if problems:
-            raise RuntimeError("QuickBooks cannot price these consultants. " + " ".join(problems))
-        return f"all {len(names)} consultant(s) have a product with a rate"
+            raise RuntimeError(
+                f"I looked in {accounting.company} and cannot price"
+                f" {len(problems)} of {len(names)} engagement(s). " + " ".join(problems)
+            )
+        note = (
+            f"all {len(names)} engagement(s) have a product in {accounting.company},"
+            " charging what the engagement list says"
+        )
+        # Not a failure -- invoices are made from these -- but worth saying
+        # once. An inventory item counts a quantity on hand and posts to stock
+        # and cost of goods sold; consultants' hours are a service, and billing
+        # them as stock drives the count negative and puts the money in the
+        # wrong accounts (docs/decisions.md #49).
+        stock = sorted(
+            expected.consultant
+            for expected in names
+            if accounting.product_kind(expected.consultant, expected.clients) == "Inventory"
+        )
+        if stock:
+            note += (
+                f". {len(stock)} of them are Inventory products, which count stock and post"
+                f" to cost of goods sold: {', '.join(stock)}. Consultants' hours are"
+                " usually a Service or Non-inventory product"
+            )
+        return note
+
+    return _run(name, run)
+
+
+def check_quickbooks_engagements(
+    accounting: object, load: Callable[[], "EngagementWorkbook"]
+) -> Check:
+    """Which engagements does QuickBooks say are live, and can each be scheduled?
+
+    The products check asks the question one way round -- does every row on the
+    engagement list have a product? This asks it the other way, which is the way
+    that matters now that QuickBooks is what says an engagement is live
+    (docs/decisions.md #42): an engagement QuickBooks has and the list has no
+    row for cannot be scheduled, because the billing schedule and the start date
+    are still the workbook's to say.
+
+    Both halves of a disagreement are named, because they are fixed in different
+    places: a missing row is fixed in the list, and a row the agent will stop
+    expecting timesheets for is fixed by making its product active again -- or
+    is correct, and the engagement has finished.
+    """
+    from finance_ops_agent.adapters.quickbooks.online import QuickBooksOnline
+    from finance_ops_agent.domain.live_engagements import live_engagements
+
+    name = "quickbooks engagements"
+    assert isinstance(accounting, QuickBooksOnline)
+
+    def run() -> str:
+        workbook = load()
+        listing = accounting.engagements()
+        listed = listing.live
+        answer = live_engagements(workbook, [(one.consultant, one.client) for one in listed])
+        rateless = sorted(
+            f"{one.consultant} at {one.client}" for one in listed if one.bill_rate_cents is None
+        )
+        used = listing.categories_seen
+        seen = (
+            f"{listing.products_seen} product(s) and"
+            f" {used} categor{'y' if used == 1 else 'ies'} in use"
+        )
+        problems: list[str] = []
+        if answer.without_a_row:
+            problems.append(
+                f"{len(answer.without_a_row)} engagement(s) in {accounting.company} have no row"
+                " on the engagement list, so I cannot tell how often to expect a timesheet"
+                f" or when the period ends: {', '.join(answer.without_a_row)}."
+            )
+        if answer.finished:
+            named = ", ".join(f"{consultant} at {client}" for consultant, client in answer.finished)
+            problems.append(
+                f"The engagement list still calls {len(answer.finished)} engagement(s) active"
+                f" and {accounting.company} has no live product for them, so I will expect no"
+                f" new periods: {named}. Make the product active again, or mark the row"
+                " inactive if the engagement has finished."
+            )
+        if rateless:
+            problems.append(
+                f"{len(rateless)} product(s) have no rate, and the rate on the product is what"
+                f" I bill: {', '.join(rateless)}."
+            )
+        if problems:
+            raise RuntimeError(" ".join(problems))
+        if not listed:
+            # Which of the two this is decides what to do about it, and saying
+            # only the first left someone comparing it against a company they
+            # could see was full of categorised products.
+            why = (
+                "no categories have been made in it at all"
+                if not listing.categories_that_exist
+                else f"it has {listing.categories_that_exist} categor"
+                + ("y" if listing.categories_that_exist == 1 else "ies")
+                + " but no product sits under one"
+            )
+            return (
+                f"I read {seen} in {accounting.company} and {why}, so the engagement list"
+                " decides which engagements are live, as it did before"
+            )
+        return (
+            f"{len(answer.live)} live engagement(s) in {accounting.company}, each with a row"
+            f" on the engagement list to schedule it from; I read {seen}"
+        )
+
+    return _run(name, run)
+
+
+def check_quickbooks_pay(accounting: object, wanted: Callable[[], list[ExpectedProduct]]) -> Check:
+    """Does the purchase side of each product agree with the engagement list?
+
+    What Icon pays, and who it pays, are still taken from the engagement list.
+    This check reads what QuickBooks holds beside them, so the two can be made
+    to agree before anything is moved across (docs/decisions.md #37). A product
+    with nothing on its purchase side is not a disagreement -- it is one that
+    has not been filled in.
+    """
+    from finance_ops_agent.adapters.quickbooks.online import QuickBooksOnline
+
+    name = "quickbooks pay rates"
+    assert isinstance(accounting, QuickBooksOnline)
+
+    def run() -> str:
+        expected_all = wanted()
+        differences: list[str] = []
+        empty = 0
+        checked = 0
+        for expected in expected_all:
+            try:
+                product = accounting.product_for(expected.consultant, expected.clients)
+            except Exception:
+                continue  # the products check reports this one
+            if product.purchase_cost_cents is None and not product.vendor:
+                empty += 1
+                continue
+            checked += 1
+            if (
+                product.purchase_cost_cents is not None
+                and product.purchase_cost_cents != expected.pay_rate_cents
+            ):
+                differences.append(
+                    f"{expected.consultant} at {expected.client}: QuickBooks pays"
+                    f" ${Money(product.purchase_cost_cents)} an hour and the engagement"
+                    f" list says ${Money(expected.pay_rate_cents)}."
+                )
+            # Either name is agreement: the display name is often the person
+            # and the company name the firm Icon actually pays.
+            known = {name for name in (product.vendor, product.vendor_company) if name}
+            if known and expected.payee not in known:
+                differences.append(
+                    f"{expected.consultant} at {expected.client}: QuickBooks pays"
+                    f" {' or '.join(sorted(known))} and the engagement list says"
+                    f" {expected.payee}."
+                )
+        if differences:
+            raise RuntimeError(
+                "QuickBooks and the engagement list do not agree about what Icon pays."
+                " Nothing is paid from QuickBooks yet, so no payment instruction is"
+                " wrong today, but these have to agree before anything moves across. "
+                + " ".join(differences)
+            )
+        if not checked:
+            return (
+                f"nothing to compare yet: none of {empty} engagement(s) has a rate or a"
+                " vendor on the purchase side of its product"
+            )
+        note = f"all {checked} engagement(s) with a purchase side agree with the engagement list"
+        return note if not empty else f"{note}; {empty} not filled in yet"
+
+    return _run(name, run)
+
+
+@dataclass(frozen=True)
+class ExpectedParty:
+    """A client or a payee as the engagement list has it, for comparing with
+    what QuickBooks holds about the same person or company."""
+
+    what: str  # "client" or "payee", for the message
+    name: str
+    lookup: str  # the name or id to ask QuickBooks by
+    emails: list[str]
+    payment_terms_days: int
+
+
+class PartyRecords(Protocol):
+    """The two questions this check asks of an accounting system.
+
+    A protocol rather than the adapter itself: the checks above take `object`
+    and assert the concrete type, which means they can only be exercised
+    through recorded HTTP. Saying what is actually needed costs nothing and
+    lets the comparison be tested on its own.
+    """
+
+    @property
+    def company(self) -> str: ...
+
+    def customer(self, name: str) -> "AccountingParty | None": ...
+
+    def payee(self, ref: str) -> "AccountingParty | None": ...
+
+
+def check_quickbooks_contacts(
+    accounting: PartyRecords, wanted: Callable[[], list[ExpectedParty]]
+) -> Check:
+    """Do QuickBooks' own customer and vendor records agree with the list?
+
+    A client's billing addresses and terms, and a payee's terms, are used now
+    (docs/decisions.md #52), so a difference here is a timesheet that will
+    wait for Kevin; finding it now finds it while someone is looking at the
+    engagement list, not when an invoice is due. A payee's address is still
+    only compared (decision 45): it says who may send a timesheet.
+
+    A blank field in QuickBooks is not a disagreement. It is one that has not
+    been filled in, and saying so is how Kevin knows what is left to do.
+    """
+    name = "quickbooks contacts"
+
+    def run() -> str:
+        differences: list[str] = []
+        empty: list[str] = []
+        compared = 0
+        for party in wanted():
+            if not party.lookup:
+                # Nothing to ask by: the engagement's product names no vendor.
+                empty.append(f"{party.name} (no vendor on its product)")
+                continue
+            try:
+                held = (
+                    accounting.customer(party.lookup)
+                    if party.what == "client"
+                    else accounting.payee(party.lookup)
+                )
+            except Exception as error:
+                differences.append(f"{party.name}: {error}")
+                continue
+            if held is None:
+                empty.append(f"{party.name} (no record in QuickBooks)")
+                continue
+            compared += 1
+            held_emails = split_addresses(held.email)
+            if not held_emails:
+                empty.append(f"{party.name} (no email)")
+            elif party.what == "client" and not same_addresses(held_emails, party.emails):
+                # A client's addresses are where the invoice goes, and QuickBooks'
+                # are the ones used (decision 52): every one has to be on both.
+                differences.append(
+                    f"QuickBooks sends {party.name}'s invoices to {', '.join(held_emails)}"
+                    f" and the engagement list says {', '.join(party.emails) or 'nowhere'}."
+                )
+            elif (
+                party.what == "payee"
+                and party.emails
+                and not {address.casefold() for address in held_emails}
+                & {address.casefold() for address in party.emails}
+            ):
+                # Not used yet: a payee's address says who may send a timesheet,
+                # which moves with the rest of the rules in the Notes box.
+                differences.append(
+                    f"QuickBooks has {held.email} for {party.name} and the engagement"
+                    f" list has {', '.join(party.emails)}."
+                )
+            if held.payment_terms_days is None:
+                empty.append(f"{party.name} ({held.terms_note or 'no payment terms'})")
+            elif held.payment_terms_days != party.payment_terms_days:
+                differences.append(
+                    f"QuickBooks gives {party.name} {held.payment_terms_days} day(s) to"
+                    f" pay and the engagement list says {party.payment_terms_days}."
+                )
+        if differences:
+            raise RuntimeError(
+                "QuickBooks and the engagement list do not agree about who to contact or"
+                " when payment is due. The agent uses QuickBooks' billing addresses and"
+                " terms, and holds a timesheet for your answer while the two disagree, so"
+                " make these agree before one arrives. " + " ".join(differences)
+            )
+        if any("no terms on the record" in said for said in empty):
+            # Said once, not per record: if QuickBooks plainly shows terms that
+            # this says are absent, the record itself settles it and guessing
+            # at the field name does not.
+            empty.append('`fops qbo-show customer "<name>"` prints what QuickBooks sent')
+        missing = ", ".join(sorted(set(empty)))
+        if not compared:
+            found = f"nothing to compare yet in {accounting.company}"
+            return f"{found}; not filled in yet: {missing}" if missing else found
+        note = f"all {compared} record(s) in {accounting.company} agree with the engagement list"
+        return note if not missing else f"{note}; not filled in yet: {missing}"
 
     return _run(name, run)
 
@@ -277,3 +635,48 @@ def check_claude_api(model: str, describe: Callable[[str], str] | None = None) -
     """The credentials that read timesheets (docs/integrations/claude-extraction.md)."""
     ask = describe or _describe_claude_model
     return _run("claude api", lambda: ask(model))
+
+
+def check_quickbooks_setup(
+    build: Callable[[], EngagementWorkbook], forwarders: tuple[str, ...]
+) -> Check:
+    """Could the engagements be built from QuickBooks alone? (decision 53)
+
+    Run whatever FOPS_ENGAGEMENTS says, so the Notes lines can be filled in and
+    proved before anything depends on them. Every problem names the record and
+    the line to fix; a vendor with no email is a to-do rather than a failure
+    while timesheets are forwarded, and a failure once they are not.
+    """
+    from finance_ops_agent.application.from_quickbooks import vendors_without_email
+
+    name = "quickbooks setup"
+
+    def run() -> str:
+        built = build()
+        if built.problems:
+            raise RuntimeError(
+                "These stop QuickBooks describing every engagement on its own: "
+                + " ".join(f"{problem.message}." for problem in built.problems)
+            )
+        unrecognised = vendors_without_email(built)
+        if unrecognised and not forwarders:
+            raise RuntimeError(
+                "no timesheet can be recognised for "
+                + ", ".join(unrecognised)
+                + ": their vendor in QuickBooks has no email, and nobody is set up to"
+                " forward timesheets. Put the address their timesheets come from on"
+                " the vendor."
+            )
+        clients = len({engagement.client for engagement in built.engagements})
+        said = (
+            f"QuickBooks alone describes all {len(built.engagements)} engagement(s) for"
+            f" {clients} client(s)"
+        )
+        if unrecognised:
+            said += (
+                "; still to do before timesheets stop being forwarded: an email on the"
+                " vendor for " + ", ".join(unrecognised)
+            )
+        return said
+
+    return _run(name, run)

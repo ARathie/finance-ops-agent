@@ -1,0 +1,32 @@
+{
+  "exchanges": [
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20%2A%20FROM%20Item%20WHERE%20Active%20%3D%20true%20STARTPOSITION%201%20MAXRESULTS%201000",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {
+            "Item": [
+              {
+                "Id": "20",
+                "Name": "Acme Corp",
+                "FullyQualifiedName": "Acme Corp",
+                "Type": "Category"
+              },
+              {
+                "Id": "42",
+                "Name": "Priya Shah",
+                "FullyQualifiedName": "Priya Shah",
+                "Type": "Service",
+                "UnitPrice": 140.0
+              }
+            ]
+          }
+        },
+        "headers": {
+          "intuit_tid": "x"
+        }
+      }
+    }
+  ]
+}

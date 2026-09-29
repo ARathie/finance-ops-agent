@@ -179,7 +179,18 @@ class _RowReader:
             return False
         return value == "yes"
 
-    def choice(self, column: str, allowed: type[StrEnum], *, forbid: set[str] | None = None) -> str:
+    def choice(
+        self,
+        column: str,
+        allowed: type[StrEnum],
+        *,
+        forbid: set[str] | None = None,
+        default: str = "",
+    ) -> str:
+        """`default` makes the cell optional: blank means that, and is not a
+        problem to report."""
+        if default and not self.text(column):
+            return default
         value = self.required(column).lower()
         allowed_values = {item.value for item in allowed} - (forbid or set())
         if value and value not in allowed_values:
@@ -301,7 +312,12 @@ def _parse_engagement(raw: RawRow) -> tuple[Engagement | None, list[ListRowProbl
     row = _RowReader("Engagements", raw)
     consultant = row.required("Consultant")
     client = row.required("Client")
-    schedule_value = row.choice("Billing schedule", BillingSchedule)
+    # Every engagement Icon bills is monthly, so a blank cell means monthly
+    # rather than a row Kevin has to finish (docs/decisions.md #44). The other
+    # schedules still work; they just have to be asked for.
+    schedule_value = row.choice(
+        "Billing schedule", BillingSchedule, default=BillingSchedule.MONTHLY.value
+    )
     first_period_start = row.date("First period start", required=False)
     if (
         schedule_value in (BillingSchedule.WEEKLY.value, BillingSchedule.EVERY_TWO_WEEKS.value)
@@ -326,9 +342,7 @@ def _parse_engagement(raw: RawRow) -> tuple[Engagement | None, list[ListRowProbl
         role=row.required("Role"),
         start_date=start_date or date.min,
         end_date=end_date,
-        billing_schedule=BillingSchedule(schedule_value)
-        if schedule_value
-        else BillingSchedule.MONTHLY,
+        billing_schedule=BillingSchedule(schedule_value or BillingSchedule.MONTHLY),
         first_period_start=first_period_start,
         bill_rate=bill_rate,
         pay_rate=pay_rate,

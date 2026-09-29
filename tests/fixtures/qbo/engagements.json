@@ -1,0 +1,56 @@
+{
+  "exchanges": [
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20%2A%20FROM%20Item%20WHERE%20Active%20%3D%20true%20STARTPOSITION%201%20MAXRESULTS%201000",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {
+            "Item": [
+              {
+                "Id": "20",
+                "Name": "Acme Corp",
+                "FullyQualifiedName": "Acme Corp",
+                "Type": "Category"
+              },
+              {
+                "Id": "42",
+                "Name": "Priya Shah",
+                "FullyQualifiedName": "Acme Corp:Priya Shah",
+                "Type": "Service",
+                "UnitPrice": 140.0,
+                "PurchaseCost": 100.0,
+                "PrefVendorRef": {
+                  "value": "7",
+                  "name": "Priya Shah"
+                }
+              },
+              {
+                "Id": "43",
+                "Name": "Dana Cruz",
+                "FullyQualifiedName": "Acme Corp:Dana Cruz",
+                "Type": "Service",
+                "UnitPrice": 140.0,
+                "PurchaseCost": 100.0,
+                "PrefVendorRef": {
+                  "value": "8",
+                  "name": "Dana Cruz"
+                }
+              },
+              {
+                "Id": "51",
+                "Name": "Consulting",
+                "FullyQualifiedName": "Consulting",
+                "Type": "Service",
+                "UnitPrice": 0.0
+              }
+            ]
+          }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    }
+  ]
+}

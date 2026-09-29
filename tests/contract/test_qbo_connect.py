@@ -13,6 +13,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -24,9 +25,11 @@ from finance_ops_agent.adapters.quickbooks.connect import (
     Callback,
     authorize_url,
     connect,
+    is_loopback,
+    parse_redirect,
     wait_for_callback,
 )
-from finance_ops_agent.adapters.quickbooks.tokens import TokenStore
+from finance_ops_agent.adapters.quickbooks.tokens import Tokens, TokenStore
 from tests.contract.http_replay import Replay
 
 TOKEN_URL = "POST https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
@@ -216,3 +219,117 @@ class TestTheLoopbackListener:
         body, _ = serve_one("the-state", "code=a-code&realmId=913&state=another-state")
 
         assert b"Something went wrong" in body
+
+
+PUBLIC_CALLBACK = "https://icon.example/icon-legal/callback.html"
+
+
+def connect_by_pasting(
+    store: TokenStore, pasted: Callable[[str], str], environment: str = "production"
+) -> Tokens:
+    return connect(
+        store,
+        client_id="a-client-id",
+        client_secret="a-client-secret",
+        environment=environment,
+        open_browser=False,
+        http=token_replay().client(),
+        redirect_uri=PUBLIC_CALLBACK,
+        read_pasted=pasted,
+    )
+
+
+class TestAProductionSignIn:
+    """A production app may not redirect to localhost (decision 51), so the
+    person pastes the address the public callback page landed on."""
+
+    def test_production_with_the_localhost_listener_is_refused_before_signing_in(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        store = TokenStore(tmp_path / "qbo_tokens.json")
+
+        def never(port: int, state: str) -> Callback:
+            raise AssertionError("no listener should have been started")
+
+        monkeypatch.setattr(connect_module, "wait_for_callback", never)
+        with pytest.raises(QuickBooksReconnect, match="QBO_REDIRECT_URI"):
+            connect(
+                store,
+                client_id="a-client-id",
+                client_secret="a-client-secret",
+                environment="production",
+                open_browser=False,
+                http=token_replay().client(),
+            )
+        assert not store.exists()
+
+    def test_the_pasted_address_is_read_and_the_company_stored(self, tmp_path: Path) -> None:
+        store = TokenStore(tmp_path / "qbo_tokens.json")
+        asked: list[str] = []
+
+        def paste(prompt: str) -> str:
+            asked.append(prompt)
+            state = parse_qs(urlparse(asked_url[0]).query)["state"][0]
+            return f"  {PUBLIC_CALLBACK}?code=a-code&state={state}&realmId=9341450000000  "
+
+        asked_url: list[str] = []
+        original = connect_module.authorize_url
+
+        def remember(client_id: str, redirect_uri: str, state: str) -> str:
+            url = original(client_id, redirect_uri, state)
+            asked_url.append(url)
+            return url
+
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(connect_module, "authorize_url", remember)
+            tokens = connect_by_pasting(store, paste)
+
+        assert asked, "the person was asked to paste the address"
+        assert parse_qs(urlparse(asked_url[0]).query)["redirect_uri"] == [PUBLIC_CALLBACK]
+        assert tokens.environment == "production"
+        assert store.load().realm_id == "9341450000000"
+        assert store.load().environment == "production"
+
+    def test_a_pasted_address_from_another_sign_in_is_refused(self, tmp_path: Path) -> None:
+        store = TokenStore(tmp_path / "qbo_tokens.json")
+
+        def paste(prompt: str) -> str:
+            return f"{PUBLIC_CALLBACK}?code=a-code&state=an-old-state&realmId=934"
+
+        with pytest.raises(QuickBooksReconnect, match="did not match this request"):
+            connect_by_pasting(store, paste)
+        assert not store.exists()
+
+    def test_pasting_something_that_is_not_the_address_is_refused(self, tmp_path: Path) -> None:
+        store = TokenStore(tmp_path / "qbo_tokens.json")
+
+        with pytest.raises(QuickBooksReconnect, match="no sign-in code"):
+            connect_by_pasting(store, lambda prompt: "I closed the tab")
+        assert not store.exists()
+
+    def test_a_refusal_in_the_pasted_address_is_passed_on(self, tmp_path: Path) -> None:
+        store = TokenStore(tmp_path / "qbo_tokens.json")
+
+        with pytest.raises(QuickBooksReconnect, match="access_denied"):
+            connect_by_pasting(
+                store, lambda prompt: f"{PUBLIC_CALLBACK}?error=access_denied&state=x"
+            )
+        assert not store.exists()
+
+
+class TestParsingTheRedirect:
+    def test_it_reads_every_field(self) -> None:
+        assert parse_redirect("https://a.example/cb?code=c&realmId=9&state=s") == Callback(
+            code="c", realm_id="9", state="s"
+        )
+
+    @pytest.mark.parametrize(
+        ("uri", "loopback"),
+        [
+            ("http://localhost:8723/callback", True),
+            ("http://127.0.0.1:8723/callback", True),
+            ("https://icon.example/icon-legal/callback.html", False),
+        ],
+    )
+    def test_which_redirects_are_loopback(self, uri: str, loopback: bool) -> None:
+        assert is_loopback(uri) is loopback

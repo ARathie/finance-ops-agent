@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from finance_ops_agent.cli.main import main
+from finance_ops_agent.cli.main import _one_line, main
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "fake_run"
 
@@ -46,3 +46,130 @@ def test_status_reads_the_same_data_folder(
 
 def test_dry_run_without_fake_is_refused(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["dry-run"]) == 2
+
+
+class TestTheEngagementsCommand:
+    """Moving the engagement list off a file and into the agent's own store
+    (decision 40)."""
+
+    def settings(self, monkeypatch: pytest.MonkeyPatch, data: Path) -> None:
+        for name, value in (
+            ("FOPS_TIMEZONE", "America/New_York"),
+            ("FOPS_ADMIN_EMAIL", "kevin@icon-technologies.com"),
+            ("FOPS_AGENT_MAILBOX", "jay@icon-technologies.com"),
+            ("FOPS_ENGAGEMENT_LIST", str(FIXTURES / "engagements")),
+            ("FOPS_DATA_DIR", str(data)),
+            ("FOPS_TIMESHEET_FORWARDERS", ""),
+        ):
+            monkeypatch.setenv(name, value)
+
+    def test_it_says_where_the_list_is_read_from(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self.settings(monkeypatch, tmp_path)
+
+        assert main(["engagements"]) == 0
+        before = capsys.readouterr().out
+        assert "engagements" in before  # the fixture folder
+        assert "Priya Shah at Acme Corp" in before
+
+        assert main(["engagements", "import"]) == 0
+        capsys.readouterr()
+
+        assert main(["engagements"]) == 0
+        after = capsys.readouterr().out
+        assert "the agent's own store" in after
+        assert "Priya Shah at Acme Corp" in after
+
+    def test_forget_puts_it_back_on_the_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self.settings(monkeypatch, tmp_path)
+        assert main(["engagements", "import"]) == 0
+        capsys.readouterr()
+
+        assert main(["engagements", "forget"]) == 0
+        assert "will read" in capsys.readouterr().out
+
+        assert main(["engagements"]) == 0
+        assert "the agent's own store" not in capsys.readouterr().out
+
+    def test_a_workbook_with_problems_is_not_imported(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Importing one the agent would refuse to bill from would only move
+        the problem somewhere harder to see."""
+        broken = tmp_path / "broken"
+        broken.mkdir()
+        for name in ("clients", "consultants", "vendors", "engagements"):
+            text = (FIXTURES / "engagements" / f"{name}.csv").read_text()
+            if name == "clients":
+                text = text.replace(",AC,", ",,")  # no invoice code
+            (broken / f"{name}.csv").write_text(text)
+        self.settings(monkeypatch, tmp_path)
+
+        assert main(["engagements", "import", "--from", str(broken)]) == 1
+        out = capsys.readouterr().out
+        assert "nothing was imported" in out
+        assert "Invoice code" in out
+
+        assert main(["engagements"]) == 0
+        assert "the agent's own store" not in capsys.readouterr().out
+
+
+class TestTheShowCommand:
+    """`fops qbo-show` prints a record as QuickBooks returns it, so what a
+    field is called and whether it is there can be read rather than guessed
+    (decision 46)."""
+
+    def test_every_kind_it_offers_knows_what_to_ask_for(self) -> None:
+        from finance_ops_agent.cli.main import SHOWABLE
+
+        for entity, field in SHOWABLE.values():
+            assert entity and field
+
+    def test_the_brief_line_shows_what_has_been_in_question(self) -> None:
+        """What kind of thing it is, and whether it sits under anything: the
+        two facts the category hunt turned on."""
+        line = _one_line(
+            {
+                "Id": "22",
+                "Type": "Inventory",
+                "Name": "Subramanian Arumugam",
+                "FullyQualifiedName": "Subramanian Arumugam",
+            }
+        )
+        assert "22" in line
+        assert "Inventory" in line
+        assert "under" not in line  # it sits under nothing, and that shows
+
+    def test_a_parent_shows_even_when_only_its_id_came_back(self) -> None:
+        line = _one_line(
+            {"Id": "42", "Type": "Service", "Name": "Priya Shah", "ParentRef": {"value": "20"}}
+        )
+        assert "under id 20" in line
+
+    def test_a_parent_in_the_name_alone_still_shows(self) -> None:
+        line = _one_line(
+            {
+                "Id": "42",
+                "Type": "Service",
+                "Name": "Priya Shah",
+                "FullyQualifiedName": "Acme Corp:Priya Shah",
+            }
+        )
+        assert "under Acme Corp" in line
+
+    def test_an_inactive_record_is_marked(self) -> None:
+        """Inactive is how an engagement ends, so it has to be visible here."""
+        line = _one_line({"Id": "9", "Type": "Service", "Name": "Gone", "Active": False})
+        assert "(inactive)" in line
+
+    def test_a_name_with_a_quote_in_it_cannot_break_out_of_the_query(self) -> None:
+        """`O'Brien Holdings` is a company name, not the end of a string."""
+        from finance_ops_agent.cli.main import SHOWABLE
+
+        _, field = SHOWABLE["customer"]
+        name = "O'Brien Holdings"
+        where = f" WHERE {field} = '{name.replace(chr(39), chr(39) * 2)}'"
+        assert where == " WHERE DisplayName = 'O''Brien Holdings'"

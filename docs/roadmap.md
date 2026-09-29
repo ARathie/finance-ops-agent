@@ -187,12 +187,16 @@ Done when:
 
 ## PR 16 — QuickBooks Online, live
 
-The code exists (PR 9). This needs an Intuit developer app and a sandbox company, and then Icon's move from QuickBooks Desktop to Online. Manual mode keeps working meanwhile.
+The code exists (PR 9). This needs an Intuit developer app, and then Icon's move from QuickBooks Desktop to Online. Manual mode keeps working meanwhile.
+
+Production keys straight away, no sandbox (decision 51). Code: `QBO_REDIRECT_URI` and the paste-the-address sign-in a production app needs, since Intuit refuses localhost redirects for production; `callback.html` on the public site; `fops doctor` fails when the stored connection is sandbox but the setting says production.
 
 Done when:
 
 - [ ] `fops qbo-test-invoice` creates one invoice, checks its number and total, saves the PDF and removes it again, with no mailbox and no email (tested against recorded responses, including a number QuickBooks already has).
-- [ ] **Needs a person:** the Intuit app is created; **Custom transaction numbers** is turned on in the sandbox company (Settings -> Account and settings -> Sales), or QuickBooks ignores Kevin's numbering (decision 29); every active consultant has a product with their bill rate on it, named as the Consultants sheet names them (decision 30); `fops qbo-connect` against the company being tested (Icon's own, while it is not yet in use -- decision 31); `fops doctor` passes the QuickBooks checks; `fops qbo-test-invoice` creates one invoice whose number is the one the agent asked for and whose total equals the agent's to the cent, and the PDF it saves shows the customised template with period ending, description, hours, rate and amount.
+- [x] `fops qbo-connect` signs in to a production app by pasting the redirect address, refuses production without `QBO_REDIRECT_URI` before opening anything, and refuses a pasted address from another sign-in; `fops doctor` fails on sandbox tokens under production settings (tested, no network).
+- [ ] **Needs a person:** `callback.html` is published with the other public pages, its address is under the app's **production** Redirect URIs and in `QBO_REDIRECT_URI`, the production client id and secret are in `.env` with `QBO_ENVIRONMENT=production`, and `fops qbo-connect` stores a connection that `fops doctor` reports as "connected to the production company".
+- [ ] **Needs a person:** the Intuit app is created; **Custom transaction numbers** is turned on in the company being tested (Settings -> Account and settings -> Sales), or QuickBooks ignores Kevin's numbering (decision 29); every active consultant has a product with their bill rate on it, named as the Consultants sheet names them (decision 30); `fops qbo-connect` against the company being tested (Icon's own, while it is not yet in use -- decision 31); `fops doctor` passes the QuickBooks checks; `fops qbo-test-invoice` creates one invoice whose number is the one the agent asked for and whose total equals the agent's to the cent, and the PDF it saves shows the customised template with period ending, description, hours, rate and amount.
 - [ ] **Needs a person:** after Icon's move to QuickBooks Online: **Custom transaction numbers** is on in the real company too; the customer names in QuickBooks match the engagement list's "QuickBooks customer" column; `fops qbo-connect` against the real company; `FOPS_ACCOUNTING=quickbooks`; the first live cycle's invoices are reviewed by Kevin in QuickBooks; the daily paid check marks a real paid invoice `client_paid`.
 
 ## PR 17 — Automatic mode, engagement by engagement
@@ -203,6 +207,20 @@ Done when:
 
 - [ ] **Needs a person:** after at least three clean ask-first cycles for an engagement, Kevin sets "Send automatically = yes" on its row and `FOPS_MODE=auto` on the server; the next clean timesheet for it goes out without an approval email, with Kevin on CC.
 - [ ] **Needs a person:** the stop button is proven live: `FOPS_MODE=dry_run` is set, a timesheet arrives, nothing is sent, Kevin gets the preview; then the mode is restored.
+
+## PR 18 — Off the spreadsheet: QuickBooks holds everything
+
+Per decision 52. Step 1 takes billing emails, payment terms and pay timing from QuickBooks' customer and vendor records; step 2 drops the columns that are only cross-checks after a clean cycle; step 3 moves what QuickBooks has no field for into the Notes box as labelled lines. When it is done, `engagements.xlsx` is no longer read.
+
+Done when:
+
+- [x] Step 1: a client's billing emails and terms and a payee's terms come from QuickBooks, blank falls back to the list, a disagreement is used and paused for Kevin, a record QuickBooks cannot serve does not stop the run, and `fops doctor` requires a client's addresses to be the same set on both sides (tested, no network).
+- [ ] **Needs a person:** every client's billing addresses are in its QuickBooks customer email (comma-separated), and `fops doctor` passes **quickbooks contacts** with no disagreements.
+- [x] Step 3 (decision 53): `FOPS_ENGAGEMENTS=quickbooks` builds the whole engagement list from QuickBooks -- `Invoice code:` in customer Notes, `Start:` in the product's purchase description, the vendor's email as the timesheet sender, defaults for the rest; a line that cannot be read is a problem naming the record, never a guess; one address for two consultants lets the name decide or asks; an outage falls back to the list; doctor's **quickbooks setup** check (tested, no network).
+- [x] **Needs a person:** each customer has its `Invoice code:` line, each product its `Start:` line, each category is named as its customer, and `fops doctor` shows `ok   quickbooks setup`. Done Sep 2026: `QuickBooks alone describes all 4 engagement(s) for 2 client(s)` against the production company, with the bill rates, pay rates and contacts all agreeing with the engagement list.
+- [ ] **Needs a person:** each vendor's email is the address that consultant's timesheets come from, and the setup line has no "still to do".
+- [ ] **Needs a person:** `FOPS_ENGAGEMENTS=quickbooks` is set, `fops doctor` passes, and a forwarded timesheet goes through `fops dry-run` with the right client, hours and amount.
+- [ ] Step 2: after one full cycle with QuickBooks deciding, the cross-check columns and then the workbook itself stop being read.
 
 ## Later, if wanted
 

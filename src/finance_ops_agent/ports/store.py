@@ -39,6 +39,7 @@ class Store(Protocol):
         period: BillingPeriod,
         status: ItemStatus,
         snapshot: EngagementSnapshot,
+        engagement_ref: str = "",
     ) -> Item:
         """Create the one item for this consultant and period, with an audit row.
 
@@ -50,6 +51,16 @@ class Store(Protocol):
     def get_item(self, item_id: int) -> Item: ...
 
     def find_item(self, consultant: str, client: str, period: BillingPeriod) -> Item | None: ...
+
+    def find_item_by_engagement(self, engagement_ref: str, period: BillingPeriod) -> Item | None:
+        """The item for this engagement and period, found by the accounting
+        system's id rather than by name, so a rename does not orphan it
+        (docs/decisions.md #39)."""
+        ...
+
+    def relabel_item(self, item_id: int, consultant: str, client: str) -> Item:
+        """Catch the item's names up with the accounting system's."""
+        ...
 
     def list_items(self) -> list[Item]: ...
 

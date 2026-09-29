@@ -23,6 +23,7 @@ def set_env(monkeypatch: pytest.MonkeyPatch, **overrides: str | None) -> None:
         "FOPS_DATA_DIR",
         "FOPS_MODEL",
         "FOPS_ACCOUNTING",
+        "FOPS_ENGAGEMENTS",
         "MAIL_IMAP_HOST",
         "MAIL_IMAP_PORT",
         "MAIL_IMAP_SECURITY",
@@ -48,6 +49,7 @@ def test_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert config.data_dir == Path("data")
     assert config.model == "claude-opus-5"
     assert config.accounting == "manual"
+    assert config.engagements_from == "list"
 
 
 def test_the_timezone_has_no_default(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -152,3 +154,20 @@ def test_folder_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = MailSettings.from_env()
     assert settings.folder_prefix == "Agent"  # blank means the default
     assert settings.sent_folder == "Sent Items"
+
+
+def test_engagements_from_quickbooks(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch, FOPS_ACCOUNTING="quickbooks", FOPS_ENGAGEMENTS="quickbooks")
+    assert Config.from_env().engagements_from == "quickbooks"
+
+
+def test_engagements_from_quickbooks_needs_quickbooks(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch, FOPS_ENGAGEMENTS="quickbooks")
+    with pytest.raises(MissingSettingError, match="FOPS_ACCOUNTING=quickbooks"):
+        Config.from_env()
+
+
+def test_an_unknown_engagements_source_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch, FOPS_ENGAGEMENTS="spreadsheet")
+    with pytest.raises(MissingSettingError, match="list or quickbooks"):
+        Config.from_env()

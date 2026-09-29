@@ -30,7 +30,7 @@
 <p>Only Icon Technologies connects this agent, and only ever to Icon Technologies' own QuickBooks Online company. There is no sign-up, and no way for anyone else to connect it to theirs.</p>
 
 <h2>How it is done</h2>
-<p>Icon Technologies' administrator runs <code>fops qbo-connect</code> on the server the agent runs on. That opens Intuit's own sign-in page in a browser; the administrator signs in as Icon Technologies and approves the connection. Intuit sends the result back to a one-time listener on the server's own loopback address, and the agent stores the company id and the resulting tokens on that server, readable only by the account the agent runs as.</p>
+<p>Icon Technologies' administrator runs <code>fops qbo-connect</code> on the machine the agent runs on. That prints Intuit's own sign-in page; the administrator opens it in a browser, signs in as Icon Technologies and approves the connection. Intuit then sends the browser to <a href="callback.html">a page on this site</a> that shows its own address, and the administrator pastes that address back into the terminal. The page itself keeps and sends nothing. The agent turns the one-time code in the address into tokens and stores them, with the company id, on that machine, readable only by the account the agent runs as.</p>
 
 <p>The same command reconnects it. Connections need renewing if the agent has not run for an extended period, and the agent warns the administrator by email before that happens rather than waiting to fail.</p>
 

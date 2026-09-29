@@ -1,0 +1,60 @@
+{
+  "description": "The client's own customer record, read when a timesheet's engagement is snapshotted (decision 52): billing address and terms.",
+  "exchanges": [
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20%2A%20FROM%20Term",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {
+            "Term": [
+              {
+                "Id": "3",
+                "Name": "Net 30",
+                "DueDays": 30
+              },
+              {
+                "Id": "4",
+                "Name": "Net 15",
+                "DueDays": 15
+              },
+              {
+                "Id": "9",
+                "Name": "Due on receipt"
+              }
+            ]
+          }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20%2A%20FROM%20Customer%20WHERE%20Id%20%3D%20%2758%27",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {
+            "Customer": [
+              {
+                "Id": "58",
+                "DisplayName": "Acme Corporation",
+                "PrimaryEmailAddr": {
+                  "Address": "ap@acme.example"
+                },
+                "SalesTermRef": {
+                  "value": "3",
+                  "name": "Net 30"
+                }
+              }
+            ]
+          }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    }
+  ]
+}

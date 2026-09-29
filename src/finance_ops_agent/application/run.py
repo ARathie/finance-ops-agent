@@ -21,8 +21,9 @@ from finance_ops_agent.application import replies as reply_steps
 from finance_ops_agent.application import summary as summary_steps
 from finance_ops_agent.application.completion import complete_if_covered
 from finance_ops_agent.application.context import Mode, RunDeps, RunReport, Settings
+from finance_ops_agent.application.from_quickbooks import workbook_from_accounting
 from finance_ops_agent.domain import checks, emails
-from finance_ops_agent.domain.checks import Finding
+from finance_ops_agent.domain.checks import Finding, same_addresses, split_addresses
 from finance_ops_agent.domain.emails import EmailAttachment, TimesheetSummary
 from finance_ops_agent.domain.engagements import (
     Client,
@@ -31,21 +32,30 @@ from finance_ops_agent.domain.engagements import (
     Delivery,
     Engagement,
     EngagementWorkbook,
+    ListRowProblem,
     Vendor,
     parse_workbook,
 )
 from finance_ops_agent.domain.invoice_numbers import codes_for_client
 from finance_ops_agent.domain.items import EngagementSnapshot, Item, TimesheetRecord
+from finance_ops_agent.domain.live_engagements import LiveEngagements, live_engagements
 from finance_ops_agent.domain.messages import (
     InboundEmail,
     MessageKind,
     StoredAttachment,
     StoredMessage,
 )
+from finance_ops_agent.domain.money import Money
 from finance_ops_agent.domain.periods import BillingPeriod, billing_periods
 from finance_ops_agent.domain.reading import ReadingHints, TimesheetReading
 from finance_ops_agent.domain.review import ReviewCode
 from finance_ops_agent.domain.statuses import ItemStatus
+from finance_ops_agent.ports.accounting import (
+    AccountingFailed,
+    AccountingParty,
+    AccountingSystem,
+    EngagementRates,
+)
 from finance_ops_agent.ports.inbox import IGNORED_FOLDER, NEEDS_REVIEW_FOLDER, PROCESSED_FOLDER
 from finance_ops_agent.ports.reader import CantReadAttachmentError
 
@@ -57,7 +67,7 @@ __all__ = ["Mode", "RunDeps", "RunReport", "Settings", "run_once"]
 def run_once(deps: RunDeps, report: RunReport | None = None) -> RunReport:
     report = report or RunReport()
     logs.log("run started", mode=deps.settings.mode.value)
-    workbook = parse_workbook(deps.engagement_list.load())
+    workbook = _engagements(deps, report)
     _report_list_problems(deps, workbook, report)
     _create_expected_items(deps, workbook, report)
     _ingest_mailbox(deps, workbook, report)
@@ -100,11 +110,35 @@ def _open_review(deps: RunDeps, report: RunReport, item_id: int | None, finding:
         logs.log("review opened", item_id=item_id, code=finding.code.value)
 
 
+def _engagements(deps: RunDeps, report: RunReport) -> EngagementWorkbook:
+    """The engagement list this run works from.
+
+    Built from QuickBooks where the setting says so (decision 53). If
+    QuickBooks cannot be asked, the spreadsheet or its imported copy stands in
+    for this run, and the run says so: a QuickBooks outage must not stop mail
+    being read (decision 38), and it must not read as Icon having no work.
+    """
+    if deps.settings.engagements_from == "quickbooks":
+        try:
+            return workbook_from_accounting(deps.accounting)
+        except AccountingFailed as error:
+            logs.log("could not build the engagements from quickbooks", said=str(error)[:200])
+            report.note(
+                "QuickBooks could not be asked for the engagements, so this run used the"
+                " engagement list instead"
+            )
+    return parse_workbook(deps.engagement_list.load())
+
+
+def describe_problem(problem: ListRowProblem) -> str:
+    """Where a problem is, as Kevin would go and find it."""
+    if problem.row_number == 0:
+        return f"{problem.sheet}: {problem.message}"
+    return f"{problem.sheet} sheet, row {problem.row_number}: {problem.message}"
+
+
 def _report_list_problems(deps: RunDeps, workbook: EngagementWorkbook, report: RunReport) -> None:
-    problems = [
-        f"{problem.sheet} sheet, row {problem.row_number}: {problem.message}"
-        for problem in workbook.problems
-    ]
+    problems = [describe_problem(problem) for problem in workbook.problems]
     for message in problems:
         _open_review(deps, report, None, Finding(ReviewCode.LIST_ROW_PROBLEM, message))
     if problems:
@@ -180,7 +214,23 @@ def _consultant_code(workbook: EngagementWorkbook, rate_row: Engagement) -> str:
     return ""
 
 
-def build_snapshot(workbook: EngagementWorkbook, rate_row: Engagement) -> EngagementSnapshot | None:
+def build_snapshot(
+    workbook: EngagementWorkbook,
+    rate_row: Engagement,
+    accounting: AccountingSystem | None = None,
+) -> EngagementSnapshot | None:
+    """The engagement row as the item will remember it.
+
+    Both rates and the payee come from the engagement's product in the
+    accounting system where it has them, and from the engagement list where it
+    does not (docs/decisions.md #38 and #43). The engagement list stays the
+    cross-check: a disagreement is recorded on the snapshot so the caller can
+    ask Kevin, and QuickBooks' figure is the one used meanwhile.
+
+    The bill rate is the one that must be right before anything leaves: it is
+    what the client is charged and what Kevin approves. Taking it here means a
+    rate that has drifted is found when the timesheet is read, rather than by
+    creating the invoice and voiding it."""
     client = _client_by_name(workbook, rate_row.client)
     consultant = _consultant_by_name(workbook, rate_row.consultant)
     if client is None or consultant is None:
@@ -196,50 +246,303 @@ def build_snapshot(workbook: EngagementWorkbook, rate_row: Engagement) -> Engage
             consultant.paid_by,
             (consultant.pay_timing_days),
         )
+    bill_rate_cents = rate_row.bill_rate.cents
+    pay_rate_cents = rate_row.pay_rate.cents
+    said: list[str] = []
+    engagement_ref = ""
+    rates = _rates_from_accounting(accounting, rate_row, client)
+    who = f"{rate_row.consultant} at {rate_row.client}"
+    if rates is not None:
+        engagement_ref = rates.ref
+        if rates.bill_rate_cents != bill_rate_cents:
+            # Caught here rather than by the invoice: before this, a drifted
+            # rate was only found by creating the invoice, seeing the total
+            # disagree and voiding it, which spent a number and left a voided
+            # invoice in the books for a spreadsheet nobody had updated
+            # (decision 43).
+            said.append(
+                f"QuickBooks charges ${Money(rates.bill_rate_cents)} an hour for"
+                f" {who} and the engagement list says"
+                f" ${Money(bill_rate_cents)}. I am using QuickBooks' figure, which is"
+                " where the rate lives now. Make them agree."
+            )
+        bill_rate_cents = rates.bill_rate_cents
+    if rates is not None and rates.pay_rate_cents is not None:
+        if rates.pay_rate_cents != pay_rate_cents:
+            said.append(
+                f"QuickBooks pays {who}"
+                f" ${Money(rates.pay_rate_cents)} an hour and the engagement list says"
+                f" ${Money(pay_rate_cents)}. I am using QuickBooks' figure, which is"
+                " where the rate lives now. Make them agree."
+            )
+        pay_rate_cents = rates.pay_rate_cents
+    if rates is not None and rates.payee and rates.payee != payee:
+        said.append(
+            f"QuickBooks pays {rates.payee} for {who} and the engagement list says"
+            f" {payee}. I am using QuickBooks' answer. Make them agree."
+        )
+        payee = rates.payee
+    # Where invoices go, how long the client has, and how long Icon has to pay:
+    # QuickBooks' customer and vendor records where they say, the engagement
+    # list where they are blank, and Kevin told where the two disagree
+    # (decision 52).
+    billing_emails = list(client.billing_emails)
+    payment_terms_days = client.payment_terms_days
+    legal_name = client.legal_name
+    held = _party_from_accounting(accounting, "customer", client.quickbooks_customer or legal_name)
+    if held is not None:
+        legal_name = held.company or held.name or legal_name
+        held_emails = split_addresses(held.email)
+        if held_emails and not same_addresses(held_emails, billing_emails):
+            said.append(
+                f"QuickBooks sends {client.name}'s invoices to {', '.join(held_emails)} and"
+                f" the engagement list says {', '.join(billing_emails) or 'nowhere'}. I am"
+                " using QuickBooks' addresses. Make them agree."
+            )
+        billing_emails = held_emails or billing_emails
+        if held.payment_terms_days is not None:
+            if held.payment_terms_days != payment_terms_days:
+                said.append(
+                    f"QuickBooks gives {client.name} {held.payment_terms_days} day(s) to pay"
+                    f" and the engagement list says {payment_terms_days}. I am using"
+                    " QuickBooks' terms. Make them agree."
+                )
+            payment_terms_days = held.payment_terms_days
+    paid_to = _party_from_accounting(accounting, "payee", rates.payee_ref if rates else "")
+    if paid_to is not None and paid_to.payment_terms_days is not None:
+        if paid_to.payment_terms_days != pay_timing:
+            said.append(
+                f"QuickBooks gives Icon {paid_to.payment_terms_days} day(s) to pay {payee}"
+                f" and the engagement list says {pay_timing}. I am using QuickBooks'"
+                " terms. Make them agree."
+            )
+        pay_timing = paid_to.payment_terms_days
     return EngagementSnapshot(
-        bill_rate_cents=rate_row.bill_rate.cents,
-        pay_rate_cents=rate_row.pay_rate.cents,
-        payment_terms_days=client.payment_terms_days,
+        bill_rate_cents=bill_rate_cents,
+        pay_rate_cents=pay_rate_cents,
+        payment_terms_days=payment_terms_days,
         pay_timing_days=pay_timing,
-        billing_emails=list(client.billing_emails),
+        billing_emails=billing_emails,
         cc_emails=list(client.cc_emails),
         payee=payee,
         paid_by=paid_by.value,
         engagement_row_number=rate_row.row_number,
         role=rate_row.role,
-        client_legal_name=client.legal_name,
+        client_legal_name=legal_name,
         quickbooks_customer=client.quickbooks_customer,
         client_invoice_code=client.invoice_code,
         consultant_code=_consultant_code(workbook, rate_row),
         client_delivery=client.delivery.value,
         send_automatically=rate_row.send_automatically,
+        rate_disagreement=" ".join(said),
+        engagement_ref=engagement_ref,
     )
 
 
+def _rates_from_accounting(
+    accounting: "AccountingSystem | None", rate_row: Engagement, client: Client
+) -> "EngagementRates | None":
+    """Ask the accounting system, and carry on without it when it cannot say.
+
+    An accounting system that is down must not stop timesheets being read: the
+    engagement list still has a rate, and the invoice is made on a later run
+    anyway (decision 38).
+    """
+    if accounting is None:
+        return None
+    names = [
+        name
+        for name in dict.fromkeys([rate_row.client, client.quickbooks_customer, client.legal_name])
+        if name
+    ]
+    try:
+        return accounting.engagement_rates(rate_row.consultant, names)
+    except AccountingFailed as error:
+        logs.log(
+            "could not ask the accounting system about the rates",
+            consultant=rate_row.consultant,
+            client=rate_row.client,
+            said=str(error)[:200],
+        )
+        return None
+
+
+def _party_from_accounting(
+    accounting: "AccountingSystem | None", which: str, lookup: str
+) -> "AccountingParty | None":
+    """A customer or payee record, or None where the accounting system cannot
+    say. Like the rates, a record QuickBooks cannot find or cannot serve right
+    now leaves the engagement list in charge rather than stopping the run: the
+    invoice itself is what refuses a customer that does not exist."""
+    if accounting is None or not lookup:
+        return None
+    try:
+        return accounting.customer(lookup) if which == "customer" else accounting.payee(lookup)
+    except AccountingFailed as error:
+        logs.log(
+            "could not ask the accounting system about a contact",
+            which=which,
+            said=str(error)[:200],
+        )
+        return None
+
+
+def _find_item(
+    deps: RunDeps,
+    workbook: EngagementWorkbook,
+    rate_row: Engagement | None,
+    consultant: str,
+    client: str,
+    period: BillingPeriod,
+) -> Item | None:
+    """This engagement's item for this period, by the accounting system's id
+    first and by name second.
+
+    A client or consultant renamed in the accounting system is the same
+    engagement, and its id says so; looking only by name would have made a
+    second item and expected a second invoice (docs/decisions.md #39). Where
+    the item is found by id under different names, the names catch up.
+    """
+    if rate_row is not None:
+        client_row = _client_by_name(workbook, rate_row.client)
+        if client_row is not None:
+            rates = _rates_from_accounting(deps.accounting, rate_row, client_row)
+            if rates is not None and rates.ref:
+                found = deps.store.find_item_by_engagement(rates.ref, period)
+                if found is not None:
+                    if (found.consultant, found.client) != (consultant, client):
+                        logs.log(
+                            "an engagement was renamed; catching the item up",
+                            item_id=found.id,
+                            was=f"{found.consultant} at {found.client}",
+                            now=f"{consultant} at {client}",
+                        )
+                        return deps.store.relabel_item(found.id, consultant, client)
+                    return found
+    return deps.store.find_item(consultant, client, period)
+
+
+def _ask_about_the_rates(deps: RunDeps, item: Item, report: RunReport) -> None:
+    """QuickBooks and the engagement list disagree about a rate, or about who
+    Icon pays.
+
+    QuickBooks' figure is the one used, because that is where the rates live
+    now (decisions 38 and 43), but Kevin is the one who pays and who signs off
+    what a client is charged, and he is told before either happens.
+
+    This **pauses the item** until he answers, as every review does. For the
+    bill rate that is plainly right -- nothing should be invoiced at a price
+    two systems disagree about. For the pay rate it means a client's invoice
+    waits on a disagreement that does not affect it, which is the cost of one
+    mechanism rather than two. Either way it is meant to be rare: `fops doctor`
+    compares the two before any timesheet arrives, so the disagreements are
+    found when someone is looking at the engagement list rather than when an
+    invoice is due.
+    """
+    if not item.snapshot.rate_disagreement:
+        return
+    if deps.store.open_review(
+        item.id, ReviewCode.LIST_ROW_PROBLEM.value, item.snapshot.rate_disagreement
+    ):
+        report.reviews_opened += 1
+        email = emails.needs_review(
+            deps.settings.admin_email,
+            f"{item.consultant} — {item.client}",
+            [item.snapshot.rate_disagreement],
+        )
+        outgoing_steps.enqueue_email(deps, "review_email", f"review:pay:{item.id}", item.id, email)
+
+
+def _which_engagements_are_live(
+    deps: RunDeps, workbook: EngagementWorkbook, report: RunReport
+) -> LiveEngagements:
+    """Ask the accounting system which engagements are live, and join.
+
+    QuickBooks holds the engagements now, so it is what says one has finished:
+    Kevin makes the product inactive and the agent stops expecting timesheets
+    (decision 42). The schedule still comes off the workbook row, which is why
+    an engagement QuickBooks has and the list does not is a review rather than
+    a guess.
+
+    An accounting system that cannot answer does not stop the run, for the same
+    reason as the rates (decision 38): the engagement list still says which
+    engagements are active, the timesheets are still read, and the next run
+    picks the answer up. Being unable to ask must never look like Icon having
+    stopped working.
+    """
+    if deps.settings.engagements_from == "quickbooks":
+        # Built from QuickBooks' live products in the first place, so every
+        # engagement here is live and every live product that could not be
+        # built has already been reported with the reason.
+        return LiveEngagements(
+            live=list(dict.fromkeys((row.consultant, row.client) for row in workbook.engagements))
+        )
+    listed: list[tuple[str, str]] = []
+    try:
+        listed = [
+            (engagement.consultant, engagement.client)
+            for engagement in deps.accounting.engagements().live
+        ]
+    except AccountingFailed as error:
+        logs.log(
+            "could not ask the accounting system which engagements are live", said=str(error)[:200]
+        )
+    answer = live_engagements(workbook, listed)
+    for described in answer.without_a_row:
+        _open_review(
+            deps,
+            report,
+            None,
+            Finding(
+                ReviewCode.LIST_ROW_PROBLEM,
+                f"QuickBooks has an engagement for {described} and the engagement list has"
+                " no row for it, so I do not know how often to expect a timesheet or when"
+                " the periods end. Add the row, or make the product inactive in QuickBooks"
+                " if the engagement has finished.",
+            ),
+        )
+    for consultant, client in answer.finished:
+        # Not a review: `fops doctor` fails its products check on exactly this,
+        # loudly and before any timesheet is due. Saying it twice would train
+        # Kevin to skim both.
+        logs.log("no longer live in the accounting system", consultant=consultant, client=client)
+        report.note(f"no new periods expected: {consultant} at {client} is not live in QuickBooks")
+    return answer
+
+
 def _create_expected_items(deps: RunDeps, workbook: EngagementWorkbook, report: RunReport) -> None:
-    """A billing period that has ended for an active engagement, with no
-    timesheet yet, becomes a waiting_for_timesheet item."""
+    """A billing period that has ended for a live engagement, with no timesheet
+    yet, becomes a waiting_for_timesheet item."""
     today = deps.clock.today()
-    for (consultant, client), rows in _engagement_pairs(workbook).items():
-        if not any(row.active for row in rows):
-            continue
+    pairs = _engagement_pairs(workbook)
+    for consultant, client in _which_engagements_are_live(deps, workbook, report).live:
+        rows = pairs[(consultant, client)]
         start, end, latest = _pair_window(rows)
         for period in billing_periods(
             latest.billing_schedule, start, end, latest.first_period_start, until=today
         ):
             if period.end >= today:
                 continue
-            if deps.store.find_item(consultant, client, period) is not None:
-                continue
             rate_row, findings = checks.rate_row_in_force(rows, period)
             if rate_row is None or findings:
                 continue  # the rate problem surfaces when a timesheet arrives
-            snapshot = build_snapshot(workbook, rate_row)
+            # By the engagement's id first: a renamed one already has an item,
+            # and looking only by name would expect a second invoice for work
+            # that is already in hand (decision 39).
+            if _find_item(deps, workbook, rate_row, consultant, client, period) is not None:
+                continue
+            snapshot = build_snapshot(workbook, rate_row, deps.accounting)
             if snapshot is None:
                 continue
-            deps.store.create_item(
-                consultant, client, period, ItemStatus.WAITING_FOR_TIMESHEET, snapshot
+            waiting = deps.store.create_item(
+                consultant,
+                client,
+                period,
+                ItemStatus.WAITING_FOR_TIMESHEET,
+                snapshot,
+                snapshot.engagement_ref,
             )
+            _ask_about_the_rates(deps, waiting, report)
             report.expected_items_created += 1
             report.note(
                 f"waiting for a timesheet: {consultant} at {client}, {period.start} to {period.end}"
@@ -488,13 +791,19 @@ def _process_timesheet(
     is_duplicate = False
     is_correction = False
     if consultant is not None and client_name is not None and period is not None:
-        item = deps.store.find_item(consultant.name, client_name, period)
+        item = _find_item(deps, workbook, rate_row, consultant.name, client_name, period)
         if item is None and rate_row is not None:
-            snapshot = build_snapshot(workbook, rate_row)
+            snapshot = build_snapshot(workbook, rate_row, deps.accounting)
             if snapshot is not None:
                 item = deps.store.create_item(
-                    consultant.name, client_name, period, ItemStatus.RECEIVED, snapshot
+                    consultant.name,
+                    client_name,
+                    period,
+                    ItemStatus.RECEIVED,
+                    snapshot,
+                    snapshot.engagement_ref,
                 )
+                _ask_about_the_rates(deps, item, report)
         if item is not None and item.status is ItemStatus.WAITING_FOR_TIMESHEET:
             item = deps.store.change_status(item.id, ItemStatus.RECEIVED, {})
         if item is not None:

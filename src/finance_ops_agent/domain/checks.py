@@ -6,7 +6,7 @@ and sends one review email listing everything wrong with a timesheet.
 """
 
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import TypeVar
@@ -52,23 +52,58 @@ def names_match(one: str, other: str) -> bool:
     return bool(tokens_one) and tokens_one == tokens_other
 
 
+def split_addresses(field: str) -> list[str]:
+    """The addresses in one email field. QuickBooks lets several be typed into
+    a customer's email separated by commas; the engagement list uses `;`."""
+    return [part for part in re.split(r"[,;\s]+", field.strip()) if part]
+
+
+def same_addresses(one: Iterable[str], other: Iterable[str]) -> bool:
+    """The same set of addresses, whatever the case or the order.
+
+    Sets, not "any one matches": where invoices go is used, so an address on
+    one side and not the other is a client who gets the invoice from one
+    system and not from the other."""
+    return {address.casefold() for address in one} == {address.casefold() for address in other}
+
+
 def match_consultant(
     sender: str, reading: TimesheetReading, consultants: list[Consultant]
 ) -> tuple[Consultant | None, list[Finding]]:
-    """The sender's address decides; failing that, the name on the timesheet."""
+    """The sender's address decides; failing that, the name on the timesheet.
+
+    One address can belong to more than one consultant: a vendor firm that
+    supplies two people and sends both their timesheets from its own address
+    (docs/decisions.md #53). Then the name on the timesheet chooses between
+    those, and only those. Taking the first one would file one person's hours
+    under another's name.
+    """
     sender_key = sender.strip().casefold()
-    for consultant in consultants:
-        if sender_key in (email.casefold() for email in consultant.emails):
-            return consultant, []
+    by_sender = [
+        consultant
+        for consultant in consultants
+        if sender_key in (email.casefold() for email in consultant.emails)
+    ]
+    if len(by_sender) == 1:
+        return by_sender[0], []
     name = reading.consultant_name.value
     if name:
         matches = [
             consultant
-            for consultant in consultants
+            for consultant in (by_sender or consultants)
             if any(names_match(name, known) for known in (consultant.name, *consultant.other_names))
         ]
         if len(matches) == 1:
             return matches[0], []
+    if by_sender:
+        return None, [
+            Finding(
+                ReviewCode.CONSULTANT_UNKNOWN,
+                f"This came from {sender.strip()}, which is the address for "
+                + ", ".join(consultant.name for consultant in by_sender)
+                + ", and the name on the timesheet does not tell me which of them it is.",
+            )
+        ]
     return None, [
         Finding(ReviewCode.CONSULTANT_UNKNOWN, "I can't tell which consultant this is for.")
     ]

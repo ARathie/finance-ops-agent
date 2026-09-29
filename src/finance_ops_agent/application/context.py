@@ -45,6 +45,10 @@ class Settings:
     # Addresses allowed to forward someone else's timesheet in (decision 25).
     # Test scaffolding: empty everywhere except the first-cycle machine.
     timesheet_forwarders: tuple[str, ...] = ()
+    # Where the engagement list comes from: "list" (the spreadsheet, or the
+    # agent's imported copy of it) or "quickbooks", built from QuickBooks alone
+    # (docs/decisions.md #53).
+    engagements_from: str = "list"
 
 
 @dataclass
