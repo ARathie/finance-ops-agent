@@ -356,3 +356,53 @@ class TestForgetting:
         store.forget_item(item_id)
 
         assert [one.id for one in store.list_items()] == [other.id]
+
+
+class TestFindingAnItemAfterARename:
+    """An engagement keeps its accounting-system id when a name is tidied, so
+    the item is found by it and the names catch up (decision 39)."""
+
+    def sqlite_store(self, tmp_path: Path) -> SqliteStore:
+        return SqliteStore(open_database(tmp_path / "agent.db"), files_dir=tmp_path / "files")
+
+    def test_it_is_found_by_the_engagement_id(self, tmp_path: Path) -> None:
+        store = self.sqlite_store(tmp_path)
+        made = store.create_item(
+            "Priya Shah", "Acme Corp", AUGUST, ItemStatus.RECEIVED, snapshot(), "21"
+        )
+
+        found = store.find_item_by_engagement("21", AUGUST)
+
+        assert found is not None and found.id == made.id
+        assert found.engagement_ref == "21"
+
+    def test_a_different_period_is_a_different_item(self, tmp_path: Path) -> None:
+        store = self.sqlite_store(tmp_path)
+        store.create_item("Priya Shah", "Acme Corp", AUGUST, ItemStatus.RECEIVED, snapshot(), "21")
+
+        assert store.find_item_by_engagement("21", SEPTEMBER) is None
+
+    def test_no_id_finds_nothing_rather_than_the_first_item(self, tmp_path: Path) -> None:
+        """Manual mode stores no id, and an empty one must not match them all."""
+        store = self.sqlite_store(tmp_path)
+        store.create_item("Priya Shah", "Acme Corp", AUGUST, ItemStatus.RECEIVED, snapshot())
+
+        assert store.find_item_by_engagement("", AUGUST) is None
+
+    def test_relabelling_keeps_the_item(self, tmp_path: Path) -> None:
+        store = self.sqlite_store(tmp_path)
+        made = store.create_item(
+            "Priya Shah", "Acme Corp", AUGUST, ItemStatus.RECEIVED, snapshot(), "21"
+        )
+
+        renamed = store.relabel_item(made.id, "Priya Shah", "Acme Corporation")
+
+        assert renamed.id == made.id
+        assert renamed.client == "Acme Corporation"
+        assert len(store.list_items()) == 1
+        assert store.find_item_by_engagement("21", AUGUST) is not None
+
+    def test_relabelling_something_that_is_not_there(self, tmp_path: Path) -> None:
+        store = self.sqlite_store(tmp_path)
+        with pytest.raises(LookupError, match="no item 99"):
+            store.relabel_item(99, "Someone", "Somewhere")

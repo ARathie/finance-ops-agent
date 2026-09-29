@@ -240,7 +240,7 @@ def connect_by_pasting(
 
 
 class TestAProductionSignIn:
-    """A production app may not redirect to localhost (decision 36), so the
+    """A production app may not redirect to localhost (decision 51), so the
     person pastes the address the public callback page landed on."""
 
     def test_production_with_the_localhost_listener_is_refused_before_signing_in(

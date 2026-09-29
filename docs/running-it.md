@@ -197,6 +197,14 @@ grep '"what": "review opened"' data/fops.log            # everything the agent a
 
 ## Backups
 
+## Where the engagement list lives
+
+`fops engagements` says which of the two the agent is reading -- the workbook at `FOPS_ENGAGEMENT_LIST`, or its own store -- and what is in it.
+
+`fops engagements import` copies the workbook into the store, after which the agent does not open that file again (decision 40). A workbook with problems is refused rather than imported. `fops engagements forget` puts the agent back on the file, which is the way back if an import turns out to be wrong.
+
+`fops doctor` names the source on its engagement list line, so a change to the workbook that seems to do nothing is explained rather than mysterious.
+
 ## The agent's mail folders
 
 `Agent/Processed`, `Agent/Needs Review` and `Agent/Ignored` say what the agent made of each message: read and used, could not use, set aside. They are a courtesy for a person looking at the mailbox -- the database is the record -- and they do not track where an invoice has got to. A timesheet read cleanly is filed as processed before its invoice is made.
@@ -218,6 +226,8 @@ Take a backup first. `fops backup` writes `data/backups/fops-backup-YYYY-MM-DD.z
 
 ## Warnings that need a person
 
+- **A QuickBooks check says a field is missing that QuickBooks plainly shows.** `fops qbo-show customer "<name>"` (or `vendor`, `product`, `term`) prints the record exactly as QuickBooks returns it. It writes nothing and touches no client, and it is the quickest way to settle what a field is called and whether it is there.
+- **A QuickBooks check fails.** Nothing on the server is wrong: something in QuickBooks itself is missing or does not match. `quickbooks-setup.md` has a section per check, with the exact line the doctor prints when that part is not right.
 - **The QuickBooks connection ages out.** The refresh token lasts about 100 days; after 80 the end of every run prints a warning saying how many days are left. Run `fops qbo-connect` to renew it. If it does expire, the agent keeps working on everything except QuickBooks and reports the failures as reviews.
 - **A review email from the agent** always means it wants Kevin, not the operator.
 - **Sends that keep failing** become a `SEND_FAILED` review after three attempts across runs. Check the mailbox login with `fops doctor`.
@@ -225,7 +235,7 @@ Take a backup first. `fops backup` writes `data/backups/fops-backup-YYYY-MM-DD.z
 
 ## When something looks wrong
 
-1. `fops doctor` (in stage 2: `docker compose exec fops fops doctor`): settings, engagement list, database, the mailbox login, QuickBooks, the heartbeat URL, the backup target. Sends nothing to a client.
+1. `fops doctor` (in stage 2: `docker compose exec fops fops doctor`): settings, engagement list, database, the mailbox login, QuickBooks, the heartbeat URL, the backup target. Sends nothing to a client. A failing QuickBooks check is something set up in the QuickBooks web app rather than anything on the server; `quickbooks-setup.md` says what each one wants, and the doctor names it on the way out.
 2. `fops status`: every item, its status, and the open reviews.
 3. `tail -50 data/fops.log`, or `docker compose logs --tail 50`: what the last runs did.
 4. Nothing in the log for an hour, or a heartbeat alert? In stage 2: `docker compose ps` (is the container up?), disk space (`df -h`), and whether Rackspace is reachable from the server. In stage 1: the Mac went to sleep, logged out, or the launchd job is not loaded (`launchctl print`).

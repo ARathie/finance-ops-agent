@@ -13,8 +13,9 @@ from finance_ops_agent.domain.items import InvoiceRecord, OutgoingRecord
 from finance_ops_agent.domain.money import Money
 from finance_ops_agent.domain.reading import ReplyAnswer, ReplyAnswerKind, ReplyReading
 from finance_ops_agent.domain.statuses import ItemStatus
+from finance_ops_agent.ports.accounting import EngagementRates
 from finance_ops_agent.ports.sender import NotSent, RecipientRefused
-from tests.scenarios.conftest import PRIYA, ScenarioEnv, reading
+from tests.scenarios.conftest import PRIYA, ScenarioEnv, engagement_row, reading
 
 AUG_START, AUG_END = date(2026, 8, 1), date(2026, 8, 31)
 
@@ -798,6 +799,217 @@ class TestWhenQuickBooksIsUnhappy:
         item = env.the_item()
         assert item.status is ItemStatus.INVOICE_SENT
         assert [r.number for r in env.store.invoices_for_item(item.id)] == ["083126AC-PS"]
+
+
+class TestWhatTheClientIsCharged:
+    """The bill rate comes off the product too (decision 43). It is the one
+    that has to be right before anything leaves: it is what the client pays and
+    what Kevin approves."""
+
+    def _rates(self, bill_cents: int) -> "EngagementRates":
+        from finance_ops_agent.ports.accounting import EngagementRates
+
+        return EngagementRates(
+            ref="21", bill_rate_cents=bill_cents, pay_rate_cents=10_000, payee=""
+        )
+
+    def test_the_bill_rate_comes_off_the_product(self, env: ScenarioEnv) -> None:
+        """The engagement list says 140.00; QuickBooks says 150.00 and wins."""
+        env.accounting.rates[("Priya Shah", "Acme Corp")] = self._rates(15_000)
+        env.workbook.engagements[0] = engagement_row(2, **{"Bill rate": "150.00"})
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        assert item.snapshot.bill_rate_cents == 15_000
+        assert item.invoice_amount == Money(2_340_000)  # 156.00 hours at 150.00
+
+    def test_a_drifted_rate_is_caught_before_an_invoice_is_made(self, env: ScenarioEnv) -> None:
+        """Before this, the only way to find it was to create the invoice, see
+        the total disagree and void it -- spending a number and leaving a
+        voided invoice in the books (decision 43)."""
+        env.accounting.rates[("Priya Shah", "Acme Corp")] = self._rates(15_000)
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        assert item.snapshot.bill_rate_cents == 15_000  # QuickBooks' figure is used
+        review = next(r for r in env.store.open_reviews() if "QuickBooks charges" in r.message)
+        assert "$150.00" in review.message  # QuickBooks
+        assert "$140.00" in review.message  # the engagement list
+        assert item.status is not ItemStatus.READY  # nothing is invoiced meanwhile
+        assert env.accounting.create_attempts == 0
+
+    def test_agreement_says_nothing(self, env: ScenarioEnv) -> None:
+        env.accounting.rates[("Priya Shah", "Acme Corp")] = self._rates(14_000)
+        clean_timesheet(env)
+        env.run()
+
+        assert env.the_item().snapshot.rate_disagreement == ""
+        assert not any("QuickBooks charges" in r.message for r in env.store.open_reviews())
+
+    def test_the_engagement_list_is_used_where_quickbooks_cannot_say(
+        self, env: ScenarioEnv
+    ) -> None:
+        """Manual mode, and a product the accounting system could not price."""
+        clean_timesheet(env)
+        env.run()
+
+        assert env.the_item().snapshot.bill_rate_cents == 14_000  # the workbook's
+
+    def test_both_rates_disagreeing_is_one_review_naming_both(self, env: ScenarioEnv) -> None:
+        """One review per item, not one per field: two emails about the same
+        engagement is how a person learns to skim them."""
+        from finance_ops_agent.ports.accounting import EngagementRates
+
+        env.accounting.rates[("Priya Shah", "Acme Corp")] = EngagementRates(
+            ref="21", bill_rate_cents=15_000, pay_rate_cents=11_000, payee=""
+        )
+        clean_timesheet(env)
+        env.run()
+
+        said = [r.message for r in env.store.open_reviews() if "QuickBooks" in r.message]
+        assert len(said) == 1
+        assert "QuickBooks charges" in said[0]
+        assert "QuickBooks pays" in said[0]
+
+
+class TestWhatIconPays:
+    """What Icon pays, and who it pays, come from the engagement's product in
+    QuickBooks where it has them (decision 38). The engagement list stays the
+    cross-check."""
+
+    def _rates(self, pay_cents: int | None, payee: str = "") -> "EngagementRates":
+        from finance_ops_agent.ports.accounting import EngagementRates
+
+        return EngagementRates(
+            ref="21", bill_rate_cents=14_000, pay_rate_cents=pay_cents, payee=payee
+        )
+
+    def test_the_pay_rate_comes_off_the_product(self, env: ScenarioEnv) -> None:
+        """The engagement list says 100.00; QuickBooks says 110.00 and wins."""
+        env.accounting.rates[("Priya Shah", "Acme Corp")] = self._rates(11_000)
+        env.workbook.engagements[0] = engagement_row(2, **{"Pay rate": "110.00"})
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        assert item.snapshot.pay_rate_cents == 11_000
+        assert item.amount_owed == Money(1_716_000)  # 156.00 hours at 110.00
+
+    def test_the_engagement_list_is_used_where_quickbooks_has_nothing(
+        self, env: ScenarioEnv
+    ) -> None:
+        """An empty purchase side has not been filled in; it does not mean
+        nothing is owed."""
+        env.accounting.rates[("Priya Shah", "Acme Corp")] = self._rates(None)
+        clean_timesheet(env)
+        env.run()
+
+        assert env.the_item().snapshot.pay_rate_cents == 10_000  # the workbook's
+
+    def test_a_disagreement_is_used_told_to_kevin_and_pauses_the_item(
+        self, env: ScenarioEnv
+    ) -> None:
+        """QuickBooks' figure is the one used, Kevin hears about it before he
+        pays, and the item waits for his answer as it does on any review --
+        which means the client's invoice waits on a disagreement that does not
+        affect it. `fops doctor` is what stops that being common."""
+        env.accounting.rates[("Priya Shah", "Acme Corp")] = self._rates(11_000)
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        assert item.snapshot.pay_rate_cents == 11_000
+        review = next(r for r in env.store.open_reviews() if "QuickBooks pays" in r.message)
+        assert "$110.00" in review.message  # QuickBooks
+        assert "$100.00" in review.message  # the engagement list
+        assert any(s.startswith("Needs your review") for s in env.sent_subjects())
+        assert item.status is not ItemStatus.READY  # waiting on his answer
+
+    def test_agreement_says_nothing(self, env: ScenarioEnv) -> None:
+        env.accounting.rates[("Priya Shah", "Acme Corp")] = self._rates(10_000)
+        clean_timesheet(env)
+        env.run()
+
+        assert env.the_item().snapshot.rate_disagreement == ""
+        assert not any("QuickBooks pays" in r.message for r in env.store.open_reviews())
+
+    def test_a_different_payee_is_used_and_told(self, env: ScenarioEnv) -> None:
+        env.accounting.rates[("Priya Shah", "Acme Corp")] = self._rates(
+            10_000, "Blue Peak Consulting LLC"
+        )
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        assert item.snapshot.payee == "Blue Peak Consulting LLC"
+        assert any("Blue Peak Consulting LLC" in r.message for r in env.store.open_reviews())
+
+    def test_an_accounting_system_that_cannot_answer_does_not_stop_the_run(
+        self, env: ScenarioEnv
+    ) -> None:
+        """A timesheet is still read and the engagement list still has a rate;
+        the invoice is made on a later run anyway."""
+        from finance_ops_agent.ports.accounting import AccountingFailed
+
+        env.accounting.fail_with = AccountingFailed("service unavailable")
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        assert item.status is ItemStatus.READY
+        assert item.snapshot.pay_rate_cents == 10_000  # the workbook's
+
+
+class TestARenamedEngagement:
+    """A client or consultant renamed in QuickBooks is the same engagement, and
+    the accounting system's id says so. Looking only by name would make a
+    second item and expect a second invoice (decision 39)."""
+
+    def _rates(self, ref: str = "21") -> EngagementRates:
+        return EngagementRates(ref=ref, bill_rate_cents=14_000, pay_rate_cents=None, payee="")
+
+    def test_the_item_carries_the_engagement_id(self, env: ScenarioEnv) -> None:
+        env.accounting.rates[("Priya Shah", "Acme Corp")] = self._rates()
+        clean_timesheet(env)
+        env.run()
+
+        assert env.the_item().engagement_ref == "21"
+
+    def test_a_rename_finds_the_same_item_and_catches_its_names_up(self, env: ScenarioEnv) -> None:
+        from tests.scenarios.conftest import client_row, engagement_row
+
+        env.accounting.rates[("Priya Shah", "Acme Corp")] = self._rates()
+        clean_timesheet(env)
+        env.run()
+        first = env.the_item()
+        assert first.client == "Acme Corp"
+
+        # Kevin tidies the name in QuickBooks, and the engagement list follows.
+        env.workbook.clients[0] = client_row(2, Client="Acme Corporation")
+        env.workbook.engagements[0] = engagement_row(2, Client="Acme Corporation")
+        env.accounting.rates[("Priya Shah", "Acme Corporation")] = self._rates()
+        env.add_email(
+            PRIYA,
+            attachment=("timesheet-again.pdf", b"PDFDATA-AGAIN"),
+            scripted_reading=reading(AUG_START, AUG_END),
+        )
+        env.run()
+
+        again = env.the_item()  # asserts there is still exactly one
+        assert again.id == first.id
+        assert again.client == "Acme Corporation"  # the label caught up
+        assert again.engagement_ref == "21"
+
+    def test_without_an_id_it_still_works_by_name(self, env: ScenarioEnv) -> None:
+        """Manual mode has no accounting system to have an id in."""
+        clean_timesheet(env)
+        env.run()
+
+        item = env.the_item()
+        assert item.engagement_ref == ""
+        assert item.consultant == "Priya Shah"
 
 
 class TestMondaySummary:

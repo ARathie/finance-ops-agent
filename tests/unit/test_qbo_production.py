@@ -1,4 +1,4 @@
-"""Moving to the production QuickBooks app (docs/decisions.md #36).
+"""Moving to the production QuickBooks app (docs/decisions.md #51).
 
 A production app cannot redirect to localhost, so the redirect address becomes
 a setting; and tokens from the sandbox keys are no use to the production ones,

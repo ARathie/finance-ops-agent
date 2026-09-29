@@ -174,7 +174,7 @@ class QuickBooksSettings:
     client_id: str
     client_secret: str
     environment: str  # sandbox | production
-    # Blank = the loopback listener, which only a sandbox app may use (decision 36).
+    # Blank = the loopback listener, which only a sandbox app may use (decision 51).
     redirect_uri: str = ""
 
     @classmethod

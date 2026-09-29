@@ -2,6 +2,8 @@
 
 The engagement list is the spreadsheet Kevin keeps with every client, consultant, vendor company, and engagement. The agent reads it at the start of every run. It is the **only** place the agent takes rates, billing contacts, and payment terms from. Nothing in an email or on a timesheet can override it.
 
+**Where it lives.** Until `fops engagements import` is run it is this file. After that the agent keeps its own copy and does not open the file again (decision 40); `fops engagements` says which, and `fops engagements forget` puts it back on the file. The columns below are the same either way.
+
 File: `engagements.xlsx` (location set in the agent's settings; a CSV export of each sheet works too). Kevin edits it in Excel like any other spreadsheet. The agent never writes to it.
 
 **Starting from scratch:** copy `templates/engagements-template.xlsx`. It has the four sheets with these columns in this order, one made-up example row on each to replace, a "Read me" sheet in plain words, and dropdowns on every column that only takes certain words (`Delivery`, `Type`, `Paid by`, `Billing schedule`, the yes/no columns) so the commonest mistake cannot be made. Rebuild it with `uv run python templates/build_template.py` if a column here ever changes.
@@ -67,13 +69,13 @@ One row per consultant working for one client. When a rate changes, add a new ro
 | Role | Printed on the invoice line | Senior PeopleSoft Developer |
 | Start date | First day of the engagement | 2026-02-01 |
 | End date | Last day, or blank while ongoing | |
-| Billing schedule | `monthly`, `twice a month`, `every two weeks`, or `weekly` | monthly |
+| Billing schedule | `monthly`, `twice a month`, `every two weeks`, or `weekly`; **leave it blank for monthly** | |
 | First period start | For `every two weeks` and `weekly` only: the first day of any one period, so the agent can work out the rest | 2026-02-02 |
 | Bill rate | Dollars per hour Icon charges the client | 140.00 |
 | Pay rate | Dollars per hour Icon pays the consultant or vendor | 100.00 |
 | Rates from | The date these rates apply from; use the start date for the first row | 2026-02-01 |
 | Send automatically | `yes` lets the agent send clean invoices without asking when it is in automatic mode; `no` always asks | no |
-| Active | `yes` or `no` | yes |
+| Active | `yes` or `no`; **in QuickBooks Online mode the product's own active/inactive decides this**, and this column only stops doctor mentioning an engagement that has finished | yes |
 
 ## How an invoice is numbered
 
@@ -99,9 +101,10 @@ Two places **not** to put a stand-in address:
 
 ## Rules the agent follows
 
-- Rates, billing contacts, payment terms, and pay timing come only from this workbook.
+- Billing contacts, payment terms, and pay timing come only from this workbook. **Rates no longer do**: in QuickBooks Online mode both of them live on the engagement's product -- what the client is charged and what Icon pays -- and this workbook's rate columns are the cross-check (decisions 30, 38 and 43). Where QuickBooks has nothing there, this workbook's figure is used. Where the two disagree, QuickBooks' figure is used and the timesheet waits until Kevin has answered a review naming both numbers.
+- **Which engagements are live comes from QuickBooks Online, not from this sheet** (decision 42). The agent lists the active products under a category and expects timesheets for those; making a product inactive is how an engagement ends. What this sheet still decides is *when* to bill -- the billing schedule, the start date, and the first period -- which QuickBooks does not hold. So a product with no row here is a review naming it, and a row with no live product means no new periods are expected. When QuickBooks has nothing to say (manual mode, or no categories set up yet), this sheet's "Active" column decides on its own, as it always did.
 - For a timesheet, the agent uses the Engagements row for that consultant and client whose "Rates from" date is the latest one on or before the first day of the billing period. If the rate changes in the middle of a period, the agent asks Kevin rather than splitting the invoice.
-- There must be exactly one active engagement for a consultant and client on any given date. Two rows with the same consultant, client, and "Rates from" date are an error.
+- There must be exactly one live engagement for a consultant and client on any given date. Two rows with the same consultant, client, and "Rates from" date are an error.
 - Billing periods: `monthly` = calendar month; `twice a month` = 1st to 15th and 16th to month end; `every two weeks` = 14-day periods counted from "First period start"; `weekly` = 7-day periods counted from "First period start". The first and last period of an engagement are cut short at the start and end dates.
 - The agent never edits this file. If a row is incomplete or contradictory (missing rate, unknown client name, `vendor` type without a vendor company, no billing email for a client delivered by email, no invoice code for an active client, a pay rate higher than the bill rate), the agent emails Kevin a review item naming the sheet and row, and leaves any affected timesheets waiting.
 - Money in this sheet is entered in dollars with cents (140.00). The agent works in whole cents internally so totals never drift.

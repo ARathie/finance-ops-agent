@@ -30,6 +30,8 @@ if TYPE_CHECKING:
     from finance_ops_agent.application.eval_runner import UsageReport
     from finance_ops_agent.cli.doctor import Check
     from finance_ops_agent.config import Config, MailSettings
+    from finance_ops_agent.domain.engagements import EngagementWorkbook
+    from finance_ops_agent.ports.engagement_list import EngagementList
     from finance_ops_agent.ports.reader import TokenUsage
 
 
@@ -111,6 +113,35 @@ def build_parser() -> argparse.ArgumentParser:
         help="loopback port for the redirect (must match the Intuit app)",
     )
 
+    show = commands.add_parser(
+        "qbo-show",
+        help="print what QuickBooks actually returns for one record, to settle"
+        " what a field is called and whether it is there",
+    )
+    show.add_argument(
+        "entity",
+        choices=sorted(SHOWABLE),
+        help="which kind of record to print",
+    )
+    show.add_argument(
+        "name",
+        nargs="?",
+        default="",
+        help="the name to look it up by, or an id for a vendor; omit to list them all",
+    )
+    show.add_argument(
+        "--brief",
+        action="store_true",
+        help="one line per record instead of the whole thing, for looking down a"
+        " list of them: id, type, name, and the category it sits under",
+    )
+    show.add_argument(
+        "--minorversion",
+        default="",
+        help="ask Intuit for a newer shape of the record, to see whether a field"
+        " missing from it only appears at a later version (try 75)",
+    )
+
     test_invoice = commands.add_parser(
         "qbo-test-invoice",
         help="create one invoice in QuickBooks to prove the path works, then remove it"
@@ -141,6 +172,23 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="the marker kept in the invoice's private note (default: a new one each run)",
     )
+
+    engagements = commands.add_parser(
+        "engagements",
+        help="the engagement list the agent reads: import the workbook into the"
+        " agent's own store, or show what is in it",
+    )
+    engagements.add_argument(
+        "action", choices=("show", "import", "forget"), nargs="?", default="show"
+    )
+    engagements.add_argument(
+        "--from",
+        dest="from_path",
+        type=Path,
+        default=None,
+        help="the workbook to import (default: FOPS_ENGAGEMENT_LIST)",
+    )
+    engagements.add_argument("--data", type=Path, default=None, help="the data folder")
 
     forget = commands.add_parser(
         "forget",
@@ -296,6 +344,20 @@ def _accounting(
     return QuickBooksOnline(client, today)
 
 
+def _engagement_list(config: "Config", store: SqliteStore) -> "EngagementList":
+    """The store where it has been imported, the workbook until then.
+
+    The workbook is on its way out (decision 40). Everything downstream reads
+    the same shape either way, so nothing but this line can tell which it was.
+    """
+    from finance_ops_agent.adapters.excel.engagement_list import ExcelEngagementList
+    from finance_ops_agent.adapters.stored.engagement_list import StoredEngagementList, imported
+
+    if imported(store):
+        return StoredEngagementList(store)
+    return ExcelEngagementList(config.engagement_list)
+
+
 def _mail_account(mail: "MailSettings") -> "MailAccount":
     from finance_ops_agent.adapters.email.client import MailAccount
 
@@ -319,7 +381,6 @@ def _real_deps(mode_override: "Mode | None" = None, since: "date | None" = None)
     from finance_ops_agent.adapters.clock import SystemClock
     from finance_ops_agent.adapters.email.inbox import ImapInbox
     from finance_ops_agent.adapters.email.sender import SmtpSender
-    from finance_ops_agent.adapters.excel.engagement_list import ExcelEngagementList
     from finance_ops_agent.application.run import MAILBOX_POSITION_KEY
     from finance_ops_agent.config import Config, MailSettings
 
@@ -340,7 +401,7 @@ def _real_deps(mode_override: "Mode | None" = None, since: "date | None" = None)
         # skipped by its Message-ID, so nothing is handled or sent twice.
         store.set_state(MAILBOX_POSITION_KEY, "")
     return RunDeps(
-        engagement_list=ExcelEngagementList(config.engagement_list),
+        engagement_list=_engagement_list(config, store),
         inbox=ImapInbox(account, config.agent_mailbox, start_date),
         reader=ClaudeReader(model=config.model),
         store=store,
@@ -409,7 +470,6 @@ def _command_run(args: argparse.Namespace) -> int:
 
 
 def _command_doctor(args: argparse.Namespace) -> int:
-    from finance_ops_agent.adapters.excel.engagement_list import ExcelEngagementList
     from finance_ops_agent.cli import doctor as checks
     from finance_ops_agent.cli.doctor import Check, CheckResult
     from finance_ops_agent.config import ENV_FILE, Config, MailSettings, MissingSettingError
@@ -449,13 +509,19 @@ def _command_doctor(args: argparse.Namespace) -> int:
     )
 
     def load_list() -> tuple[int, list[str]]:
-        parsed = parse_workbook(ExcelEngagementList(config.engagement_list).load())
+        parsed = parse_workbook(_engagement_list(config, _open_store(config.data_dir)).load())
         return len(parsed.engagements), [
             f"{problem.sheet} row {problem.row_number}: {problem.message}"
             for problem in parsed.problems
         ]
 
-    results.append(checks.check_engagement_list(load_list, config.engagement_list))
+    from finance_ops_agent.adapters.stored.engagement_list import imported
+
+    results.append(
+        checks.check_engagement_list(
+            load_list, config.engagement_list, stored=imported(_open_store(config.data_dir))
+        )
+    )
 
     def describe_database() -> str:
         store = _open_store(config.data_dir)
@@ -505,25 +571,32 @@ def _command_doctor(args: argparse.Namespace) -> int:
     failures = [check for check in results if check.result is CheckResult.FAIL]
     if failures:
         print(f"\n{len(failures)} check(s) failed. Nothing was sent to a client.")
+        pointer = checks.setup_pointer(failures)
+        if pointer:
+            print(pointer)
         return 1
     print("\nEverything checks out. Nothing was sent to a client.")
     return 0
 
 
 def _quickbooks_checks(config: "Config") -> list["Check"]:
-    from finance_ops_agent.adapters.excel.engagement_list import ExcelEngagementList
     from finance_ops_agent.adapters.quickbooks.client import QuickBooksClient
     from finance_ops_agent.adapters.quickbooks.online import QuickBooksOnline
     from finance_ops_agent.adapters.quickbooks.tokens import TokenStore
     from finance_ops_agent.cli.doctor import (
         Check,
         CheckResult,
+        ExpectedParty,
+        ExpectedProduct,
+        check_quickbooks_contacts,
         check_quickbooks_customers,
+        check_quickbooks_engagements,
+        check_quickbooks_pay,
         check_quickbooks_products,
         check_quickbooks_tokens,
     )
     from finance_ops_agent.config import MissingSettingError, QuickBooksSettings
-    from finance_ops_agent.domain.engagements import parse_workbook
+    from finance_ops_agent.domain.engagements import EngagementWorkbook, parse_workbook
 
     try:
         settings = QuickBooksSettings.from_env()
@@ -536,8 +609,11 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
     client = QuickBooksClient(store, settings.client_id, settings.client_secret)
     accounting = QuickBooksOnline(client, date.today())  # noqa: DTZ011
 
+    def parsed_list() -> EngagementWorkbook:
+        return parse_workbook(_engagement_list(config, _open_store(config.data_dir)).load())
+
     def wanted_customers() -> list[str]:
-        parsed = parse_workbook(ExcelEngagementList(config.engagement_list).load())
+        parsed = parsed_list()
         return sorted(
             {
                 client_row.quickbooks_customer or client_row.legal_name
@@ -546,13 +622,170 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
             }
         )
 
-    def wanted_consultants() -> list[str]:
-        parsed = parse_workbook(ExcelEngagementList(config.engagement_list).load())
-        return sorted({consultant.name for consultant in parsed.consultants if consultant.active})
+    def wanted_engagements() -> list[ExpectedProduct]:
+        """One product per engagement, so the checks are per pairing too: a
+        consultant at two clients has two rates (decision 36)."""
+        from finance_ops_agent.application.run import build_snapshot
+
+        parsed = parsed_list()
+        by_client = {client_row.name: client_row for client_row in parsed.clients}
+        wanted: dict[tuple[str, str], ExpectedProduct] = {}
+        for engagement in parsed.engagements:
+            if not engagement.active:
+                continue
+            snapshot = build_snapshot(parsed, engagement)
+            if snapshot is None:
+                continue  # an incomplete row; the engagement list check says so
+            client_row = by_client.get(engagement.client)
+            candidates = [engagement.client]
+            if client_row is not None:
+                candidates += [client_row.quickbooks_customer, client_row.legal_name]
+            wanted[(engagement.consultant, engagement.client)] = ExpectedProduct(
+                consultant=engagement.consultant,
+                client=engagement.client,
+                clients=[name for name in dict.fromkeys(candidates) if name],
+                bill_rate_cents=snapshot.bill_rate_cents,
+                pay_rate_cents=snapshot.pay_rate_cents,
+                payee=snapshot.payee,
+            )
+        return [wanted[key] for key in sorted(wanted)]
+
+    def wanted_contacts() -> list[ExpectedParty]:
+        """Every client, and every payee an engagement names, once each.
+
+        The payee is looked up by the id on its product's purchase side rather
+        than by name, so a vendor filed under a spelling nobody expected is
+        still the one compared.
+        """
+        parsed = parsed_list()
+        by_consultant = {row.name: row for row in parsed.consultants}
+        by_vendor = {row.company: row for row in parsed.vendors}
+        parties: dict[tuple[str, str], ExpectedParty] = {}
+        for client_row in parsed.clients:
+            if not client_row.active:
+                continue
+            lookup = client_row.quickbooks_customer or client_row.legal_name
+            parties[("client", lookup)] = ExpectedParty(
+                what="client",
+                name=client_row.name,
+                lookup=lookup,
+                emails=list(client_row.billing_emails),
+                payment_terms_days=client_row.payment_terms_days,
+            )
+        for expected in wanted_engagements():
+            try:
+                rates = accounting.engagement_rates(expected.consultant, expected.clients)
+            except Exception:
+                continue  # the products check reports this one
+            consultant_row = by_consultant.get(expected.consultant)
+            vendor_row = by_vendor.get(expected.payee) or (
+                by_vendor.get(rates.payee) if rates is not None else None
+            )
+            if vendor_row is not None:
+                emails, timing = list(vendor_row.contact_emails), vendor_row.pay_timing_days
+            elif consultant_row is not None:
+                emails, timing = list(consultant_row.emails), consultant_row.pay_timing_days
+            else:
+                continue
+            # An engagement whose product names no vendor is still listed, with
+            # nothing to look up. Skipping it here made the check report only
+            # what it happened to find, so a company with no purchase sides at
+            # all looked the same as one that agreed about everything.
+            reference = "" if rates is None else rates.payee_ref
+            parties[("payee", reference or f"~{expected.consultant} at {expected.client}")] = (
+                ExpectedParty(
+                    what="payee",
+                    name=f"{expected.payee or expected.consultant}",
+                    lookup=reference,
+                    emails=emails,
+                    payment_terms_days=timing,
+                )
+            )
+        return [parties[key] for key in sorted(parties)]
 
     results.append(check_quickbooks_customers(accounting, wanted_customers))
-    results.append(check_quickbooks_products(accounting, wanted_consultants))
+    results.append(check_quickbooks_engagements(accounting, parsed_list))
+    results.append(check_quickbooks_products(accounting, wanted_engagements))
+    results.append(check_quickbooks_pay(accounting, wanted_engagements))
+    results.append(check_quickbooks_contacts(accounting, wanted_contacts))
     return results
+
+
+# What `fops qbo-show` will print, and the field each is looked up by. It exists
+# because the same mistake was made three times in one day: a field guessed at,
+# a check reporting nothing where a record plainly had something, and no way to
+# see what QuickBooks had actually sent. Reading nothing is cheaper than
+# guessing (docs/decisions.md #46).
+SHOWABLE = {
+    "customer": ("Customer", "DisplayName"),
+    "vendor": ("Vendor", "DisplayName"),
+    "product": ("Item", "Name"),
+    "term": ("Term", "Name"),
+}
+
+
+def _command_qbo_show(args: argparse.Namespace) -> int:
+    """Print one record exactly as QuickBooks returns it.
+
+    No interpretation and no field picking: the whole entity, so that what a
+    field is called and whether it is there can be read rather than guessed.
+    Nothing is written and no client is touched.
+    """
+    import json as json_module
+
+    from finance_ops_agent.adapters.quickbooks.client import QuickBooksClient
+    from finance_ops_agent.adapters.quickbooks.tokens import TokenStore
+    from finance_ops_agent.config import Config, MissingSettingError, QuickBooksSettings
+
+    config = Config.from_env()
+    try:
+        settings = QuickBooksSettings.from_env()
+    except MissingSettingError as error:
+        print(str(error))
+        return 1
+    client = QuickBooksClient(
+        TokenStore(config.qbo_token_path),
+        settings.client_id,
+        settings.client_secret,
+        minorversion=str(args.minorversion or ""),
+    )
+    entity, field = SHOWABLE[args.entity]
+    name = str(args.name or "")
+    if not name:
+        where = ""
+    elif args.entity == "vendor" and name.isdigit():
+        where = f" WHERE Id = '{name}'"
+    else:
+        where = f" WHERE {field} = '{name.replace(chr(39), chr(39) * 2)}'"
+    rows = client.query(f"SELECT * FROM {entity}{where}")
+    if not rows:
+        print(f"QuickBooks returned no {args.entity} for {name!r}.")
+        return 1
+    if args.brief:
+        for row in rows:
+            print(_one_line(row))
+        print(f"\n{len(rows)} {args.entity}(s).")
+        return 0
+    print(json_module.dumps(rows, indent=2, sort_keys=True))
+    return 0
+
+
+def _one_line(row: dict[str, object]) -> str:
+    """One record, small enough to read twenty of.
+
+    The fields are the ones that have actually been in question: what kind of
+    thing it is, and whether it sits under anything.
+    """
+    parent = row.get("ParentRef") or {}
+    under = ""
+    if isinstance(parent, dict) and (parent.get("name") or parent.get("value")):
+        under = f"  under {parent.get('name') or 'id ' + str(parent['value'])}"
+    elif ":" in str(row.get("FullyQualifiedName") or ""):
+        under = f"  under {str(row['FullyQualifiedName']).rpartition(':')[0]}"
+    kind = str(row.get("Type") or "")
+    name = str(row.get("Name") or row.get("DisplayName") or "")
+    live = "" if row.get("Active", True) else "  (inactive)"
+    return f"{str(row.get('Id', '')):>5}  {kind:<13} {name}{under}{live}"
 
 
 def _send_test_email(sender: "SmtpSender", admin_email: str) -> "Check":
@@ -631,6 +864,100 @@ def _command_qbo_test_invoice(args: argparse.Namespace) -> int:
 
 
 SENT_ALREADY = ("invoice_sent", "client_paid")
+
+
+def _command_engagements(args: argparse.Namespace) -> int:
+    """Where the engagement list lives, and moving it into the agent's store.
+
+    The workbook is on its way out (decision 40): once it is imported the agent
+    reads the store and the file is not opened again.
+    """
+    from finance_ops_agent.adapters.excel.engagement_list import (
+        CsvEngagementList,
+        ExcelEngagementList,
+    )
+    from finance_ops_agent.adapters.stored.engagement_list import (
+        ENGAGEMENT_LIST_KEY,
+        StoredEngagementList,
+        imported,
+        put,
+    )
+    from finance_ops_agent.config import Config
+    from finance_ops_agent.domain.engagements import parse_workbook
+
+    config = Config.from_env()
+    store = _open_store(args.data if args.data is not None else config.data_dir)
+
+    if args.action == "forget":
+        if not imported(store):
+            print("The agent is reading the workbook already; there is nothing to forget.")
+            return 0
+        store.set_state(ENGAGEMENT_LIST_KEY, "")
+        print(
+            "Removed the engagement list from the agent's store."
+            f" It will read {config.engagement_list} again."
+        )
+        return 0
+
+    if args.action == "import":
+        source = args.from_path if args.from_path is not None else config.engagement_list
+        reader = CsvEngagementList(source) if source.is_dir() else ExcelEngagementList(source)
+        try:
+            workbook = reader.load()
+        except OSError as error:
+            print(f"Could not read {source}: {error}")
+            return 1
+        parsed = parse_workbook(workbook)
+        if parsed.problems:
+            # Importing a workbook the agent would refuse to bill from would
+            # only move the problem somewhere harder to see.
+            print(f"{source} has {len(parsed.problems)} problem(s); nothing was imported:")
+            for problem in parsed.problems:
+                print(f"  {problem.sheet} row {problem.row_number}: {problem.message}")
+            return 1
+        put(store, workbook)
+        print(f"Imported {source} into the agent's store.")
+        _print_engagement_list(parsed)
+        print("\nThe agent reads its own copy now and will not open that file again.")
+        print("Keep the file somewhere safe until you are sure, then `fops engagements forget`")
+        print("puts the agent back on it.")
+        return 0
+
+    where = "the agent's own store" if imported(store) else str(config.engagement_list)
+    source_list = (
+        StoredEngagementList(store)
+        if imported(store)
+        else (
+            CsvEngagementList(config.engagement_list)
+            if config.engagement_list.is_dir()
+            else ExcelEngagementList(config.engagement_list)
+        )
+    )
+    try:
+        parsed = parse_workbook(source_list.load())
+    except Exception as error:
+        print(f"Could not read the engagement list: {error}")
+        return 1
+    print(f"The agent reads its engagement list from {where}.")
+    _print_engagement_list(parsed)
+    if not imported(store):
+        print("\n`fops engagements import` moves it into the agent's store.")
+    return 0
+
+
+def _print_engagement_list(parsed: "EngagementWorkbook") -> None:
+    print(
+        f"  {len(parsed.clients)} client(s), {len(parsed.consultants)} consultant(s),"
+        f" {len(parsed.vendors)} vendor(s), {len(parsed.engagements)} engagement(s)"
+    )
+    for engagement in parsed.engagements:
+        state = "" if engagement.active else " (not active)"
+        print(
+            f"    {engagement.consultant} at {engagement.client},"
+            f" {engagement.billing_schedule.value}, from {engagement.start_date}{state}"
+        )
+    for problem in parsed.problems:
+        print(f"  problem: {problem.sheet} row {problem.row_number}: {problem.message}")
 
 
 def _command_forget(args: argparse.Namespace) -> int:
@@ -892,8 +1219,12 @@ def main(argv: list[str] | None = None) -> int:
         return _command_run(args)
     if args.command == "qbo-connect":
         return _command_qbo_connect(args)
+    if args.command == "qbo-show":
+        return _command_qbo_show(args)
     if args.command == "qbo-test-invoice":
         return _command_qbo_test_invoice(args)
+    if args.command == "engagements":
+        return _command_engagements(args)
     if args.command == "forget":
         return _command_forget(args)
     if args.command == "backup":

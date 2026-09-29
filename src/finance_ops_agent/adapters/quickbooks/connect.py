@@ -8,7 +8,7 @@ The redirect is read one of two ways. A sandbox app may redirect to
 `http://localhost`, where a one-shot listener catches it. A production app may
 not -- Intuit accepts only an https address that is not localhost -- so the
 browser lands on a static page on Icon's public site and the person pastes the
-address it shows back into the terminal (docs/decisions.md #36).
+address it shows back into the terminal (docs/decisions.md #51).
 """
 
 import secrets

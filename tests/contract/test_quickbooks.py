@@ -9,6 +9,7 @@ credentials, no real company.
 import json
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from urllib.parse import unquote
 
 import pytest
 
@@ -18,6 +19,8 @@ from finance_ops_agent.adapters.quickbooks.client import (
     QuickBooksReconnect,
 )
 from finance_ops_agent.adapters.quickbooks.online import (
+    PRODUCT_FIELDS,
+    PRODUCT_PAGE,
     QuickBooksOnline,
     item_id_from_note,
     private_note,
@@ -27,6 +30,8 @@ from finance_ops_agent.adapters.quickbooks.tokens import (
     Tokens,
     TokenStore,
 )
+from finance_ops_agent.cli.doctor import ExpectedProduct
+from finance_ops_agent.domain.engagements import EngagementWorkbook, RawWorkbook
 from finance_ops_agent.domain.invoices import Invoice, build_invoice
 from finance_ops_agent.domain.money import Money
 from tests.contract.http_replay import Replay
@@ -288,8 +293,12 @@ class TestCreateInvoice:
         product would bill the wrong rate."""
         replay = replay_from("missing_item")
         accounting, _, _ = build(replay, tmp_path)
-        with pytest.raises(QuickBooksFailed, match="no product called 'Priya Shah'"):
+        with pytest.raises(QuickBooksFailed) as error:
             accounting.create_invoice(worked_example_invoice(), item_id=1)
+        message = str(error.value)
+        assert "no product for 'Priya Shah'" in message
+        assert "Acme Corp:Priya Shah" in message  # every path it tried is named
+        assert "never create products myself" in message
 
     def test_the_line_is_priced_from_the_product_and_dated_by_the_period(
         self, tmp_path: Path
@@ -304,7 +313,7 @@ class TestCreateInvoice:
         body = next(entry for entry in replay.bodies if isinstance(entry, dict) and "Line" in entry)
         line = body["Line"][0]
         assert line["Description"] == "Priya Shah"
-        assert line["SalesItemLineDetail"]["ItemRef"] == {"value": "12"}
+        assert line["SalesItemLineDetail"]["ItemRef"] == {"value": "12"}  # Acme Corp:Priya Shah
         assert line["SalesItemLineDetail"]["ServiceDate"] == "2026-08-31"
         assert line["SalesItemLineDetail"]["UnitPrice"] == 140.0  # off the product
 
@@ -415,6 +424,380 @@ class TestTheDoctorCheck:
 
         assert check.result is CheckResult.PASS
         assert f"the sandbox company {REALM}" in check.detail
+
+
+class TestFindingTheProduct:
+    """A product is an engagement, not a person: a consultant at two clients
+    has two rates and one product cannot hold both. The category gives that a
+    home, and QuickBooks maintains the path (decision 36)."""
+
+    BASE = f"https://sandbox-quickbooks.api.intuit.com/v3/company/{REALM}"
+
+    def _replay(self, answers: dict[str, object]) -> Replay:
+        from urllib.parse import quote
+
+        def key(statement: str) -> str:
+            return f"GET {self.BASE}/query?query=" + quote(statement)
+
+        empty: dict[str, object] = {"QueryResponse": {}}
+        script: dict[str, list[dict[str, object]]] = {}
+        for where, answer in (
+            ("FullyQualifiedName = 'MasTec:Sridhar Doraiswamy'", answers.get("by_path", empty)),
+            (
+                "FullyQualifiedName = 'MasTec Inc:Sridhar Doraiswamy'",
+                answers.get("by_legal", empty),
+            ),
+            ("Name = 'Sridhar Doraiswamy'", answers.get("by_name", empty)),
+        ):
+            statement = f"SELECT {PRODUCT_FIELDS} FROM Item WHERE " + where
+            script[key(statement)] = [{"status": 200, "json": answer}]
+        # A product with a preferred vendor has its company name read, because
+        # the display name is often the person and the company is who Icon pays.
+        script[key(f"SELECT {PRODUCT_FIELDS} FROM Vendor WHERE Id = '9'")] = [
+            {
+                "status": 200,
+                "json": {
+                    "QueryResponse": {
+                        "Vendor": [
+                            {
+                                "Id": "9",
+                                "DisplayName": "Sridhar Doraiswamy",
+                                "CompanyName": "Blue Peak Consulting LLC",
+                            }
+                        ]
+                    }
+                },
+            }
+        ]
+        return Replay(script)
+
+    def _item(self, item_id: str, path: str, rate: float = 140.0) -> dict[str, object]:
+        return {
+            "QueryResponse": {
+                "Item": [
+                    {
+                        "Id": item_id,
+                        "Name": "Sridhar Doraiswamy",
+                        "UnitPrice": rate,
+                        "FullyQualifiedName": path,
+                    }
+                ]
+            }
+        }
+
+    def test_the_category_path_is_what_it_looks_for(self, tmp_path: Path) -> None:
+        replay = self._replay({"by_path": self._item("21", "MasTec:Sridhar Doraiswamy")})
+        accounting, _, _ = build(replay, tmp_path)
+
+        product = accounting.product_for("Sridhar Doraiswamy", ["MasTec", "MasTec Inc"])
+
+        assert product.ref == "21"
+        assert product.unit_price_cents == 14_000
+        assert len(replay.calls) == 1  # the first path answered; nothing else was asked
+
+    def test_the_next_name_is_tried_when_the_first_finds_nothing(self, tmp_path: Path) -> None:
+        """Kevin may have named the category for the client as QuickBooks knows
+        it rather than as the engagement list does."""
+        replay = self._replay({"by_legal": self._item("22", "MasTec Inc:Sridhar Doraiswamy")})
+        accounting, _, _ = build(replay, tmp_path)
+
+        product = accounting.product_for("Sridhar Doraiswamy", ["MasTec", "MasTec Inc"])
+
+        assert product.ref == "22"
+
+    def test_a_product_with_no_category_yet_still_works(self, tmp_path: Path) -> None:
+        """The bridge while the categories are being filled in: one product of
+        that name and no ambiguity about which rate it carries."""
+        replay = self._replay({"by_name": self._item("23", "Sridhar Doraiswamy")})
+        accounting, _, _ = build(replay, tmp_path)
+
+        product = accounting.product_for("Sridhar Doraiswamy", ["MasTec", "MasTec Inc"])
+
+        assert product.ref == "23"
+
+    def test_two_products_of_that_name_and_no_category_is_refused(self, tmp_path: Path) -> None:
+        """This is the case that would have billed the wrong rate."""
+        replay = self._replay(
+            {
+                "by_name": {
+                    "QueryResponse": {
+                        "Item": [
+                            {
+                                "Id": "24",
+                                "Name": "Sridhar Doraiswamy",
+                                "UnitPrice": 140.0,
+                                "FullyQualifiedName": "Northwind:Sridhar Doraiswamy",
+                            },
+                            {
+                                "Id": "25",
+                                "Name": "Sridhar Doraiswamy",
+                                "UnitPrice": 120.0,
+                                "FullyQualifiedName": "Harbour Point:Sridhar Doraiswamy",
+                            },
+                        ]
+                    }
+                }
+            }
+        )
+        accounting, _, _ = build(replay, tmp_path)
+
+        with pytest.raises(QuickBooksFailed) as error:
+            accounting.product_for("Sridhar Doraiswamy", ["MasTec", "MasTec Inc"])
+
+        message = str(error.value)
+        assert "more than one product" in message
+        assert "Northwind:Sridhar Doraiswamy" in message
+        assert "Harbour Point:Sridhar Doraiswamy" in message
+        assert "MasTec:Sridhar Doraiswamy" in message  # what it was looking for
+
+    def test_it_asks_for_the_entity_not_a_field_list(self, tmp_path: Path) -> None:
+        """QuickBooks refuses PrefVendorRef in a SELECT -- "Property
+        PrefVendorRef not found for Entity Item" -- because references come
+        back with the entity or not at all."""
+        replay = self._replay({"by_path": self._item("21", "MasTec:Sridhar Doraiswamy")})
+        accounting, _, _ = build(replay, tmp_path)
+
+        accounting.product_for("Sridhar Doraiswamy", ["MasTec"])
+
+        [(_, url)] = replay.calls
+        assert "SELECT%20%2A%20FROM%20Item" in url
+        assert "PrefVendorRef" not in url
+
+    def test_the_purchase_side_is_read_too(self, tmp_path: Path) -> None:
+        """What Icon pays and who it pays, read but not used yet (decision 37),
+        so QuickBooks and the engagement list can be compared."""
+        answer: dict[str, object] = {
+            "QueryResponse": {
+                "Item": [
+                    {
+                        "Id": "21",
+                        "Name": "Sridhar Doraiswamy",
+                        "UnitPrice": 140.0,
+                        "FullyQualifiedName": "MasTec:Sridhar Doraiswamy",
+                        "PurchaseCost": 100.0,
+                        "PrefVendorRef": {"value": "9", "name": "Blue Peak Consulting LLC"},
+                    }
+                ]
+            }
+        }
+        replay = self._replay({"by_path": answer})
+        accounting, _, _ = build(replay, tmp_path)
+
+        product = accounting.product_for("Sridhar Doraiswamy", ["MasTec"])
+
+        assert product.purchase_cost_cents == 10_000
+        assert product.vendor == "Blue Peak Consulting LLC"  # the reference's own name
+        assert product.vendor_company == "Blue Peak Consulting LLC"  # read off the vendor
+
+    def test_a_product_with_nothing_on_its_purchase_side(self, tmp_path: Path) -> None:
+        """Not filled in is not the same as nothing owed."""
+        replay = self._replay({"by_path": self._item("21", "MasTec:Sridhar Doraiswamy")})
+        accounting, _, _ = build(replay, tmp_path)
+
+        product = accounting.product_for("Sridhar Doraiswamy", ["MasTec"])
+
+        assert product.purchase_cost_cents is None
+        assert product.vendor == ""
+
+    def test_the_same_consultant_at_two_clients_gets_two_rates(self, tmp_path: Path) -> None:
+        """The whole point: one product per consultant could only hold one."""
+        from urllib.parse import quote
+
+        def key(client: str) -> str:
+            return f"GET {self.BASE}/query?query=" + quote(
+                f"SELECT {PRODUCT_FIELDS} FROM Item"
+                f" WHERE FullyQualifiedName = '{client}:Sridhar Doraiswamy'"
+            )
+
+        replay = Replay(
+            {
+                key("MasTec"): [
+                    {"status": 200, "json": self._item("21", "MasTec:Sridhar Doraiswamy", 140.0)}
+                ],
+                key("iStream"): [
+                    {"status": 200, "json": self._item("31", "iStream:Sridhar Doraiswamy", 120.0)}
+                ],
+            }
+        )
+        accounting, _, _ = build(replay, tmp_path)
+
+        at_mastec = accounting.product_for("Sridhar Doraiswamy", ["MasTec"])
+        at_istream = accounting.product_for("Sridhar Doraiswamy", ["iStream"])
+
+        assert at_mastec.unit_price_cents == 14_000
+        assert at_istream.unit_price_cents == 12_000
+
+
+class TestTheProductsCheck:
+    """It says which company it looked in and counts engagements, not people:
+    a consultant at two clients is two products (decision 36)."""
+
+    def _expected(self, bill_cents: int = 14_000) -> list[ExpectedProduct]:
+        return [
+            ExpectedProduct(
+                consultant="Sridhar Doraiswamy",
+                client="MasTec",
+                clients=["MasTec"],
+                bill_rate_cents=bill_cents,
+                pay_rate_cents=10_000,
+                payee="Blue Peak Consulting LLC",
+            )
+        ]
+
+    def test_a_pass_counts_engagements_and_names_the_company(self, tmp_path: Path) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_products
+
+        replay = TestFindingTheProduct()._replay(
+            {"by_path": TestFindingTheProduct()._item("21", "MasTec:Sridhar Doraiswamy")}
+        )
+        accounting, _, _ = build(replay, tmp_path)
+
+        check = check_quickbooks_products(accounting, self._expected)
+
+        assert check.result is CheckResult.PASS
+        assert "1 engagement(s)" in check.detail
+        assert f"the sandbox company {REALM}" in check.detail
+
+    def test_a_bill_rate_that_disagrees_fails_before_an_invoice_does(self, tmp_path: Path) -> None:
+        """Otherwise this is only discoverable by watching an invoice be
+        created, found to disagree, and voided (decision 30)."""
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_products
+
+        replay = TestFindingTheProduct()._replay(
+            {"by_path": TestFindingTheProduct()._item("21", "MasTec:Sridhar Doraiswamy", 150.0)}
+        )
+        accounting, _, _ = build(replay, tmp_path)
+
+        check = check_quickbooks_products(accounting, self._expected)
+
+        assert check.result is CheckResult.FAIL
+        assert "$150.00" in check.detail  # what the product charges
+        assert "$140.00" in check.detail  # what the engagement list says
+        assert "MasTec:Sridhar Doraiswamy" in check.detail
+
+
+class TestThePayRatesCheck:
+    """`fops doctor` compares the purchase side with the engagement list, so
+    the two can be made to agree before anything moves across (decision 37)."""
+
+    BASE = TestFindingTheProduct.BASE
+
+    def _expected(
+        self, pay_cents: int = 10_000, payee: str = "Blue Peak Consulting LLC"
+    ) -> list["ExpectedProduct"]:
+        from finance_ops_agent.cli.doctor import ExpectedProduct
+
+        return [
+            ExpectedProduct(
+                consultant="Sridhar Doraiswamy",
+                client="MasTec",
+                clients=["MasTec"],
+                bill_rate_cents=14_000,
+                pay_rate_cents=pay_cents,
+                payee=payee,
+            )
+        ]
+
+    def _replay(
+        self, purchase: dict[str, object], company: str = "Blue Peak Consulting LLC"
+    ) -> Replay:
+        from urllib.parse import quote
+
+        item: dict[str, object] = {
+            "Id": "21",
+            "Name": "Sridhar Doraiswamy",
+            "UnitPrice": 140.0,
+            "FullyQualifiedName": "MasTec:Sridhar Doraiswamy",
+        }
+        item.update(purchase)
+        statement = (
+            f"SELECT {PRODUCT_FIELDS} FROM Item"
+            " WHERE FullyQualifiedName = 'MasTec:Sridhar Doraiswamy'"
+        )
+        vendor = f"SELECT {PRODUCT_FIELDS} FROM Vendor WHERE Id = '9'"
+        return Replay(
+            {
+                f"GET {self.BASE}/query?query=" + quote(statement): [
+                    {"status": 200, "json": {"QueryResponse": {"Item": [item]}}}
+                ],
+                # The display name is the person; the company name is who Icon
+                # pays, and either matches the engagement list's payee.
+                f"GET {self.BASE}/query?query=" + quote(vendor): [
+                    {
+                        "status": 200,
+                        "json": {
+                            "QueryResponse": {
+                                "Vendor": [
+                                    {
+                                        "Id": "9",
+                                        "DisplayName": "Sridhar Doraiswamy",
+                                        "CompanyName": company,
+                                    }
+                                ]
+                            }
+                        },
+                    }
+                ],
+            }
+        )
+
+    def test_agreement_passes(self, tmp_path: Path) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_pay
+
+        replay = self._replay(
+            {
+                "PurchaseCost": 100.0,
+                "PrefVendorRef": {"value": "9", "name": "Blue Peak Consulting LLC"},
+            }
+        )
+        accounting, _, _ = build(replay, tmp_path)
+
+        check = check_quickbooks_pay(accounting, self._expected)
+
+        assert check.result is CheckResult.PASS
+        assert "agree with the engagement list" in check.detail
+
+    def test_a_pay_rate_that_disagrees_is_named_with_both_figures(self, tmp_path: Path) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_pay
+
+        replay = self._replay({"PurchaseCost": 110.0})
+        accounting, _, _ = build(replay, tmp_path)
+
+        check = check_quickbooks_pay(accounting, self._expected)
+
+        assert check.result is CheckResult.FAIL
+        assert "$110.00" in check.detail  # what QuickBooks holds
+        assert "$100.00" in check.detail  # what the engagement list says
+        assert "no payment instruction is wrong today" in check.detail
+
+    def test_a_different_payee_is_named(self, tmp_path: Path) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_pay
+
+        replay = self._replay(
+            {"PurchaseCost": 100.0, "PrefVendorRef": {"value": "9", "name": "Someone Else Ltd"}},
+            company="Someone Else Holdings",
+        )
+        accounting, _, _ = build(replay, tmp_path)
+
+        check = check_quickbooks_pay(accounting, self._expected)
+
+        assert check.result is CheckResult.FAIL
+        assert "Someone Else Ltd" in check.detail  # the display name
+        assert "Someone Else Holdings" in check.detail  # and the company name
+        assert "Blue Peak Consulting LLC" in check.detail  # what the list says
+
+    def test_nothing_filled_in_is_not_a_disagreement(self, tmp_path: Path) -> None:
+        """A product whose purchase side is empty has not been filled in; it
+        does not disagree with anything."""
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_pay
+
+        replay = self._replay({})
+        accounting, _, _ = build(replay, tmp_path)
+
+        check = check_quickbooks_pay(accounting, self._expected)
+
+        assert check.result is CheckResult.PASS
+        assert "nothing to compare yet" in check.detail
 
 
 class TestCancelling:
@@ -597,7 +980,7 @@ class TestCrashDuringAWholeRun:
 
         # Run 1: nothing there yet, so it creates - then dies before the
         # billing email. Run 2: the private note is found, so it must not create.
-        replay = replay_from("create_ok", "find_existing")
+        replay = replay_from("create_ok", "find_existing", "engagements")
         accounting, _, _ = build(replay, tmp_path)
         env = _auto_env(tmp_path, accounting)
 
@@ -652,3 +1035,634 @@ def _auto_env(tmp_path: Path, accounting: QuickBooksOnline) -> "ScenarioEnv":
         scripted_reading=reading(date(2026, 8, 1), date(2026, 8, 31)),
     )
     return env
+
+
+_ITEM_LISTING_URL = "https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20%2A%20FROM%20Item%20WHERE%20Active%20%3D%20true%20STARTPOSITION%201%20MAXRESULTS%201000"
+
+
+class TestListingTheEngagements:
+    """`engagements()` is the question the other way round from `product_for`:
+    not "what is this engagement billed at?" but "which engagements are
+    there?" -- which is what lets QuickBooks say one has finished."""
+
+    def test_a_category_reached_only_by_parent_ref_still_counts(self, tmp_path: Path) -> None:
+        """Whether a category shows up in `FullyQualifiedName` depends on the
+        API version; `ParentRef` is the relationship itself. Reading the name
+        alone reported "no product has a category" against a company where
+        every product had one."""
+        accounting, _, _ = build(replay_from("engagements_parent_ref"), tmp_path)
+        listing = accounting.engagements()
+        assert [(one.consultant, one.client) for one in listing.live] == [
+            ("Priya Shah", "Acme Corp")
+        ]
+
+    def test_it_counts_what_it_read_not_only_what_it_recognised(self, tmp_path: Path) -> None:
+        """ "No engagements" and "no products at all" need different things
+        done about them."""
+        listing = build(replay_from("engagements"), tmp_path)[0].engagements()
+        assert listing.products_seen == 3  # two engagements and one uncategorised
+        assert listing.categories_seen == 1
+
+    def test_only_products_under_a_category_are_engagements(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(replay_from("engagements"), tmp_path)
+        listed = accounting.engagements().live
+        assert [(one.consultant, one.client) for one in listed] == [
+            ("Priya Shah", "Acme Corp"),
+            ("Dana Cruz", "Acme Corp"),
+        ]
+
+    def test_a_category_is_not_an_engagement(self, tmp_path: Path) -> None:
+        """A category is itself an Item in QuickBooks, so the listing holds
+        both the engagements and the clients they sit under."""
+        accounting, _, _ = build(replay_from("engagements"), tmp_path)
+        assert "Acme Corp" not in [one.consultant for one in accounting.engagements().live]
+
+    def test_it_asks_only_for_live_products(self, tmp_path: Path) -> None:
+        """An inactive product coming back would read as a live engagement."""
+        replay = replay_from("engagements")
+        accounting, _, _ = build(replay, tmp_path)
+        accounting.engagements()
+        asked = " ".join(unquote(url) for url in replay.urls())
+        assert "FROM Item WHERE Active = true" in asked
+
+    def test_both_rates_and_the_payee_come_back(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(replay_from("engagements"), tmp_path)
+        priya = accounting.engagements().live[0]
+        assert priya.ref == "42"
+        assert priya.bill_rate_cents == 14000
+        assert priya.pay_rate_cents == 10000
+        assert priya.payee == "Priya Shah"
+
+    def test_a_product_with_no_rate_is_listed_rather_than_dropped(self, tmp_path: Path) -> None:
+        """One that quietly vanished would look exactly like one that had
+        finished, and the agent would stop expecting timesheets for it."""
+        accounting, _, _ = build(replay_from("engagements_rateless"), tmp_path)
+        listed = accounting.engagements().live
+        assert [(one.consultant, one.bill_rate_cents) for one in listed] == [("Sam Okafor", None)]
+
+    def test_it_pages_rather_than_stopping_at_the_first_page(self, tmp_path: Path) -> None:
+        """A full page means there may be more. Stopping there would read as
+        every engagement past the first page having ended."""
+        accounting, _, _ = build(replay_from("engagements_paged"), tmp_path)
+        listed = accounting.engagements().live
+        assert len(listed) == PRODUCT_PAGE + 1
+        assert listed[-1].consultant == "Last One"
+
+    def test_a_short_page_ends_the_paging(self, tmp_path: Path) -> None:
+        """One call, not two: the fixture records no second page, so a second
+        call would fail rather than pass quietly."""
+        replay = replay_from("engagements")
+        accounting, _, _ = build(replay, tmp_path)
+        accounting.engagements()
+        queries = [url for method, url in replay.calls if "FROM%20Item" in url]
+        assert len(queries) == 1
+
+
+class TestTheEngagementsCheck:
+    """The products check asks "does every row have a product?"; this asks the
+    other way round, which is the way that matters once QuickBooks is what says
+    an engagement is live."""
+
+    def _workbook(self, *consultants: str, active: bool = True) -> EngagementWorkbook:
+        from finance_ops_agent.domain.engagements import parse_workbook
+        from tests.scenarios.conftest import client_row, consultant_row, engagement_row
+
+        # The parser cross-checks each engagement's consultant against the
+        # Consultants sheet, so both sheets have to hold them.
+        return parse_workbook(
+            RawWorkbook(
+                clients=[client_row()],
+                consultants=[
+                    consultant_row(2 + n, Consultant=name, Email=f"{n}@example.com")
+                    for n, name in enumerate(consultants)
+                ],
+                vendors=[],
+                engagements=[
+                    engagement_row(2 + n, Consultant=name, Active="yes" if active else "no")
+                    for n, name in enumerate(consultants)
+                ],
+            )
+        )
+
+    def test_a_pass_counts_the_live_engagements(self, tmp_path: Path) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_engagements
+
+        accounting, _, _ = build(replay_from("engagements"), tmp_path)
+        check = check_quickbooks_engagements(
+            accounting, lambda: self._workbook("Priya Shah", "Dana Cruz")
+        )
+
+        assert check.result is CheckResult.PASS
+        assert "2 live engagement(s)" in check.detail
+        assert f"the sandbox company {REALM}" in check.detail
+
+    def test_an_engagement_with_no_row_fails_and_names_it(self, tmp_path: Path) -> None:
+        """No row means no billing schedule, which QuickBooks does not hold."""
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_engagements
+
+        accounting, _, _ = build(replay_from("engagements"), tmp_path)
+        check = check_quickbooks_engagements(accounting, lambda: self._workbook("Priya Shah"))
+
+        assert check.result is CheckResult.FAIL
+        assert "Dana Cruz at Acme Corp" in check.detail
+        assert "no row on the engagement list" in check.detail
+
+    def test_a_row_with_no_live_product_fails_and_says_what_will_happen(
+        self, tmp_path: Path
+    ) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_engagements
+
+        accounting, _, _ = build(replay_from("engagements"), tmp_path)
+        check = check_quickbooks_engagements(
+            accounting, lambda: self._workbook("Priya Shah", "Dana Cruz", "Sam Okafor")
+        )
+
+        assert check.result is CheckResult.FAIL
+        assert "Sam Okafor at Acme Corp" in check.detail
+        assert "no new periods" in check.detail
+        assert "mark the row inactive if the engagement has finished" in check.detail
+
+    def test_a_product_with_no_rate_fails(self, tmp_path: Path) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_engagements
+        from finance_ops_agent.domain.engagements import parse_workbook
+        from tests.scenarios.conftest import client_row, consultant_row, engagement_row
+
+        book = parse_workbook(
+            RawWorkbook(
+                clients=[client_row(2, **{"Client": "MasTec", "Legal name": "MasTec"})],
+                consultants=[consultant_row(2, Consultant="Sam Okafor")],
+                vendors=[],
+                engagements=[engagement_row(2, Consultant="Sam Okafor", Client="MasTec")],
+            )
+        )
+        accounting, _, _ = build(replay_from("engagements_rateless"), tmp_path)
+        check = check_quickbooks_engagements(accounting, lambda: book)
+
+        assert check.result is CheckResult.FAIL
+        assert "no rate" in check.detail
+        assert "Sam Okafor at MasTec" in check.detail
+
+    def test_a_company_whose_categories_exist_but_are_unused_says_that_instead(
+        self, tmp_path: Path
+    ) -> None:
+        """Making the categories and putting products under them are different
+        jobs, so being told the wrong one is being sent to the wrong screen."""
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_engagements
+
+        accounting, _, _ = build(replay_from("engagements_unused_category"), tmp_path)
+        check = check_quickbooks_engagements(accounting, lambda: self._workbook("Priya Shah"))
+
+        assert check.result is CheckResult.PASS
+        assert "1 category but no product sits under one" in check.detail
+
+    def test_a_company_with_no_categories_says_the_list_still_decides(self, tmp_path: Path) -> None:
+        """Not "every engagement has ended": a company part-way through being
+        set up answers exactly like manual mode."""
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_engagements
+
+        replay = Replay(
+            {
+                f"GET {_ITEM_LISTING_URL}": [
+                    {"status": 200, "json": {"QueryResponse": {}}, "headers": {}}
+                ]
+            }
+        )
+        accounting, _, _ = build(replay, tmp_path)
+        check = check_quickbooks_engagements(accounting, lambda: self._workbook("Priya Shah"))
+
+        assert check.result is CheckResult.PASS
+        assert "no categories have been made in it at all" in check.detail
+        assert "0 product(s) and 0 categories in use" in check.detail  # says what it read
+
+
+class TestReadingContactsAndTerms:
+    """Read and compared, never used yet: the addresses a timesheet may arrive
+    from and the terms that set a due date still come from the engagement list
+    (decision 45)."""
+
+    def test_a_customer_carries_its_email_and_its_terms(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(replay_from("contacts"), tmp_path)
+        held = accounting.customer("Acme Corporation")
+        assert held is not None
+        assert held.email == "ap@acme.example"
+        assert held.payment_terms_days == 30
+
+    def test_a_vendor_carries_its_email_and_its_terms(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(replay_from("contacts"), tmp_path)
+        held = accounting.payee("7")
+        assert held is not None
+        assert held.name == "Priya Shah"
+        assert held.email == "priya@example.com"
+        assert held.payment_terms_days == 15
+
+    def test_a_blank_email_is_none_rather_than_a_guess(self, tmp_path: Path) -> None:
+        """Not filled in is not the same as nothing being due."""
+        accounting, _, _ = build(replay_from("contacts"), tmp_path)
+        held = accounting.payee("8")
+        assert held is not None
+        assert held.email == ""
+
+    def test_a_record_naming_no_term_falls_back_to_the_company_default(
+        self, tmp_path: Path
+    ) -> None:
+        """A customer's own SalesTermRef is only set when someone chose terms on
+        that customer; the Customer Details screen shows terms either way,
+        because it shows what an invoice would get. Reading the default is what
+        makes the agent's due date the one QuickBooks would have worked out."""
+        accounting, _, _ = build(replay_from("contacts"), tmp_path)
+        held = accounting.payee("8")
+        assert held is not None
+        assert held.payment_terms_days == 30
+        assert held.terms_note == ""
+
+    def test_no_terms_and_no_default_is_nothing_to_compare(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(replay_from("contacts_no_default"), tmp_path)
+        held = accounting.payee("8")
+        assert held is not None
+        assert held.payment_terms_days is None
+        assert held.terms_note == "no terms on the record and no company default"
+
+    def test_the_company_default_is_read_once(self, tmp_path: Path) -> None:
+        """A company with no default must not be asked again every time a
+        record turns out to name no terms."""
+        replay = replay_from("contacts_no_default")
+        accounting, _, _ = build(replay, tmp_path)
+        accounting.payee("8")
+        accounting.payee("8")
+        asked = [url for _, url in replay.calls if "Preferences" in url]
+        assert len(asked) == 1
+
+    def test_a_term_with_no_days_names_the_term(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(replay_from("contacts"), tmp_path)
+        held = accounting.payee("9")
+        assert held is not None
+        assert held.payment_terms_days is None
+        assert "Due on receipt" in held.terms_note
+
+    def test_the_terms_are_asked_for_whole(self, tmp_path: Path) -> None:
+        """A field list is one more thing that has to stay in step with what
+        QuickBooks' query language accepts, which it refused once already for
+        PrefVendorRef."""
+        replay = replay_from("contacts")
+        accounting, _, _ = build(replay, tmp_path)
+        accounting.payee("7")
+        assert any("SELECT%20%2A%20FROM%20Term" in url for url in replay.urls())
+
+    def test_a_vendor_that_is_not_there(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(replay_from("contacts"), tmp_path)
+        assert accounting.payee("404") is None
+
+    def test_no_id_asks_nothing(self, tmp_path: Path) -> None:
+        """A product with no vendor on its purchase side must not send a query
+        for the empty string."""
+        replay = replay_from("contacts")
+        accounting, _, _ = build(replay, tmp_path)
+        assert accounting.payee("") is None
+        assert replay.calls == []
+
+    def test_the_terms_are_read_once_for_the_whole_run(self, tmp_path: Path) -> None:
+        """They change about never, and a call per party would be a call per
+        engagement on every doctor run."""
+        replay = replay_from("contacts")
+        accounting, _, _ = build(replay, tmp_path)
+        accounting.payee("7")
+        accounting.customer("Acme Corporation")
+        terms = [url for _, url in replay.calls if "FROM%20Term" in url]
+        assert len(terms) == 1
+
+    def test_the_customer_is_found_the_same_way_the_invoice_finds_it(self, tmp_path: Path) -> None:
+        """Otherwise the record compared could be a different customer from the
+        one billed."""
+        replay = replay_from("contacts")
+        accounting, _, _ = build(replay, tmp_path)
+        accounting.customer("Acme Corporation")
+        assert any("DisplayName%20%3D%20%27Acme%20Corporation%27" in url for url in replay.urls())
+
+
+class TestFindingTheProductByItsParent:
+    """The category is not always in `FullyQualifiedName`, and the path lookup
+    failing is not proof there is no category. Without this, two products of
+    one name were refused as ambiguous even though their parents told them
+    apart -- and, worse, a single one was billed from "the name alone" without
+    anyone checking which client it belonged to."""
+
+    def test_two_products_of_one_name_are_told_apart_by_their_parent(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(replay_from("product_by_parent_ref"), tmp_path)
+        product = accounting.product_for("Sridhar Doraiswamy", ["MasTec", "MasTec Inc"])
+        assert product.ref == "21"
+        assert product.unit_price_cents == 14_000  # MasTec's rate, not iStream's
+
+    def test_the_other_client_gets_the_other_product(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(replay_from("product_by_parent_ref"), tmp_path)
+        product = accounting.product_for("Sridhar Doraiswamy", ["iStream"])
+        assert product.ref == "22"
+        assert product.unit_price_cents == 16_000
+
+    def test_a_parent_is_asked_for_once_per_run(self, tmp_path: Path) -> None:
+        replay = replay_from("product_by_parent_ref")
+        accounting, _, _ = build(replay, tmp_path)
+        accounting.product_for("Sridhar Doraiswamy", ["MasTec"])
+        accounting.product_for("Sridhar Doraiswamy", ["iStream"])
+        asked = [url for _, url in replay.calls if "Id%20%3D%20%2720%27" in url]
+        assert len(asked) == 1
+
+
+class TestAVendorFiledUnderThePersonsName:
+    """Kevin's vendors are named for the consultant, with the firm Icon pays in
+    the company name -- `Subramanian Arumugam` / `Star Tech Services, Inc.`.
+    The reference on a product carries only the display name, so reading that
+    alone made every such engagement look like a disagreement."""
+
+    def _replay(self, tmp_path: Path) -> Replay:
+        from urllib.parse import quote
+
+        def key(statement: str) -> str:
+            return "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000" + (
+                "/query?query=" + quote(statement)
+            )
+
+        return Replay(
+            {
+                key(
+                    f"SELECT {PRODUCT_FIELDS} FROM Item"
+                    " WHERE FullyQualifiedName = 'MasTec:Subramanian Arumugam'"
+                ): [
+                    {
+                        "status": 200,
+                        "json": {
+                            "QueryResponse": {
+                                "Item": [
+                                    {
+                                        "Id": "31",
+                                        "Name": "Subramanian Arumugam",
+                                        "FullyQualifiedName": "MasTec:Subramanian Arumugam",
+                                        "UnitPrice": 140.0,
+                                        "PurchaseCost": 100.0,
+                                        "PrefVendorRef": {
+                                            "value": "11",
+                                            "name": "Subramanian Arumugam",
+                                        },
+                                    }
+                                ]
+                            }
+                        },
+                    }
+                ],
+                key(f"SELECT {PRODUCT_FIELDS} FROM Vendor WHERE Id = '11'"): [
+                    {
+                        "status": 200,
+                        "json": {
+                            "QueryResponse": {
+                                "Vendor": [
+                                    {
+                                        "Id": "11",
+                                        "DisplayName": "Subramanian Arumugam",
+                                        "CompanyName": "Star Tech Services, Inc.",
+                                    }
+                                ]
+                            }
+                        },
+                    }
+                ],
+            }
+        )
+
+    def test_the_firm_is_who_icon_pays(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(self._replay(tmp_path), tmp_path)
+        rates = accounting.engagement_rates("Subramanian Arumugam", ["MasTec"])
+        assert rates is not None
+        assert rates.payee == "Star Tech Services, Inc."
+
+    def test_the_persons_name_is_kept_as_well(self, tmp_path: Path) -> None:
+        """Either matching the engagement list's payee is agreement, because
+        Kevin may have written down either one."""
+        accounting, _, _ = build(self._replay(tmp_path), tmp_path)
+        product = accounting.product_for("Subramanian Arumugam", ["MasTec"])
+        assert product.vendor == "Subramanian Arumugam"
+        assert product.vendor_company == "Star Tech Services, Inc."
+
+    def test_the_vendor_is_asked_for_once(self, tmp_path: Path) -> None:
+        replay = self._replay(tmp_path)
+        accounting, _, _ = build(replay, tmp_path)
+        accounting.product_for("Subramanian Arumugam", ["MasTec"])
+        accounting.engagement_rates("Subramanian Arumugam", ["MasTec"])
+        asked = [url for _, url in replay.calls if "FROM%20Vendor" in url]
+        assert len(asked) == 1
+
+
+class TestNamesWithInvisibleCharactersInThem:
+    """A vendor's company name pasted from a document arrives as `"Subramanian
+    Arumugam "` -- a non-breaking space on the end. It is identical to the
+    plain name on every screen and not equal to it, so it became a
+    disagreement nobody could see, and would have become a payee name with an
+    invisible character in it."""
+
+    def _replay(self) -> Replay:
+        from urllib.parse import quote
+
+        base = "https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000"
+
+        def key(statement: str) -> str:
+            return f"GET {base}/query?query=" + quote(statement)
+
+        return Replay(
+            {
+                key(
+                    f"SELECT {PRODUCT_FIELDS} FROM Item"
+                    " WHERE FullyQualifiedName = 'MasTec:Subramanian Arumugam'"
+                ): [
+                    {
+                        "status": 200,
+                        "json": {
+                            "QueryResponse": {
+                                "Item": [
+                                    {
+                                        "Id": "31",
+                                        "Name": "Subramanian Arumugam ",
+                                        "FullyQualifiedName": "MasTec:Subramanian Arumugam",
+                                        "UnitPrice": 140.0,
+                                        "PurchaseCost": 100.0,
+                                        "PrefVendorRef": {
+                                            "value": "63",
+                                            "name": "Subramanian Arumugam",
+                                        },
+                                    }
+                                ]
+                            }
+                        },
+                    }
+                ],
+                key(f"SELECT {PRODUCT_FIELDS} FROM Vendor WHERE Id = '63'"): [
+                    {
+                        "status": 200,
+                        "json": {
+                            "QueryResponse": {
+                                "Vendor": [
+                                    {
+                                        "Id": "63",
+                                        "DisplayName": "Subramanian Arumugam",
+                                        # As QuickBooks really returned it.
+                                        "CompanyName": "Subramanian Arumugam ",
+                                    }
+                                ]
+                            }
+                        },
+                    }
+                ],
+            }
+        )
+
+    def test_the_payee_has_no_invisible_character_in_it(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(self._replay(), tmp_path)
+        rates = accounting.engagement_rates("Subramanian Arumugam", ["MasTec"])
+        assert rates is not None
+        assert rates.payee == "Subramanian Arumugam"
+
+    def test_it_agrees_with_the_engagement_list_rather_than_looking_identical(
+        self, tmp_path: Path
+    ) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, ExpectedProduct, check_quickbooks_pay
+
+        expected = ExpectedProduct(
+            consultant="Subramanian Arumugam",
+            client="MasTec",
+            clients=["MasTec"],
+            bill_rate_cents=14_000,
+            pay_rate_cents=10_000,
+            payee="Subramanian Arumugam",
+        )
+        accounting, _, _ = build(self._replay(), tmp_path)
+        check = check_quickbooks_pay(accounting, lambda: [expected])
+        assert check.result is CheckResult.PASS
+
+    def test_a_product_name_is_cleaned_too(self, tmp_path: Path) -> None:
+        """It is the Description on the invoice the client reads."""
+        accounting, _, _ = build(self._replay(), tmp_path)
+        product = accounting.product_for("Subramanian Arumugam", ["MasTec"])
+        assert product.vendor_company == "Subramanian Arumugam"
+
+
+class TestACategoryTheListingDoesNotReturn:
+    """A sandbox reported 22 products and 0 categories against a company where
+    every product had one. Whatever the reason a category does not come back
+    as an item of its own, a product that plainly has a parent must not read
+    as one with no category."""
+
+    def test_the_parent_is_asked_for_rather_than_the_product_dropped(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(replay_from("engagements_hidden_category"), tmp_path)
+        listing = accounting.engagements()
+        assert [(one.consultant, one.client) for one in listing.live] == [
+            ("Priya Shah", "Acme Corp"),
+            ("Dana Cruz", "Acme Corp"),
+        ]
+
+    def test_a_product_with_no_parent_is_still_not_an_engagement(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(replay_from("engagements_hidden_category"), tmp_path)
+        assert "Consulting" not in [one.consultant for one in accounting.engagements().live]
+
+    def test_the_count_says_a_category_was_found(self, tmp_path: Path) -> None:
+        """The line that named the problem has to stop naming it once it is
+        gone, or the next person reads the old symptom."""
+        listing = build(replay_from("engagements_hidden_category"), tmp_path)[0].engagements()
+        assert listing.products_seen == 3
+        assert listing.categories_seen == 1
+
+    def test_one_parent_shared_by_two_products_is_asked_for_once(self, tmp_path: Path) -> None:
+        replay = replay_from("engagements_hidden_category")
+        accounting, _, _ = build(replay, tmp_path)
+        accounting.engagements()
+        asked = [url for _, url in replay.calls if "Id%20%3D%20%2720%27" in url]
+        assert len(asked) == 1
+
+
+class TestAConsultantHeldAsStock:
+    """Kevin's sandbox products are Inventory items: they count a quantity on
+    hand and post to stock and cost of goods sold. Invoices are still made from
+    them, so this is something to say rather than something to refuse."""
+
+    def _replay(self, kind: str) -> Replay:
+        from urllib.parse import quote
+
+        base = "https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000"
+        statement = (
+            f"SELECT {PRODUCT_FIELDS} FROM Item"
+            " WHERE FullyQualifiedName = 'MasTec:Sridhar Doraiswamy'"
+        )
+        return Replay(
+            {
+                f"GET {base}/query?query=" + quote(statement): [
+                    {
+                        "status": 200,
+                        "json": {
+                            "QueryResponse": {
+                                "Item": [
+                                    {
+                                        "Id": "22",
+                                        "Name": "Sridhar Doraiswamy",
+                                        "FullyQualifiedName": "MasTec:Sridhar Doraiswamy",
+                                        "UnitPrice": 140.0,
+                                        "Type": kind,
+                                    }
+                                ]
+                            }
+                        },
+                    }
+                ]
+            }
+        )
+
+    def _expected(self) -> list[ExpectedProduct]:
+        return [
+            ExpectedProduct(
+                consultant="Sridhar Doraiswamy",
+                client="MasTec",
+                clients=["MasTec"],
+                bill_rate_cents=14_000,
+                pay_rate_cents=10_000,
+                payee="Sridhar Doraiswamy",
+            )
+        ]
+
+    def test_it_passes_but_says_so(self, tmp_path: Path) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_products
+
+        accounting, _, _ = build(self._replay("Inventory"), tmp_path)
+        check = check_quickbooks_products(accounting, self._expected)
+
+        assert check.result is CheckResult.PASS  # invoices are still made from it
+        assert "Inventory product" in check.detail
+        assert "Sridhar Doraiswamy" in check.detail
+        assert "Service or Non-inventory" in check.detail
+
+    def test_a_service_product_says_nothing(self, tmp_path: Path) -> None:
+        from finance_ops_agent.cli.doctor import CheckResult, check_quickbooks_products
+
+        accounting, _, _ = build(self._replay("Service"), tmp_path)
+        check = check_quickbooks_products(accounting, self._expected)
+
+        assert check.result is CheckResult.PASS
+        assert "Inventory" not in check.detail
+
+
+class TestAskingForANewerShapeOfTheRecord:
+    """Intuit serves an old shape of each entity unless a minor version is
+    asked for, and newer fields do not come back at all. Nothing is sent by
+    default; `FOPS_QBO_MINORVERSION` turns it on."""
+
+    def test_no_minor_version_is_sent_unless_one_is_set(self, tmp_path: Path) -> None:
+        replay = replay_from("engagements")
+        accounting, _, _ = build(replay, tmp_path)
+        accounting.engagements()
+        assert not any("minorversion" in url for url in replay.urls())
+
+    def test_a_set_version_reaches_every_request(self, tmp_path: Path) -> None:
+        from finance_ops_agent.adapters.quickbooks.client import QuickBooksClient
+        from finance_ops_agent.adapters.quickbooks.tokens import TokenStore
+
+        store = TokenStore(tmp_path / "qbo_tokens.json")
+        store.save(tokens())
+        client = QuickBooksClient(
+            store, "an-id", "a-secret", http=Replay({}).client(), minorversion="75"
+        )
+        assert client.company_url("/query?query=SELECT").endswith("&minorversion=75")
+        assert client.company_url("/invoice").endswith("?minorversion=75")

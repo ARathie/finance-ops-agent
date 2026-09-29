@@ -6,7 +6,7 @@ Intuit will not issue production QuickBooks credentials without a public licence
 |---|---|
 | `index.html` | The launch URL. Says plainly that this is internal software with nothing to sign in to. |
 | `connect.html` | The connect/reconnect URL. Describes `fops qbo-connect`. |
-| `callback.html` | The production redirect URI. Intuit sends the browser here after sign-in; it shows its own address for pasting into `fops qbo-connect` (decision 36). |
+| `callback.html` | The production redirect URI. Intuit sends the browser here after sign-in; it shows its own address for pasting into `fops qbo-connect` (decision 51). |
 | `disconnect.html` | The disconnect URL. How to end the connection from either side. |
 | `eula.html` | The end-user licence agreement. |
 | `privacy.html` | The privacy policy. The substantive one. |

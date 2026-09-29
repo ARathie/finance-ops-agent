@@ -12,7 +12,7 @@ This repository is the billing agent for Icon Technologies: it reads consultant 
 
 ## Rules that must never be broken
 
-1. **Two rates, never from the reading.** The bill rate (charged to the client) and the pay rate (paid to the consultant or vendor) are different numbers, and neither ever comes from an email, a timesheet, or the model. The **pay rate** comes only from the engagement list. The **bill rate** comes from the consultant's product in QuickBooks Online when that is the accounting mode, and from the engagement list in manual mode; where both exist and disagree, the invoice is voided and Kevin is told (decision 30).
+1. **Two rates, never from the reading.** The bill rate (charged to the client) and the pay rate (paid to the consultant or vendor) are different numbers, and neither ever comes from an email, a timesheet, or the model. **Both come from the engagement's product in QuickBooks Online** when that is the accounting mode -- the sales price and the purchase cost -- and from the engagement list in manual mode, or where QuickBooks has nothing there (decisions 30, 38 and 43). The engagement list is the cross-check: where the two disagree, QuickBooks' figure is used, the item waits, and Kevin is told before anything is invoiced or paid.
 2. **When unsure, ask Kevin.** Uncertainty about who, which client, which dates, how many hours, whether it was approved, the rate, or who to send to becomes a review item emailed to Kevin. The code never guesses.
 3. **One record per consultant per billing period.** A second timesheet for the same consultant and period is a duplicate or a correction, never a second invoice.
 4. **Nothing goes to a client without Kevin on CC, and nothing is sent or created twice.** Every client email and every invoice creation is written to the `outgoing` table before it happens and reconciled after a restart.
@@ -46,6 +46,7 @@ Some boxes in `docs/roadmap.md` need a human: an account created, a command run 
 - Every new rule, status change, and review reason has a test, including its failure path.
 - Fakes updated whenever a port changes; no network needed for tests; no credentials or real client data in the repo.
 - Docs updated in the same PR when behaviour changes; the PR's automated boxes ticked in `docs/roadmap.md`, and every "Needs a person" box left unticked and spelled out to the operator.
+- When a QuickBooks check in `cli/doctor.py` changes, `docs/quickbooks-setup.md` changes in the same PR. Those checks and that document are one specification written twice: the checks say what the agent expects, the document tells Kevin what to click. They drift silently otherwise, and the doctor points him at it when one fails.
 
 ## Do not
 

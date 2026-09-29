@@ -269,7 +269,215 @@ This needed `inbox.move` to look beyond the inbox: it searched `INBOX` only, so 
 
 The folder remains a courtesy for a person looking at the mailbox. The database is the record.
 
-## 36. Production QuickBooks keys from the start, signed in by pasting the address back
+## 36. A product is an engagement, not a person
+
+Decision 30 made each consultant a product in QuickBooks, with their rate on it. That only works while a consultant has one rate. Icon's engagement list is explicitly one row per consultant **per client**, so a consultant working at two clients has two bill rates, and one product cannot hold both: the agent would have billed one of them at the other's rate, and its own total check would have voided the invoice with "the product's rate and the engagement list have stopped agreeing". None of Icon's current engagements repeats a consultant, so it had not bitten.
+
+Decision: **a product is an engagement.** It sits under a QuickBooks **category named for the client**, so its `FullyQualifiedName` is `MasTec:Sridhar Doraiswamy`, and that is what the agent looks it up by.
+
+Why the category rather than the name or the SKU:
+
+- QuickBooks enforces uniqueness on an item's name, so two products could not both be called `Sridhar Doraiswamy`. Under different categories they can, because the qualified path is the identity.
+- `FullyQualifiedName` is **read-only, system-defined, filterable and sortable**. QuickBooks maintains it, so it cannot drift out of step with the hierarchy the way a hand-typed key does, and the lookup stays one exact query.
+- `Sku` was the other candidate. It is not returned at all without a `minorversion` parameter, which the agent does not send, its uniqueness is not enforced, and it would still not have allowed two products of the same name.
+- In the QuickBooks interface the products end up grouped by client, which is how Kevin reads them anyway.
+
+The client is looked up under the names it might be filed under, in turn: the engagement list's short name, then the "QuickBooks customer" name, then the legal name. Each is an exact match, the first that finds a product wins, and the log says which matched -- the same shape as the customer lookup in decision 32.
+
+**A product not yet under a category is still used**, but only while exactly one product answers to that name: a bridge for filling the categories in. Two products sharing a name with no category to tell them apart is refused and both are named, because that is precisely the case that would bill the wrong rate.
+
+`fops doctor` checks **per engagement** now, not per consultant, for the same reason.
+
+## 37. The purchase side is read before it is trusted
+
+QuickBooks holds both sides of an engagement's product: `UnitPrice`, what the client is billed, and `PurchaseCost`, what Icon pays for those hours, with a preferred vendor saying who it pays. The bill rate moved to QuickBooks in decision 30. The pay rate is the obvious next thing to move, and moving it blind would be a poor trade: the pay rate feeds the payment instruction Kevin acts on, and unlike the bill rate nothing about it is checked against an invoice afterwards.
+
+Decision: the agent **reads** the purchase side and **does not use it yet**. `fops doctor` gains a **quickbooks pay rates** check that compares what QuickBooks holds with what the engagement list says, so the two can be made to agree before anything depends on either.
+
+- A product with nothing on its purchase side is **not a disagreement**; it has not been filled in, and the check says how many are in that state rather than failing.
+- A purchase cost or a preferred vendor that **differs** is a failure, naming both figures. Nothing is paid from QuickBooks today, so no payment instruction is wrong because of it -- but they have to agree before the pay rate moves, and a difference found now is a difference nobody has to debug later.
+- The **bill rate** is now compared too, in the products check, and a difference there is a failure for a harder reason: the invoice would be created, found to disagree, and voided (decision 30). That was only discoverable by watching an invoice fail.
+
+`fops doctor` truncated a failing check's detail at 300 characters, which was fine while every failure was one line. These checks name one line per engagement, so the limit is now generous enough to show them all and says when it has cut something short: a check that silently drops the entries someone needs is worse than one that says nothing.
+
+The step this sets up is moving the pay rate and the payee across, which needs more than a lookup: the amount owed is worked out when a timesheet is read and stored on the item, and that happens in the application layer from the engagement list alone, with no accounting system in reach. That is a change of shape, not a change of source, and it waits until the two agree.
+
+## 38. What Icon pays comes from the product's purchase side
+
+Decision 37 read the purchase side without using it, so the two sources could be compared first. `fops doctor` now reports they agree for every one of Icon's engagements, so the move can be made.
+
+Decision: **the pay rate and the payee come from the engagement's product in QuickBooks** -- `PurchaseCost` and the preferred vendor -- in the same way the bill rate has since decision 30. The engagement list stays the cross-check.
+
+- **Where QuickBooks has nothing on the purchase side, the engagement list is used.** An empty purchase side is one that has not been filled in, not a statement that nothing is owed. This is what lets the categories and costs be filled in at Kevin's pace.
+- **A disagreement uses QuickBooks' figure and tells Kevin**, because that is where the rate lives now and he is the one who pays. The review **pauses the item** as every review does, which means the client's invoice waits on a disagreement that has nothing to do with it. That is the price of one mechanism rather than two, and `fops doctor` is what keeps it rare: it compares the two before any timesheet arrives, so a difference is found while someone is looking at the engagement list rather than when an invoice is due.
+- **An accounting system that cannot answer does not stop the run.** The engagement list still has a rate, the timesheet is still read, and the invoice happens on a later run anyway. A QuickBooks outage must not stop the agent reading mail.
+
+This is a change of shape, not only of source: the amount owed is worked out when a timesheet is read, so the accounting system is now consulted while an item is being created, in `application/run.py`. That is the first time the accounting port is asked anything outside invoicing, which is why `AccountingSystem` gained `engagement_rates` rather than the application reaching for an adapter.
+
+What still comes from the engagement list about paying: **how** Icon pays (bank transfer, payroll, check) and **when** (the pay timing days). Both have plausible homes on a QuickBooks vendor record, and neither is worth moving until the rest of the residue moves with it.
+
+## 39. An item belongs to an engagement, not to a pair of names
+
+An engagement is a product in QuickBooks (decision 36), and its client and consultant come from that product's category path. Names get tidied: `MasTec` becomes `MasTec Inc`, a consultant's spelling is corrected. Items were found by consultant and client name alone, so a rename would have orphaned every item in flight -- the agent would have stopped finding them, expected fresh invoices for work already in hand, and left the originals waiting for ever.
+
+Decision: **an item carries the accounting system's id for its engagement, and is found by that first.** The consultant and client names stay on the item as the label a person reads, and **catch up** when the accounting system's names change.
+
+- Found by id under different names, the item is **relabelled**, not duplicated. It is the same engagement; the id says so.
+- Found by neither, it is a new item, as before.
+- **Both places that look for an item do this**: the one that reads a timesheet, and the one that works out which invoices to expect. The second runs first in a run, so leaving it looking by name alone would have made the duplicate before the rename could be noticed.
+- **An empty id matches nothing.** Manual mode has no accounting system to have an id in, and those items are still found by name; an empty id must not match all of them.
+
+`items.engagement_ref` is nullable for items made before this and for manual mode. The unique constraint still stands on consultant, client and period -- one invoice per consultant per client per month (CLAUDE.md rule 3) is unchanged, and the id is the identity rather than a second key.
+
+## 40. The engagement list moves into the agent's own store
+
+Rates, the consultant-client pairing, and whether an engagement is live all belong to QuickBooks now (decisions 30, 36 and 38). What is left in the workbook is Icon's own operating policy -- billing schedules, the addresses timesheets arrive from, the names to match on, which clients are invoiced by email and which by portal -- and no accounting system has a home for any of it. Keeping a spreadsheet alive for that residue means two places to edit, one of which nothing checks.
+
+Decision: **`fops engagements import` copies the workbook into the agent's store, and the agent reads it from there.** `fops engagements` says which of the two it is reading and what is in it; `fops engagements forget` puts it back on the file.
+
+**What is stored is the workbook exactly as it was read** -- sheets of rows of cells, by row number -- not a new shape. Nothing downstream can tell the difference: the same parsing, the same checks, the same problems naming the same sheet and row Kevin sees. That is deliberate. Reshaping the data and changing where it lives at the same time would have made every rule about it suspect at once, and fields can now leave the list one at a time as they move to QuickBooks rather than everything moving together.
+
+- **A workbook with problems is not imported.** Importing one the agent would refuse to bill from only moves the problem somewhere harder to look at.
+- **`fops doctor` says which source it read**, because someone editing the workbook after importing and seeing nothing change deserves to be told why rather than to work it out.
+- The list is stored under one key in the state the agent already keeps, so there is no migration and a backup already carries it.
+
+What this does **not** do yet is give Kevin a way to change anything without the workbook: importing again from an edited file is the only path today. Editing commands come next, and the shape they should take is clearer once it is known which fields are still in the list after the rest move to QuickBooks.
+
+## 41. What Kevin sets up in QuickBooks is written down, next to the checks that test it
+
+More of the agent's inputs live in QuickBooks with every step of the move: the customers, a product per engagement, two rates on each one, a category that says which engagement it is, and a setting that decides whether Kevin's invoice numbers survive at all. None of it was written anywhere Kevin reads. `integrations/quickbooks-online.md` describes the same setup, but it is a developer's document -- it says what goes over the wire -- and `fops doctor` names what is wrong without saying where to go and change it.
+
+Decision: **`docs/quickbooks-setup.md` is the Kevin-facing half of `cli/doctor.py`**, one section per check, and each section ends with the line the doctor actually prints when that part is not right.
+
+- **The messages are quoted verbatim, not paraphrased.** A remembered approximation is worse than nothing: someone searching for the words on their screen has to find them.
+- **`CLAUDE.md` binds the two together**: a QuickBooks check that changes changes that document in the same PR. The checks are already the machine-readable form of it -- `ExpectedProduct` is a specification of what Kevin must have created -- so this keeps one thing from being two.
+- **The doctor points at it once**, after the failure count, and only when a QuickBooks check failed. Repeating it inside each message would lengthen a dozen sentences Kevin already has to read to fix one thing. A test asserts the file it names exists, because a pointer at a document that moved is worse than no pointer.
+
+Two things the document says that no check does. The **custom transaction numbers** setting cannot be read through the API, so nothing fails until the first invoice is made, voided and reported; that is written down as the one thing to get right before a real run rather than after. And **ending an engagement** is still the engagement list's `Active` column, not QuickBooks' -- marking a product inactive while the list still calls the engagement live turns it into a "no product for…" failure. Making QuickBooks the switch is agreed and not built; the document says so plainly rather than describing the intended behaviour as though it were there.
+
+## 42. QuickBooks says which engagements are live; the workbook says when to bill
+
+Decision 36 made each engagement a product under a category, and decision 38 moved both rates onto it. What still came from the workbook was the list of engagements itself, from the Engagements sheet's `Active` column -- so ending an engagement meant editing a spreadsheet, while everything else about it was edited in QuickBooks. Two switches for one thing, and only one of them was where Kevin was already working.
+
+Decision: **the accounting system is asked which engagements are live, and that is what decides whether to expect a timesheet.** In QuickBooks that is the active products under a category, listed with paging; `AccountingSystem.engagements()` is the port.
+
+This is a join, not a replacement, and the seam is worth naming: **QuickBooks says *which*, the workbook says *when*.** The billing schedule, the start date and the first period exist in no accounting system, so an engagement can only be scheduled from a row. That decides the awkward cases:
+
+- **A product with no row** cannot be given a period, so Kevin is asked (`LIST_ROW_PROBLEM`) rather than a schedule being guessed.
+- **A row with no live product** means no new periods. It is a run report line and a failing doctor check, not a review: doctor fails on exactly this before any timesheet is due, and saying it twice trains someone to skim both.
+- **A row marked inactive by hand, with a live product,** is live. QuickBooks is the switch, and its schedule is still read off that row.
+- **An empty listing means "nothing to say", never "everything has ended".** Manual mode answers that way, and so does a company whose products are not filled in yet. The engagement list then decides on its own, exactly as before. The dangerous reading of silence is the one where the agent quietly stops billing, so it is a test of its own.
+- **An accounting system that cannot answer does not stop the run**, for the same reason as the rates (decision 38): the list still says what is active and the next run picks the answer up.
+
+Ending an engagement means "expect no more timesheets" and nothing else -- it is not "can no longer invoice". Work already in hand keeps its items, a waiting invoice still goes out, and a late timesheet for a period that already happened is still handled.
+
+Two details that are easy to get wrong. The **order** is the workbook's, not sorted: items are created in that order and their numbers are what Kevin reads in the tracking sheet. And a **category is itself an Item** in QuickBooks, so the listing contains the clients as well as the engagements; a category is not an engagement, and neither is a product with no category.
+
+**A product's category is found by `ParentRef`, not by splitting `FullyQualifiedName`.** The first version did the latter and reported "no product sits under a category" against a company where every product did: whether a category appears in the fully qualified name depends on the API version being talked to, while `ParentRef` is the relationship itself. The same assumption was in `product_for`, where it was quieter and worse -- the path lookup failed, the fallback matched on the consultant's name alone, and the right answer came back for the wrong reason. A consultant at two clients would have been refused as ambiguous, or, had only one product existed, billed without anyone checking which client it belonged to. Both now read the parent, and the counts of what was read are part of what the doctor prints, because "no engagements" and "no products at all" need different things done about them.
+
+What this does **not** do is retire the Engagements sheet's columns. The pairing, the rates and the `Active` flag are now cross-checks rather than sources, and they earn their place while there is only one cycle's evidence that QuickBooks holds them correctly -- the fallback above depends on them. Removing them is its own change, once a full cycle has run with QuickBooks deciding.
+
+## 43. The bill rate comes off the product too, and is taken when the timesheet is read
+
+Decision 30 said the invoice is priced from the consultant's product, and it was -- but only the invoice. Everything the agent computed for itself still used the engagement list's bill rate: the preview, the amount Kevin approves, the tracking sheet, the guardrail on an unusual amount. The two were held together by the total check, which voided an invoice whose total disagreed. So the workbook was still a *source* of the bill rate, not only a cross-check, and it was the last thing keeping decision 30 half-finished.
+
+Decision: **the bill rate is taken from the product when the timesheet is read**, into the item's snapshot, the way the pay rate has been since decision 38. A disagreement with the engagement list is a review naming both figures, and the item waits.
+
+What this changes is *when* a drifted rate is found. Before, the only way to discover it was to create the invoice, see the total disagree, and void it -- which spent an invoice number and left a voided invoice in Kevin's books, all because a spreadsheet nobody had updated said something else. Now it is found when the timesheet is read, before anything exists to void, and it costs a reply.
+
+- **The item waits, as on any review.** For the bill rate that is plainly right: nothing should be invoiced at a price two systems disagree about.
+- **One review per item, not one per field.** A bill rate, a pay rate and a payee that all disagree are one message naming all three. Two emails about one engagement is how a person learns to skim them.
+- **The total check stays.** Its job is now different and still real: the invoice is not created until Kevin approves, so the product's rate can change in between. That window is what it guards.
+- **Where QuickBooks cannot price the engagement, the engagement list does.** A product with no rate makes the lookup fail, which is already a refusal in its own right and a failing doctor check; the run does not stop.
+
+`EngagementSnapshot.pay_disagreement` became `rate_disagreement`, since it now carries all three. Items already in the database hold the old name, so it is still read: a rename that silently dropped their text would lose the one sentence saying what the disagreement was.
+
+What is left in the workbook after this is what QuickBooks has no home for: the billing schedules, the addresses timesheets may arrive from, the names to match on, the delivery method, payment terms and pay timing. The rate columns stay as the cross-check and as the fallback when QuickBooks cannot answer.
+
+## 44. A blank billing schedule means monthly
+
+Every engagement Icon bills is monthly. Making Kevin write "monthly" on every row is a cell to get wrong for no information gained, and a blank one was rejecting the whole row.
+
+Decision: **a blank "Billing schedule" means monthly.** The other schedules still work and still have to be asked for by name, and "First period start" is still required for the two that need it -- a blank cell must not be read as weekly, which is its own test.
+
+## 45. What QuickBooks holds about a client or a payee is read and compared, not used
+
+The addresses a timesheet may arrive from, and the terms that set a due date, are the next things that could leave the engagement list. QuickBooks has a home for both: a customer carries `PrimaryEmailAddr` and `SalesTermRef`, and the vendor on a product's purchase side carries `PrimaryEmailAddr` and `TermRef`. Terms are their own entity, so a reference has to be resolved to a number of days; they are read once per run rather than once per party.
+
+Decision: **`fops doctor` reads both records and compares them with the engagement list, and nothing uses QuickBooks' answer yet.** This is the shape decision 37 used before the pay rate moved, for the same reason: a difference found here is found while someone is looking at the engagement list, not when an invoice is due or a timesheet is refused.
+
+- **A blank field in QuickBooks is not a disagreement.** It has not been filled in, and the check says which so Kevin knows what is left rather than being told he is wrong -- including *why* there are no terms, because "nobody chose one for this customer" and "the term chosen has no due-days" need different fixes, and a company can have Net 30 in its Terms list and on every invoice by default without any record carrying it.
+- **An engagement whose product names no vendor is listed with nothing to look up**, not skipped. Skipped, a company with no purchase sides filled in read exactly like one that agreed about everything.
+- **A payee is looked up by the id on its product's purchase side, never by name.** A vendor filed under a spelling nobody expected is still the one compared.
+- **A client's record is found the same way the invoice finds it** -- display name, then company name -- so the record compared can never be a different customer from the one billed.
+- **Several addresses on the list against one in QuickBooks is agreement if any of them match.** The list holds every address a client sends invoices to; QuickBooks holds one.
+
+Moving the timesheet addresses is the one to be careful with, because that field decides **who may send a timesheet**, and getting it wrong either refuses a real one or accepts someone else's. `FOPS_TIMESHEET_FORWARDERS` stays regardless (decision 25): forwarding by hand has to keep working while the agent is being tested, and it is reported loudly outside dry run.
+
+This check takes a `Protocol` saying what it needs rather than the adapter plus an `isinstance`, which is what the checks before it do. That was why none of them could be exercised except through recorded HTTP; saying what is actually needed costs nothing and lets the comparison be tested on its own.
+
+Two things that did **not** move, and why:
+
+- **"Names on timesheets" and "Other names"** are Icon's own knowledge of how a client or a person is written on somebody else's paperwork -- `ACME Corp.`, `Shah, Priya`. QuickBooks holds structured names (a vendor's given and family name, a customer's display, company and print-on-cheque names) which are worth reading as extra candidates, but it has no list of aliases, and inventing one from the structured fields would quietly narrow what the agent recognises.
+- **"Delivery"** is not a payment method. It is `email` (the agent sends the invoice) or `portal` (Kevin uploads it to the client's own system and the agent sends nothing). QuickBooks' `PreferredDeliveryMethod` answers a different question -- how QuickBooks itself would deliver -- and has no value meaning "Icon uploads this by hand somewhere else".
+
+## 46. A vendor's company name is who Icon pays, and `fops qbo-show` ends the guessing
+
+Kevin's vendors are filed under the consultant's name, with the firm Icon actually pays in the **company name**: `Subramanian Arumugam` / `Star Tech Services, Inc.`. The `PrefVendorRef` on a product carries only the display name, so reading that alone made every such engagement look like a disagreement with the engagement list, which names the firm.
+
+Decision: **the payee is the vendor's company name where it has one, and either name counts as agreement.** The vendor is read once per run and both names are kept: Kevin may have written down either, and a doctor check that insists on one spelling is noise rather than a finding.
+
+The second half of this decision is about method. Three times in one day a field's shape was guessed at and the guess was wrong -- `PrefVendorRef` in a `SELECT` list, `DueDays` in another, and a product's category taken by splitting `FullyQualifiedName` when the relationship lives in `ParentRef`. Each time the symptom was the same: a check reported nothing where the QuickBooks screen plainly showed something, and the next step was another guess.
+
+Decision: **`fops qbo-show <customer|vendor|product|term> [name]` prints the record exactly as QuickBooks returns it** -- the whole entity, no field picking, nothing written and no client touched. Where a check says a field is absent and the screen says otherwise, the record settles it. The contacts check names the command when it reports missing terms, because that is exactly the case where the answer is one command away and a guess is not worth making.
+
+## 47. The company's default terms count, and names from QuickBooks are cleaned
+
+`fops qbo-show` (decision 46) settled two things on its first use, both of which had been guessed at wrongly.
+
+**A customer's screen shows terms it does not hold.** MasTec's Customer Details tab shows `Terms: Net 30`; the record QuickBooks returns has no `SalesTermRef` at all. The tab shows what an invoice would get, and where a record names no terms that is the **company default** from Account and settings. (The same record shows the tab and the API disagreeing elsewhere, too: `PreferredDeliveryMethod` is `Print` in the record and "None" on the screen. The screen is not a rendering of the record.)
+
+Decision: **where a customer or vendor names no terms, the company default is used**, because that is the date QuickBooks itself would work out. Only when there is no default either is there nothing to compare, and the check says so in those words. The default is read once per run, and "not asked yet" is kept distinct from "asked, and there is none", or a company without one would be asked again for every record.
+
+A company default applies to every client, so a client on different terms is invisible in QuickBooks alone -- which the comparison with the engagement list is exactly what catches.
+
+**A name can carry a character nobody can see.** The vendor for Subramanian Arumugam has `CompanyName` of `"Subramanian Arumugam "` -- a non-breaking space on the end, from a paste. It is identical to the plain name on every screen and is not equal to it. That would have been a disagreement no one could explain, and, since the payee is the company name where there is one (decision 46), a payment instruction naming a payee with an invisible character in it.
+
+Decision: **every name and address read from QuickBooks is whitespace-normalised** -- non-breaking spaces included -- before it is compared or kept. One helper, used by every read, rather than a `strip()` at each comparison: the next such character will arrive somewhere nobody thought to put one.
+
+## 48. A parent that is not in the listing is still a parent
+
+A sandbox reported "22 product(s) and 0 categories" against a company where every product sits under one. Two things could produce that -- the item listing not returning categories as items of their own, or returning them under a type the agent does not recognise -- and both ended the same way: a product whose `ParentRef` carried only an id was matched against a category map that did not contain it, so it read as a product with no category and was dropped.
+
+Decision: **where a product's parent is not among the items that came back, it is asked for by id rather than the product being discarded.** One query per distinct parent, kept for the run, which for Icon is one per client. The same lookup `product_for` already uses.
+
+This is the third form of one mistake: taking the shape of a QuickBooks answer for granted -- a field list it would refuse, a category in a name that need not be there, and now a category among items that need not come back. The rule that falls out of all three is the same. **Where the agent can ask, it asks; where it cannot, it says what it saw.** The counts in the doctor line exist for that second half, and they are what made this one visible in a single run rather than another round of guessing.
+
+The counts now say what they mean too: categories are counted by the parents actually resolved, not by rows of a particular type, so the line stops reporting the old symptom once the cause is gone.
+
+## 49. Ask Intuit for a newer shape of the record, and say when a consultant is held as stock
+
+`fops qbo-show product "Subramanian Arumugam"` returned the record that ended the category hunt. It has **no `ParentRef` and no `SubItem`**, so the agent was right at every step: there is no category on that product as far as the API is concerned, and no amount of code will find one. Two things follow.
+
+**Intuit serves an old shape of each entity unless a minor version is asked for.** The same company was already known to withhold `Sku` for want of one. Whether the category relationship is among the fields a later version adds is a question about one company's data, answerable in a single call rather than by reasoning.
+
+Decision: **`FOPS_QBO_MINORVERSION` adds a minor version to every request, and `fops qbo-show --minorversion` tries one without changing anything.** Nothing is sent by default: every recorded exchange, and every company already working, was answered without one, and changing what is asked for on a guess is what this whole sequence has been about.
+
+**Asked at minor version 75, the record came back byte for byte the same.** So the category is not a field being withheld: it is not there. The setting stays, because it cost one flag to add and answers this question for the next field that goes missing, but it is not the fix for this one. What is left is that these products have no category in QuickBooks at all, whatever the screen that was used to set one appeared to do -- and the thing they do have is a type that should not be there either.
+
+**The same record showed something nobody was looking for.** `"Type": "Inventory"`, with `TrackQtyOnHand`, an inventory asset account and cost of goods sold. An hour of someone's time is not stock. Invoices are still made from such a product, which is why this is not a refusal, but each one drives a quantity on hand negative and posts the money to stock and cost of goods sold rather than to income and an expense.
+
+Decision: **`fops doctor` names the engagements whose product is an Inventory item**, in the products check that passes anyway, and says that a Service or Non-inventory product is what hours are usually held as. It is Kevin's books that are affected rather than the agent's arithmetic, so it is said once and plainly, not raised as a failure.
+
+## 50. Twenty-two records, one line each
+
+Every step of the category hunt asked for one record at a time, and each answer ruled out one explanation. The question left standing -- does any product in this company sit under anything? -- is about all of them at once, and twenty-two full records is not something anyone reads.
+
+Decision: **`fops qbo-show --brief` prints one line per record**: the id, what kind of thing it is, the name, what it sits under, and whether it is inactive. Those are exactly the fields that have been in question, and none of them was visible in a listing before.
+
+It is a small thing, but it is the same lesson as the counts in the doctor line (decision 48) and as `qbo-show` itself (decision 46): **the cost of looking has to be lower than the cost of guessing, or guessing wins.** Three rounds of this were spent one record at a time.
+
+## 51. Production QuickBooks keys from the start, signed in by pasting the address back
 
 Decision 31 let the first live exercise use Icon's own QuickBooks Online company instead of the sandbox. This goes one step further: the agent is connected with the **production** app keys now, and the sandbox is not used for anything beyond the recorded responses the tests replay. Trying to prove things in the sandbox kept running into Intuit's sample data -- customers, products and forms laid out in ways Icon's company is not and will not be -- so passes and failures there said little about Icon's own setup. Icon is not using QuickBooks Online for its books yet, and `fops qbo-test-invoice` removes what it makes, so the window decision 31 describes still holds.
 

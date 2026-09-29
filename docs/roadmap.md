@@ -189,7 +189,7 @@ Done when:
 
 The code exists (PR 9). This needs an Intuit developer app, and then Icon's move from QuickBooks Desktop to Online. Manual mode keeps working meanwhile.
 
-Production keys straight away, no sandbox (decision 36). Code: `QBO_REDIRECT_URI` and the paste-the-address sign-in a production app needs, since Intuit refuses localhost redirects for production; `callback.html` on the public site; `fops doctor` fails when the stored connection is sandbox but the setting says production.
+Production keys straight away, no sandbox (decision 51). Code: `QBO_REDIRECT_URI` and the paste-the-address sign-in a production app needs, since Intuit refuses localhost redirects for production; `callback.html` on the public site; `fops doctor` fails when the stored connection is sandbox but the setting says production.
 
 Done when:
 

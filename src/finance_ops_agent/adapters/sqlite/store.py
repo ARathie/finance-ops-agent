@@ -117,6 +117,7 @@ class SqliteStore:
         period: BillingPeriod,
         status: ItemStatus,
         snapshot: EngagementSnapshot,
+        engagement_ref: str = "",
     ) -> Item:
         if status not in INITIAL_STATUSES:
             raise ValueError(f"an item cannot start as {status}")
@@ -124,6 +125,7 @@ class SqliteStore:
             row = ItemRow(
                 consultant=consultant,
                 client=client,
+                engagement_ref=engagement_ref or None,
                 period_start=period.start,
                 period_end=period.end,
                 status=status.value,
@@ -161,6 +163,40 @@ class SqliteStore:
                 )
             ).one_or_none()
             return None if row is None else _to_item(row)
+
+    def find_item_by_engagement(self, engagement_ref: str, period: BillingPeriod) -> Item | None:
+        """The item for this engagement and period, whatever it is called now.
+
+        The accounting system's id does not change when a name does, so this
+        finds an item whose consultant or client has since been renamed
+        (docs/decisions.md #39).
+        """
+        if not engagement_ref:
+            return None
+        with Session(self._engine) as session:
+            row = session.scalars(
+                select(ItemRow).where(
+                    ItemRow.engagement_ref == engagement_ref,
+                    ItemRow.period_start == period.start,
+                    ItemRow.period_end == period.end,
+                )
+            ).first()
+            return None if row is None else _to_item(row)
+
+    def relabel_item(self, item_id: int, consultant: str, client: str) -> Item:
+        """Names get tidied in the accounting system; the item keeps up.
+
+        The engagement is the same engagement -- the id says so -- so this is
+        the label a person reads catching up, not a different item.
+        """
+        with Session(self._engine) as session, session.begin():
+            row = session.get(ItemRow, item_id)
+            if row is None:
+                raise LookupError(f"there is no item {item_id}")
+            row.consultant = consultant
+            row.client = client
+            session.flush()
+            return _to_item(row)
 
     def list_items(self) -> list[Item]:
         with Session(self._engine) as session:
@@ -746,6 +782,7 @@ def _to_item(row: ItemRow) -> Item:
         period=BillingPeriod(row.period_start, row.period_end),
         status=ItemStatus(row.status),
         snapshot=EngagementSnapshot.model_validate(row.engagement_snapshot),
+        engagement_ref=row.engagement_ref or "",
         approved_hours=(
             None if row.approved_hours_hundredths is None else Hours(row.approved_hours_hundredths)
         ),
