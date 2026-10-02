@@ -1,17 +1,10 @@
 {
   "investigation": {
-    "found": "The number is already on the invoice the agent made for the same work: Manoj's August timesheet was also recorded under the client's old name, MasTec, and that invoice is waiting for your approval. Making a second invoice would bill August twice.",
+    "found": "The same month of work for Manoj Koottappilly at MasTec is in the agent's list twice: once as \"MasTec\" and once as \"MasTec North America, Inc.\", both for Aug 1–31, 2026. The first one already has invoice 083126MT-MK sitting in QuickBooks waiting for your approval, so when the agent tried to invoice the second copy QuickBooks refused the number as already used. Nothing has gone to the client, and no hours have been billed twice — this is one timesheet counted twice, not a QuickBooks fault.</found>\n<evidence>[\"Item 2 (Manoj Koottappilly, MasTec North America, Inc., Aug 1–31, 2026) is ready and has no invoice; its only open review is the duplicate invoice number.\", \"Item 1 (Manoj Koottappilly, MasTec, Aug 1–31, 2026) already holds invoice 083126MT-MK, QuickBooks id 2, status created, waiting for approval.\", \"The agent's whole list is just these two items — same consultant, same billing period, client names differing only by the full legal name.\", \"A check of every invoice the agent has recorded found nothing deleted, renumbered or misfiled in QuickBooks, so the existing 083126MT-MK is genuine.\"]</evidence>\n<proposals><item>\n<what_to_do>If the invoice already waiting for your approval is the right one for Manoj's August work, treat this second copy as a duplicate and drop it. Nothing needs doing in QuickBooks; invoice 083126MT-MK stays as it is and you approve it as usual.</what_to_do>\n<reply_to_choose>ignore</reply_to_choose>\n<why>Best when the two entries are the same timesheet and the existing invoice is correct.</why>\n</item>\n<item>\n<what_to_do>If Manoj sent a corrected August timesheet and this second copy is the newer one, tell the agent the new one replaces the earlier entry. Then delete the old invoice 083126MT-MK in QuickBooks by hand (delete it, do not void it — a voided invoice keeps the number) and reply \"try again\" so the agent can raise the invoice fresh on the same number.</what_to_do>\n<reply_to_choose>use the new one</reply_to_choose>\n<why>Right when the later entry reflects a corrected timesheet and the invoice already made is out of date.</why>\n</item>\n<item>\n<what_to_do>If these really are two separate pieces of August work that both have to be billed, leave the existing invoice alone and give this one its own number.</what_to_do>\n<reply_to_choose>use 083126MT-MK-revised</reply_to_choose>\n<why>Only if you confirm both entries are genuine work and the client should receive two invoices.</why>\n</item>\n</proposals>\n<sure>true</sure>\n",
     "evidence": [
-      "invoice 083126MT-MK belongs to the August item for Manoj at MasTec, waiting for approval",
-      "this item is Manoj at MasTec North America, Inc. for the same August period"
+      "x"
     ],
-    "proposals": [
-      {
-        "what_to_do": "Treat this one as the duplicate, and approve or cancel the waiting invoice from its own approval email.",
-        "reply_to_choose": "ignore",
-        "why": "Both items are the same August work."
-      }
-    ],
+    "proposals": [],
     "sure": true
   },
   "calls": [
@@ -19,6 +12,13 @@
       "name": "describe_item",
       "arguments": {
         "item_id": 2
+      },
+      "ok": true
+    },
+    {
+      "name": "describe_item",
+      "arguments": {
+        "item_id": 1
       },
       "ok": true
     },
@@ -31,10 +31,15 @@
       "ok": true
     },
     {
-      "name": "describe_item",
+      "name": "list_items",
       "arguments": {
-        "item_id": 1
+        "status": "any"
       },
+      "ok": true
+    },
+    {
+      "name": "check_recorded_invoices",
+      "arguments": {},
       "ok": true
     }
   ]

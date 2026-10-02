@@ -1,23 +1,30 @@
 {
   "investigation": {
-    "found": "QuickBooks already has an invoice numbered 083126MT-MK that someone made by hand; it carries none of the agent's notes. It may be Manoj's August invoice entered manually, in which case making another would bill August twice.",
+    "found": "The timesheet for Manoj Koottappilly at MasTec North America, Inc. for August 2026 is ready to bill, but QuickBooks already has an invoice with the number this item would use, 083126MT-MK (dated 29 Sep 2026, for MasTec). That invoice was not created by me — it carries no note linking it to any of my items — so someone entered it in QuickBooks by hand. I have no invoice of my own on record for this item, and nothing has gone to the client, so the only question is whether that hand-made invoice is the real bill for this month or a leftover.",
     "evidence": [
-      "invoice 083126MT-MK has no note naming one of the agent's items",
-      "it is for MasTec North America, Inc., dated 2026-09-29"
+      "Item 1 (Manoj Koottappilly, MasTec North America, Inc., Aug 1–31 2026) is status ready with one open review: QuickBooks refused the invoice number.",
+      "QuickBooks invoice 083126MT-MK (id 7, MasTec North America, Inc., dated 2026-09-29) holds that number and has no note naming one of my items — made by hand.",
+      "My records contain no invoice for this item; nothing was sent to the client.",
+      "This is the only timesheet item I hold, so the clash is not a duplicate item of mine."
     ],
     "proposals": [
       {
-        "what_to_do": "Check invoice 083126MT-MK in QuickBooks. If it is Manoj's August invoice made by hand, nothing more is needed here.",
-        "reply_to_choose": "ignore",
-        "why": "If August was already billed by hand."
+        "what_to_do": "If the hand-made invoice 083126MT-MK in QuickBooks was a trial or leftover and should not stand, delete it in QuickBooks (delete, not void — a voided invoice keeps its number), then reply \"try again\" so I create the invoice for August.",
+        "reply_to_choose": "try again",
+        "why": "Right when the existing invoice is not the real bill and the number should be reused."
       },
       {
-        "what_to_do": "If it is something else, make this one under a new number.",
+        "what_to_do": "Keep the hand-made invoice as it is and have me bill under a different number, for example 083126MT-MK-revised.",
         "reply_to_choose": "use 083126MT-MK-revised",
-        "why": "If the two are different work."
+        "why": "Right when the hand-made invoice must stay in the books but this timesheet still needs its own invoice."
+      },
+      {
+        "what_to_do": "If the hand-made invoice 083126MT-MK is already the bill for Manoj's August work and was sent to MasTec, reply \"ignore\" so I stop asking and do not bill it twice.",
+        "reply_to_choose": "ignore",
+        "why": "Right when this month has already been invoiced by hand and there is nothing left for me to bill."
       }
     ],
-    "sure": false
+    "sure": true
   },
   "calls": [
     {
@@ -33,6 +40,18 @@
         "number": "083126MT-MK",
         "item_id": 1
       },
+      "ok": true
+    },
+    {
+      "name": "list_items",
+      "arguments": {
+        "status": "any"
+      },
+      "ok": true
+    },
+    {
+      "name": "check_recorded_invoices",
+      "arguments": {},
       "ok": true
     }
   ]

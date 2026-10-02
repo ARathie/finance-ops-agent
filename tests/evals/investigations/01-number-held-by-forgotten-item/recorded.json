@@ -1,20 +1,28 @@
 {
   "investigation": {
-    "found": "QuickBooks already has invoice 083126MT-MK, and it is the agent's own invoice for an earlier timesheet item that was removed from its records during testing. That leftover is holding the number Manoj's August invoice needs.",
+    "found": "QuickBooks already has an invoice numbered 083126MT-MK for MasTec North America, Inc., dated 30 Sep 2026, so I could not create the invoice for Manoj Koottappilly's August work. Nothing was sent to the client. That existing invoice is one I made myself for an earlier copy of this same engagement, which was later removed from my records — the invoice stayed behind in QuickBooks and is still holding the number. The only thing standing in the way is that leftover invoice; I need you to tell me whether it should go or whether I should bill under a different number.",
     "evidence": [
-      "invoice 083126MT-MK carries the agent's note for item 30",
-      "item 30 is no longer in the agent's records"
+      "Item: Manoj Koottappilly, MasTec North America, Inc., Aug 1–31, 2026, status ready; one open review, QuickBooks refused the invoice.",
+      "QuickBooks invoice 083126MT-MK (id 2) exists: MasTec North America, Inc., dated 2026-09-30.",
+      "That invoice was created by me for a removed engagement record (item 30), which is no longer in my records; the invoice was never removed from QuickBooks.",
+      "This is the only engagement in my records — no duplicate timesheet for the same consultant and period.",
+      "No other recorded invoice shows a problem in QuickBooks."
     ],
     "proposals": [
       {
-        "what_to_do": "Delete invoice 083126MT-MK in QuickBooks (delete, not void: a voided invoice keeps its number).",
+        "what_to_do": "In QuickBooks, check invoice 083126MT-MK (dated 30 Sep 2026, MasTec North America, Inc.). If it was never sent to the client and is just a leftover, delete it — delete, not void, because a voided invoice keeps its number — then reply \"try again\" and I will create the invoice for Manoj's August work under 083126MT-MK.",
         "reply_to_choose": "try again",
-        "why": "If the old invoice was only a test."
+        "why": "Right when the existing invoice is a leftover from the removed record and the August work still needs to be billed."
       },
       {
-        "what_to_do": "Make this invoice under a new number instead.",
+        "what_to_do": "If that invoice must stay in QuickBooks (for example it has already gone to the client or to your accountant) but Manoj's August work still needs its own invoice, tell me a different number to use and I will create the invoice under that number instead.",
         "reply_to_choose": "use 083126MT-MK-revised",
-        "why": "If the old invoice must stay."
+        "why": "Right when the existing invoice has to be kept but the August work is genuinely still unbilled."
+      },
+      {
+        "what_to_do": "If that existing invoice already covers this same August work for Manoj at MasTec and has gone to the client, reply \"ignore\" so I stop chasing this one and do not bill the same month twice.",
+        "reply_to_choose": "ignore",
+        "why": "Right when the work has in fact already been invoiced, so there is nothing left to bill."
       }
     ],
     "sure": true
@@ -33,6 +41,18 @@
         "number": "083126MT-MK",
         "item_id": 1
       },
+      "ok": true
+    },
+    {
+      "name": "list_items",
+      "arguments": {
+        "status": "any"
+      },
+      "ok": true
+    },
+    {
+      "name": "check_recorded_invoices",
+      "arguments": {},
       "ok": true
     }
   ]

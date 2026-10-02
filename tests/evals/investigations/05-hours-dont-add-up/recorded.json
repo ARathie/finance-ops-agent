@@ -1,23 +1,31 @@
 {
   "investigation": {
-    "found": "The timesheet prints a total of 160.00 hours, but its daily hours add up to 152.00. One of the two is wrong, and nothing in the records says which.",
+    "found": "Priya Shah's August timesheet for Acme Corp disagrees with itself: the day-by-day hours add up to 152, but the total printed at the bottom says 160 — a gap of one full day. The agent won't guess which figure to bill, so the item is parked for your review. Nothing else is wrong: this is the only item in the system for Priya at Acme for that period, there is no corrected timesheet waiting, and no invoice has been made or attempted yet.",
     "evidence": [
-      "printed total 160.00 hours",
-      "daily hours add up to 152.00"
+      "Item 1: Priya Shah, Acme Corp, Aug 1–31 2026, status needs_review, one open review HOURS_DONT_ADD_UP.",
+      "Timesheet as read: total printed 160.00, daily rows add up to 152.00 — an 8 hour difference.",
+      "Approval is present: approved by Jane Doe on 9/2.",
+      "Only one item in the agent's records — no second or corrected timesheet for this consultant and period.",
+      "No invoice exists for this item and no invoice number has been attempted."
     ],
     "proposals": [
       {
-        "what_to_do": "If the daily hours are right, bill 152 hours.",
+        "what_to_do": "Bill the 152 hours that the daily entries actually add up to, treating the printed total as a typo.",
         "reply_to_choose": "use 152 hours",
-        "why": "The days are usually what the client approved."
+        "why": "Right when the day-by-day lines are the reliable record and no day is missing."
       },
       {
-        "what_to_do": "If the printed total is right, bill 160 hours.",
+        "what_to_do": "Bill the 160 hours printed as the total, on the basis that a day's entry was left off the sheet.",
         "reply_to_choose": "use 160 hours",
-        "why": "If a day is missing from the list."
+        "why": "Right when you know a full day was worked but never written into the daily rows."
+      },
+      {
+        "what_to_do": "Ask Priya (or Jane Doe, who approved it) for a corrected timesheet; when it arrives in the billing inbox, tell the agent to use it instead of this one.",
+        "reply_to_choose": "use the new one",
+        "why": "Right when you can't tell which figure is correct and want the consultant to restate the month."
       }
     ],
-    "sure": false
+    "sure": true
   },
   "calls": [
     {
@@ -25,6 +33,18 @@
       "arguments": {
         "item_id": 1
       },
+      "ok": true
+    },
+    {
+      "name": "list_items",
+      "arguments": {
+        "status": "any"
+      },
+      "ok": true
+    },
+    {
+      "name": "list_open_reviews",
+      "arguments": {},
       "ok": true
     }
   ]

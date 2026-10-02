@@ -1,19 +1,28 @@
 {
   "investigation": {
-    "found": "The timesheet shows no sign that the client approved Priya's August hours, and nothing in the records says otherwise.",
+    "found": "Priya Shah's August timesheet for Acme Corp came in with 156 hours, but nothing in it shows that anyone at Acme signed off on those hours — there is no approver name and no approval date. Because the agent only invoices hours the client has approved, it held the item instead of billing it. There is nothing else wrong: this is the only item for Priya, no invoice has been started, and the agent's invoice records are clean, so the single missing fact is who approved and when.",
     "evidence": [
-      "approval: none shown"
+      "Item 1: Priya Shah, Acme Corp, Aug 1–31 2026, status needs_review, 156.00 hours, approval: none shown",
+      "One open review on the item: NO_APPROVAL — no client approval visible",
+      "Item history shows only creation and the status change — no approval was ever recorded",
+      "This is the only timesheet item on file, so there is no second or corrected copy of this timesheet",
+      "No invoices recorded for this item and no invoice problems anywhere in QuickBooks"
     ],
     "proposals": [
       {
-        "what_to_do": "If the client approved these hours by email or phone, say who and when.",
-        "reply_to_choose": "approved by <name> on <date>",
-        "why": "The approval happened outside the timesheet."
+        "what_to_do": "If you know who at Acme approved Priya's August hours, tell the agent the name and the date and it will invoice the 156 hours.",
+        "reply_to_choose": "approved by Jane Doe on 9/3",
+        "why": "Right when the approval exists (a reply, a portal sign-off, a verbal OK) and only needs recording — replace the name and date with the real ones."
       },
       {
-        "what_to_do": "If they are not approved yet, wait; nothing is billed until they are.",
-        "reply_to_choose": "",
-        "why": "The hours still need the client's approval."
+        "what_to_do": "Ask Priya or the Acme manager to send the approved timesheet, and when the approved copy arrives tell the agent to use it instead of the one it has.",
+        "reply_to_choose": "use the new one",
+        "why": "Right when no one has actually approved August yet and a signed-off timesheet is coming."
+      },
+      {
+        "what_to_do": "If these hours are not real billable work for Acme — a duplicate submission or internal time — tell the agent to drop the item.",
+        "reply_to_choose": "ignore",
+        "why": "Right when there is nothing to bill Acme for this period."
       }
     ],
     "sure": true
@@ -24,6 +33,23 @@
       "arguments": {
         "item_id": 1
       },
+      "ok": true
+    },
+    {
+      "name": "list_items",
+      "arguments": {
+        "status": "any"
+      },
+      "ok": true
+    },
+    {
+      "name": "list_open_reviews",
+      "arguments": {},
+      "ok": true
+    },
+    {
+      "name": "check_recorded_invoices",
+      "arguments": {},
       "ok": true
     }
   ]

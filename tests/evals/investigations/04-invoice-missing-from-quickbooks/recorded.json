@@ -1,23 +1,31 @@
 {
   "investigation": {
-    "found": "The agent's records say invoice 053125IS-SA was sent, but QuickBooks has no invoice with that id. It is most likely from testing in the QuickBooks sandbox, under iStream, the client's old name.",
+    "found": "The May invoice for Subramanian Arumugam at iStream (number 053125IS-SA) is in my records as sent, but it is no longer in our QuickBooks company at all — the invoice it pointed to is gone, and no other invoice there carries that number. The most likely reasons are that someone deleted it in QuickBooks, or it was originally created in a test/sandbox company rather than the real one. Until my record is corrected, my daily check for paid invoices keeps failing, so no payment on this item would be noticed.",
     "evidence": [
-      "the agent recorded invoice 053125IS-SA as QuickBooks id 153",
-      "QuickBooks has no invoice with id 153"
+      "My records: item 1, Subramanian Arumugam / iStream / May 1–31, 2025, invoice 053125IS-SA (QuickBooks id 153), marked sent.",
+      "QuickBooks has no invoice with id 153.",
+      "No invoice in QuickBooks is numbered 053125IS-SA, so it was not renumbered or re-entered by hand — the number is free.",
+      "No other timesheet item exists for this consultant or period, so this is not a duplicate or leftover of another item.",
+      "While the record stands, the daily paid-invoice check fails for this item."
     ],
     "proposals": [
       {
-        "what_to_do": "If it was a test, have the operator remove the agent's record with `uv run fops forget 1 --force`.",
+        "what_to_do": "If iStream never received a real invoice for May (it was a test, or it was made in the sandbox company), drop my record of it by running `uv run fops forget 1 --force`. I will then be able to raise the May invoice again properly in the real company.",
         "reply_to_choose": "",
-        "why": "Nothing real was billed."
+        "why": "Right when no genuine invoice ever went out to the client for this period."
       },
       {
-        "what_to_do": "If it was a real invoice someone deleted, make it again in QuickBooks first, then tell the operator.",
+        "what_to_do": "If a real invoice for May was sent to iStream and someone deleted it in QuickBooks, re-enter it in QuickBooks by hand for iStream, dated May 31, 2025, using the number 053125IS-SA (that number is free), then reply to this email.",
+        "reply_to_choose": "try again",
+        "why": "Right when the client has the invoice and it only needs to exist again in QuickBooks."
+      },
+      {
+        "what_to_do": "If you are not sure whether iStream was ever invoiced for May, check the QuickBooks audit log for the deleted invoice and the sent mail to iStream before choosing one of the above; I will leave the item as it is in the meantime.",
         "reply_to_choose": "",
-        "why": "The client really was billed."
+        "why": "Right when it is unclear whether the client already has a May invoice and billing twice would be a risk."
       }
     ],
-    "sure": false
+    "sure": true
   },
   "calls": [
     {
@@ -30,6 +38,21 @@
     {
       "name": "check_recorded_invoices",
       "arguments": {},
+      "ok": true
+    },
+    {
+      "name": "explain_invoice_number",
+      "arguments": {
+        "number": "053125IS-SA",
+        "item_id": 1
+      },
+      "ok": true
+    },
+    {
+      "name": "list_items",
+      "arguments": {
+        "status": "any"
+      },
       "ok": true
     }
   ]
