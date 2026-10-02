@@ -15,6 +15,7 @@ Read in this order the first time. `context/` is the business's own description 
 
 - `glossary.md` — the words used everywhere else.
 - `how-it-works.md` — the whole process, step by step, the modes, and pictures of every path the agent can take.
+- `study/anatomy.html` — "Anatomy of a Billing Agent": the agent taken apart for learning and explaining it, with the same pictures (a test keeps them in step). Published as a private page; `study/sync_diagrams.py` copies the pictures in.
 - `pathways.md` — the checklist of every path: what decides it, what happens, which test covers it, and a box to tick once it has been seen working for real. Ends with the gaps found writing it.
 - `engagement-list.md` — the spreadsheet Kevin keeps; the only source of rates and contacts.
 - `timesheet-checks.md` — what the agent reads from a timesheet, the checks, and every reason it asks Kevin for a review.
