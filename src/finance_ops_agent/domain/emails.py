@@ -280,6 +280,9 @@ class SummaryData:
     no_timesheet_yet: list[str] = field(default_factory=list)
     set_aside: list[str] = field(default_factory=list)
     duplicates_filed: list[str] = field(default_factory=list)
+    # From the read-only diagnosis (decision 56); the section only appears
+    # when there is something in it.
+    looks_stuck: list[str] = field(default_factory=list)
 
 
 def monday_summary(
@@ -298,6 +301,7 @@ def monday_summary(
         *section("No timesheet yet for the last period", data.no_timesheet_yet),
         *section("Emails set aside (unknown senders)", data.set_aside),
         *section("Duplicates filed", data.duplicates_filed),
+        *(section("Things that look stuck", data.looks_stuck) if data.looks_stuck else []),
     ]
     return OutgoingEmail(
         to=(admin,),

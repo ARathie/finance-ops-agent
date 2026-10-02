@@ -27,7 +27,7 @@ from finance_ops_agent.ports.reader import CantReadAttachmentError, TokenUsage
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 TIMESHEET_PROMPT_VERSION = "timesheet_v3"
 CLASSIFY_PROMPT_VERSION = "classify_v1"
-REPLY_PROMPT_VERSION = "reply_v2"
+REPLY_PROMPT_VERSION = "reply_v3"
 MAX_TOKENS = 16000
 
 _M = TypeVar("_M", bound=BaseModel)
@@ -170,6 +170,14 @@ class ClaudeReader:
                 f"Period: {context.period or '(not known)'}\n"
                 f"Invoice number: {context.invoice_number or '(none yet)'}"
             )
+            if context.offered:
+                parts.append(
+                    "Ways out the agent offered him:\n"
+                    + "\n".join(
+                        f'{letter}. reply "{words}"'
+                        for letter, words in zip("ABC", context.offered, strict=False)
+                    )
+                )
         parts.append(f"What was asked:\n{asked}")
         parts.append(f"The administrator's reply:\n{reply_text}")
         text = "\n\n".join(parts)

@@ -195,6 +195,21 @@ def test_read_reply_is_told_what_the_reply_is_about() -> None:
     assert "append -revised" in text
 
 
+def test_the_ways_out_it_offered_are_shown_by_letter() -> None:
+    """So "the second one" can be read as what option B stood for (decision 56)."""
+    expected = ReplyReading(answers=[])
+    reader, stub, _ = make_reader(StubResponse(parsed_output=expected))
+    reader.read_reply(
+        "the second one",
+        [("QUICKBOOKS_FAILED", "QuickBooks already has an invoice numbered 083126MT-MK.")],
+        ReplyContext(asked="review", offered=["try again", "use 083126MT-MK-revised"]),
+    )
+    text = stub.calls[0]["messages"][0]["content"][0]["text"]
+    assert 'A. reply "try again"' in text
+    assert 'B. reply "use 083126MT-MK-revised"' in text
+    assert "picks one" in stub.calls[0]["system"][0]["text"]
+
+
 def test_token_usage_is_recorded_so_a_live_run_can_be_costed() -> None:
     expected = reading(*AUG)
     reader, _, _ = make_reader(

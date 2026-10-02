@@ -216,6 +216,9 @@ class ReplyContext(BaseModel):
     client: str = ""
     period: str = ""
     invoice_number: str = ""
+    # The replies the agent offered Kevin as ways out, in letter order (A, B,
+    # C), when it looked into the problem first (decision 56).
+    offered: list[str] = Field(default_factory=list)
 
 
 class ReadingHints(BaseModel):

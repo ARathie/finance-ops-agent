@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from finance_ops_agent.domain.invoices import Invoice
 from finance_ops_agent.ports.accounting import (
     AccountingEngagement,
+    AccountingFailed,
     AccountingNumberTaken,
     AccountingParty,
     CreatedInvoice,
@@ -110,6 +111,11 @@ class FakeAccounting:
         if self.fail_with is not None:
             raise self.fail_with
         self.asked.extend(external_ids)
+        held = {held.external_id for held in self._held()}
+        for external_id in external_ids:
+            if external_id not in held:
+                # As QuickBooks answers for an invoice it does not have (610).
+                raise AccountingFailed(f"Object Not Found: invoice {external_id}")
         return {external_id: external_id in self.paid for external_id in external_ids}
 
     can_look_up_invoices = True

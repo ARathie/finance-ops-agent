@@ -255,6 +255,13 @@ class FakeStore:
         self._files[sha] = content
         return sha
 
+    def amend_pending_outgoing(self, idempotency_key: str, payload: dict[str, object]) -> bool:
+        record = self._outgoing.get(idempotency_key)
+        if record is None or record.status != "pending" or record.attempts:
+            return False
+        self._outgoing[idempotency_key] = replace(record, payload=json.loads(json.dumps(payload)))
+        return True
+
     def update_outgoing(
         self,
         idempotency_key: str,

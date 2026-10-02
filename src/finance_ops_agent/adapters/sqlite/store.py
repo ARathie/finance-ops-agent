@@ -521,6 +521,16 @@ class SqliteStore:
         path.write_bytes(content)
         return sha
 
+    def amend_pending_outgoing(self, idempotency_key: str, payload: dict[str, object]) -> bool:
+        with Session(self._engine) as session, session.begin():
+            row = session.scalars(
+                select(OutgoingRow).where(OutgoingRow.idempotency_key == idempotency_key)
+            ).first()
+            if row is None or row.status != "pending" or row.attempts:
+                return False
+            row.payload = json.loads(json.dumps(payload))
+            return True
+
     def update_outgoing(
         self,
         idempotency_key: str,

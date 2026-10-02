@@ -15,6 +15,7 @@ from email.utils import make_msgid
 
 from finance_ops_agent.application.answers import chosen_invoice_number, wants_to_see_it_first
 from finance_ops_agent.application.context import Mode, RunDeps, RunReport
+from finance_ops_agent.application.diagnosis import explain_invoice_number, looking_at
 from finance_ops_agent.domain import emails
 from finance_ops_agent.domain.emails import EmailAttachment, OutgoingEmail
 from finance_ops_agent.domain.guardrails import GuardrailCheck, check_guardrails
@@ -265,6 +266,14 @@ def _create_invoice(
                 ' reply "try again". Or reply with the number to use instead, for'
                 f' example "use {error.number}-revised".'
             )
+            # Who holds it decides which of those is right, so look (decision 56).
+            held = [
+                finding.what
+                for finding in explain_invoice_number(looking_at(deps), error.number, item.id)
+                if finding.needs_attention
+            ]
+            if held:
+                message += " What I found: " + " ".join(held)
         else:
             message = (
                 f"I could not make the invoice for {item.consultant} at {item.client}"

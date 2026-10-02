@@ -573,3 +573,31 @@ Decision: **a diagnosis layer that only reads**, in `application/diagnosis.py`, 
 - **Shaped as tools.** Each check takes plain arguments (an item id, a number) and returns plain data. An agent loop can call them as they are.
 
 Not decided here: the agent itself, what it may change, and when it runs. Those need their own decision, and they change rule 7 ("Claude reads; code decides"). What this one guarantees is that whatever an agent does with these tools, the tools cannot change anything.
+
+## 56. When something is stuck, the agent looks into it and offers Kevin ways out
+
+Decision 55 built the read-only diagnosis for a person to run. This one puts it to work inside the agent, so a problem reaches Kevin explained and with ways out, instead of as an error. It comes in three layers.
+
+**1. The run calls the diagnosis itself, wherever it gets stuck.** This is plain code, with no model involved.
+
+- **A number QuickBooks already holds:** the review says whose invoice holds it, such as "the invoice I made for item 30, which was forgotten".
+- **The paid check asks about each invoice on its own.** An invoice QuickBooks does not have gets its own review and email, naming it and the fix. The others are still checked, and the day is marked done when nothing else failed. Before, one sandbox invoice failed the check for every invoice, on every run.
+- **The Monday summary gains "Things that look stuck"** when there are any.
+
+**2. The diagnosis becomes a tool list** (`application/agent_tools.py`): `describe_item`, `explain_invoice_number`, `check_recorded_invoices`, `list_items` and `list_open_reviews`, plus `check_inbox` and `check_items` when there is an inbox or a workbook to look at.
+
+- Every tool is read-only by construction (decision 55). Tools that act would be a separate list with their own decision, never added to this one.
+- A failing tool answers with its error rather than raising.
+- **No money reaches the model.** Every dollar amount in a tool's answer or in the problem it is given is masked, and rate reviews (`RATE_MISSING`) are not investigated at all. This keeps the rule that rates are never sent to the model.
+
+**3. The investigator** (`ports/investigator.py`; Claude in `adapters/claude/investigator.py`, prompt `investigate_v1`) runs once per run, after everything that raises reviews and before anything is sent.
+
+- **What it does:** for each review email still waiting to go out (at most three per run), it looks into the item with the tools. It finishes by calling an `answer` tool with what it found, the evidence, one to three proposals, and whether it is sure.
+- **What Kevin sees:** the email gains "What I found" and "What you could do: A. … B. …". Each option has the exact words that choose it, and he can reply with just the letter.
+- **It proposes; Kevin decides; code acts.** Proposals offering to approve, cancel or send are dropped. Kevin's choice goes through the reply handling of decision 54 like any other reply. A reply that is only a letter ("A", "option 2", "go with B") is matched to that option's words by code, not by the model. Anything longer is read by the model, which is told what each letter stood for.
+- **It only ever adds.** The email is changed only while still `pending`, and the store refuses to change one once a send has begun (`amend_pending_outgoing`). If the investigator fails, refuses, runs out of its eight steps, or answers in a shape that does not fit, the email goes out exactly as it was.
+- **On the record:** what it called, and whether each call worked, is kept in the email's outgoing row and in the log.
+
+This is where rule 7 ("Claude reads; code decides") moves. Claude now chooses what to *look at* and what to *suggest*. Code still decides everything that changes anything, and Kevin chooses between the suggestions. The investigator is not given, and cannot reach, anything that acts.
+
+Not done here: an eval set for the investigator. Its answers are only scored by the scenarios, which script it. Before relying on it, record live answers for the first live cycle's incidents, the way timesheet readings are recorded (PR 12).

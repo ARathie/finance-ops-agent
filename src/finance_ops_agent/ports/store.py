@@ -175,6 +175,12 @@ class Store(Protocol):
         the server accepted it. `clear_times` forgets both times for a resend."""
         ...
 
+    def amend_pending_outgoing(self, idempotency_key: str, payload: dict[str, object]) -> bool:
+        """Replace what a written-down email says, only while nothing has been
+        attempted (status pending). False, changing nothing, once it has: an
+        email is never altered after the agent began sending it."""
+        ...
+
     # Invoices and payment instructions
 
     def record_invoice(self, record: InvoiceRecord) -> InvoiceRecord:

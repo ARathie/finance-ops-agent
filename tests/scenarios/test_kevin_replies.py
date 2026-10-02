@@ -311,3 +311,13 @@ class TestApprovalInPlainWords:
 
         assert env.the_item().status is ItemStatus.INVOICE_SENT
         assert len(to_client(env)) == 1
+
+
+def test_a_quote_must_be_his_whole_words(env: ScenarioEnv) -> None:
+    """A model quoting "A" must be pointing at Kevin's "A", not the a in "thanks"."""
+    subject = number_already_in_quickbooks(env)
+    env.replies["thanks"] = ReplyReading(answers=[answer(ReplyAnswerKind.TRY_AGAIN, "a")])
+    env.reply_from_kevin(subject, "thanks")
+    env.run()
+
+    assert "wasn't sure enough" in last_reply_body(env)

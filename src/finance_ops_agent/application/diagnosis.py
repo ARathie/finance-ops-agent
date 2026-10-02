@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
 
+from finance_ops_agent.application.context import RunDeps
 from finance_ops_agent.domain.emails import dollars, format_period
 from finance_ops_agent.domain.engagements import EngagementWorkbook
 from finance_ops_agent.domain.invoice_numbers import is_voided_number
@@ -66,6 +67,9 @@ class Finding:
     next_step: str  # what a person can do about it; empty when nothing is needed
     item_id: int | None = None
     needs_attention: bool = True  # False for "this is fine", said so nobody wonders
+    # The one thing it is about, for code that acts on it: an invoice's id in
+    # the accounting system, an invoice number, or an email's Message-ID.
+    about: str = ""
 
 
 @dataclass(frozen=True)
@@ -77,6 +81,14 @@ class Looking:
     inbox: InboxToLookAt | None = None
     mailbox_position: str | None = None
     mail_start_date: date | None = None
+    workbook: EngagementWorkbook | None = None
+
+
+def looking_at(deps: RunDeps, workbook: EngagementWorkbook | None = None) -> Looking:
+    """What a run may look at: its own store and accounting system. Not the
+    inbox -- the run has just read it, and listing it again is a second
+    connection for nothing."""
+    return Looking(store=deps.store, accounting=deps.accounting, workbook=workbook)
 
 
 def _describe(item: Item) -> str:
@@ -136,6 +148,7 @@ def check_recorded_invoices(looking: Looking) -> list[Finding]:
                         f" `uv run fops forget {item.id} --force`. If it was a real invoice"
                         " someone deleted, make it again in QuickBooks first.",
                         item.id,
+                        about=record.external_id,
                     )
                 )
                 continue
@@ -439,6 +452,7 @@ def diagnose_everything(looking: Looking, workbook: EngagementWorkbook | None) -
         if taken is not None:
             findings += explain_invoice_number(looking, taken.group(1), review.item_id)
     findings += check_inbox(looking)
+    workbook = workbook or looking.workbook
     if workbook is not None:
         findings += check_items(looking, workbook)
     return findings

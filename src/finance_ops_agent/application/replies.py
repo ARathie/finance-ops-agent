@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from finance_ops_agent.application import outgoing
 from finance_ops_agent.application.completion import complete_if_covered
 from finance_ops_agent.application.context import Mode, RunDeps, RunReport
+from finance_ops_agent.application.investigation import offered_replies, picked_option
 from finance_ops_agent.domain import emails
 from finance_ops_agent.domain.emails import format_period
 from finance_ops_agent.domain.invoice_numbers import problem_with_chosen_number
@@ -84,9 +85,13 @@ def _squeezed(text: str) -> str:
 
 
 def _is_quoted(answer: ReplyAnswer, body: str) -> bool:
-    """The words the model relied on are really in the reply."""
+    """The words the model relied on are really in the reply, as whole words:
+    a quote of "A" must be Kevin's "A", not the a in "thanks"."""
     quote = _squeezed(answer.quote or "")
-    return bool(quote) and quote in _squeezed(body)
+    if not quote:
+        return False
+    pattern = rf"(?<!\w){re.escape(quote)}(?!\w)"
+    return re.search(pattern, _squeezed(body)) is not None
 
 
 def _what_it_answers(record: OutgoingRecord) -> str:
@@ -107,15 +112,18 @@ class _Outcome:
     not_done: list[str] = field(default_factory=list)
 
 
-def _context(deps: RunDeps, item: Item | None, asked: str) -> ReplyContext:
+def _context(
+    deps: RunDeps, item: Item | None, asked: str, offered: list[str] | None = None
+) -> ReplyContext:
     if item is None:
-        return ReplyContext(asked=asked)
+        return ReplyContext(asked=asked, offered=offered or [])
     return ReplyContext(
         asked=asked,
         consultant=item.consultant,
         client=item.client,
         period=format_period(item.period),
         invoice_number=outgoing.planned_invoice_number(deps, item),
+        offered=offered or [],
     )
 
 
@@ -329,7 +337,14 @@ def _handle_review_reply(
     if not open_reviews:
         return  # nothing left to answer; the item moved on
     questions = [(review.code, review.message) for review in open_reviews]
-    reading = deps.reader.read_reply(body, questions, _context(deps, item, "review"))
+    offered = offered_replies(deps, open_reviews)
+    picked = picked_option(body, offered)
+    if picked is not None:
+        # "A" stands for the words that option offered; read and check those,
+        # exactly as if he had written them (decision 56).
+        report.note(f'Kevin picked an option: "{picked}"')
+        body = picked
+    reading = deps.reader.read_reply(body, questions, _context(deps, item, "review", offered))
     outcome = _Outcome()
 
     if any(answer.kind is ReplyAnswerKind.IGNORE for answer in reading.answers):

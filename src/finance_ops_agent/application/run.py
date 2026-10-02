@@ -15,8 +15,8 @@ import hashlib
 from datetime import date
 
 from finance_ops_agent import logs
+from finance_ops_agent.application import investigation, paid_check
 from finance_ops_agent.application import outgoing as outgoing_steps
-from finance_ops_agent.application import paid_check
 from finance_ops_agent.application import replies as reply_steps
 from finance_ops_agent.application import summary as summary_steps
 from finance_ops_agent.application.completion import complete_if_covered
@@ -74,6 +74,9 @@ def run_once(deps: RunDeps, report: RunReport | None = None) -> RunReport:
     _process_messages(deps, workbook, report)
     outgoing_steps.plan_outgoing(deps, report)
     paid_check.check_paid_invoices(deps, report)
+    # Last before anything is sent: every review email written this run is
+    # still pending, so it can gain what the investigator found (decision 56).
+    investigation.investigate_pending_reviews(deps, report, workbook)
     tracking_sha = _write_tracking(deps)
     summary_steps.enqueue_monday_summary(deps, report, tracking_sha)
     outgoing_steps.send_pending(deps, report)

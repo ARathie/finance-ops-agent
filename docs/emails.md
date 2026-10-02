@@ -22,6 +22,8 @@ Sent when one or more checks fail (see `timesheet-checks.md`). One email per tim
 - **Body:** what the agent found (same summary as above), each problem in plain words, and what Kevin can do: fix the engagement list, or reply with the answer, or reply "ignore". Examples of replies that work are included.
 - **Attachments:** the original timesheet file -- the one showing approval, when the email carried more than one document.
 
+When the agent can, it looks into the problem before sending (decision 56). The email then ends with **What I found**, two or three plain sentences on the cause, and **What you could do**: up to three options, lettered A to C. Each option says what to do, including anything done by hand in QuickBooks, and the exact words to reply to choose it. Kevin can reply with just the letter. When the agent is not sure of the cause, it says so. If it could not look, the email is exactly as it would have been.
+
 Kevin's reply is read by the agent, in his own words, and one reply can ask for several things. Besides giving a missing fact, he can name a different invoice number ("add -revised to it"), say he fixed something and the agent should "try again", or ask to see the invoice before it goes out. Only replies from `kevin@icon-technologies.com` in the same thread count. The agent checks every request, does the ones it can, and replies in the thread with what it understood, what it did, and anything it still needs (decision 54).
 
 ### 3. Approve this invoice?

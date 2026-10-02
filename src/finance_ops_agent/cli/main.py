@@ -390,6 +390,7 @@ def _mail_account(mail: "MailSettings") -> "MailAccount":
 
 def _real_deps(mode_override: "Mode | None" = None, since: "date | None" = None) -> RunDeps:
     """Wire the real adapters from the environment (docs/technical-design.md)."""
+    from finance_ops_agent.adapters.claude.investigator import ClaudeInvestigator
     from finance_ops_agent.adapters.claude.reader import ClaudeReader
     from finance_ops_agent.adapters.clock import SystemClock
     from finance_ops_agent.adapters.email.inbox import ImapInbox
@@ -431,6 +432,9 @@ def _real_deps(mode_override: "Mode | None" = None, since: "date | None" = None)
         renderer=renderer,
         tracking_path=config.data_dir / "tracking.xlsx",
         render_tracking=tracking_sheet_bytes,
+        # Looks into a stuck item before Kevin is emailed (decision 56). Read-only
+        # tools only; it adds to the email and changes nothing.
+        investigator=ClaudeInvestigator(model=config.model),
     )
 
 

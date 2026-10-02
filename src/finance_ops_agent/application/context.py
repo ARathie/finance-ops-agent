@@ -10,6 +10,7 @@ from finance_ops_agent.ports.accounting import AccountingSystem
 from finance_ops_agent.ports.clock import Clock
 from finance_ops_agent.ports.engagement_list import EngagementList
 from finance_ops_agent.ports.inbox import EmailInbox
+from finance_ops_agent.ports.investigator import Investigator
 from finance_ops_agent.ports.pdf import PdfRenderer
 from finance_ops_agent.ports.reader import TimesheetReader
 from finance_ops_agent.ports.sender import EmailSender
@@ -63,6 +64,9 @@ class RunDeps:
     accounting: AccountingSystem
     renderer: PdfRenderer
     tracking_path: Path | None = None
+    # Looks into a stuck item before Kevin is emailed about it (decision 56).
+    # None: the review goes out as it is.
+    investigator: Investigator | None = None
     render_tracking: Callable[[list[TrackingRow]], bytes] | None = None
 
 

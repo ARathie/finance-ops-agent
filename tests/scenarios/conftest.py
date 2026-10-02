@@ -27,6 +27,7 @@ from finance_ops_agent.domain.reading import (
     ReplyReading,
     TimesheetReading,
 )
+from finance_ops_agent.ports.investigator import Investigator
 
 TODAY = date(2026, 9, 8)
 AGENT_ADDRESS = "jay@icon-technologies.com"
@@ -166,6 +167,7 @@ class ScenarioEnv:
     forwarders: tuple[str, ...] = ()
     engagements_from: str = "list"
     replies: dict[str, ReplyReading] = field(default_factory=dict)
+    investigator: Investigator | None = None
     _deps: RunDeps | None = field(default=None, repr=False)
 
     def add_email(
@@ -220,6 +222,7 @@ class ScenarioEnv:
             sender=self.sender,
             accounting=self.accounting,
             renderer=TextPdfRenderer(),
+            investigator=self.investigator,
         )
 
     def run(self) -> RunReport:
