@@ -47,7 +47,8 @@ Some boxes in `docs/roadmap.md` need a human: an account created, a command run 
 - Fakes updated whenever a port changes; no network needed for tests; no credentials or real client data in the repo.
 - Docs updated in the same PR when behaviour changes; the PR's automated boxes ticked in `docs/roadmap.md`, and every "Needs a person" box left unticked and spelled out to the operator.
 - A new path through the agent, or a changed outcome, is added to `docs/pathways.md` (and its picture in `docs/how-it-works.md`) in the same PR, with the test that covers it.
-- The study page `docs/study/anatomy.html` (published as "Anatomy of a Billing Agent", https://claude.ai/artifact/LPoCdLpuJbH1WqJjhVLpM2) explains the agent as it is. When a picture changes, run `uv run python docs/study/sync_diagrams.py` (a test fails until you do); when behaviour or the numbers on it change, update its words in the same PR; then republish it to that link if you can, or tell the operator it needs republishing.
+- The overview `docs/overview/overview.html` explains the agent as it is. When a picture changes, run `uv run python docs/overview/sync_diagrams.py` (a test fails until you do); when behaviour or the numbers on it change, update its words in the same PR.
+- The operator keeps a longer, private version of the overview as their own claude.ai page, "Anatomy of a Billing Agent". It is deliberately not in this repository. When the overview changes, update that page the same way if you can reach it (read it, change it, republish to the same link), or tell the operator it needs updating. Never copy its extra material into the repository.
 - When a QuickBooks check in `cli/doctor.py` changes, `docs/quickbooks-setup.md` changes in the same PR. Those checks and that document are one specification written twice: the checks say what the agent expects, the document tells Kevin what to click. They drift silently otherwise, and the doctor points him at it when one fails.
 
 ## Do not

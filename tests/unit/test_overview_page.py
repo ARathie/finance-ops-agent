@@ -1,17 +1,16 @@
-"""The study page shows the same pictures as docs/how-it-works.md.
+"""The overview page shows the same pictures as docs/how-it-works.md.
 
-The page is published as "Anatomy of a Billing Agent" and is how the project
-is learned and explained. A picture that changed in one place and not the
-other would teach the agent as it used to be. If this fails, run
-`uv run python docs/study/sync_diagrams.py`, update the words around the
-picture on the page, and republish it.
+A picture that changed in one place and not the other would explain the
+agent as it used to be. If this fails, run
+`uv run python docs/overview/sync_diagrams.py` and update the words around
+the picture on the page.
 """
 
 import importlib.util
 from pathlib import Path
 from types import ModuleType
 
-PAGE = Path(__file__).resolve().parents[2] / "docs" / "study"
+PAGE = Path(__file__).resolve().parents[2] / "docs" / "overview"
 
 
 def _sync_module() -> ModuleType:
@@ -25,10 +24,10 @@ def _sync_module() -> ModuleType:
 def test_every_picture_is_on_the_page_as_it_is_in_the_docs() -> None:
     sync = _sync_module()
     wanted = sync.diagrams()
-    shown = sync.page_diagrams((PAGE / "anatomy.html").read_text())
+    shown = sync.page_diagrams((PAGE / "overview.html").read_text())
     assert sorted(shown) == list(range(1, len(wanted) + 1)), "a picture is missing from the page"
     for number, diagram in enumerate(wanted, start=1):
         assert shown[number] == diagram, (
-            f"picture {number} on the study page differs from docs/how-it-works.md;"
-            " run `uv run python docs/study/sync_diagrams.py`"
+            f"picture {number} on the overview page differs from docs/how-it-works.md;"
+            " run `uv run python docs/overview/sync_diagrams.py`"
         )

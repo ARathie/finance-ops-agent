@@ -1,4 +1,4 @@
-<title>Anatomy of a Billing Agent</title>
+<title>Billing Agent Overview</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
   :root {
@@ -201,7 +201,7 @@
   li { margin-bottom: 9px; }
   li::marker { color: var(--accent); }
 
-  /* ---------- pm lens ---------- */
+  /* ---------- callout ---------- */
   .lens {
     border-left: 2px solid var(--signal);
     background: var(--signal-soft);
@@ -374,16 +374,15 @@
     <li><a href="#p10"><span class="n">10</span> Money &amp; correctness</a></li>
     <li><a href="#p11"><span class="n">11</span> Tests vs. evals</a></li>
     <li><a href="#p12"><span class="n">12</span> Running it</a></li>
-    <li><a href="#p13"><span class="n">13</span> Vocabulary &amp; questions</a></li>
-    <li><a href="#p14"><span class="n">14</span> Telling it in an interview</a></li>
+    <li><a href="#p13"><span class="n">13</span> Vocabulary &amp; status</a></li>
   </ol>
 </nav>
 
 <main>
 <header class="top">
   <p class="eyebrow">Icon Technologies · finance-ops-agent</p>
-  <h1>Anatomy of a Billing Agent</h1>
-  <p class="standfirst">One working agent, taken apart layer by layer — every path it can take, why each one is decided the way it is, and the patterns underneath that transfer to <strong>every</strong> agent product you will ever spec.</p>
+  <h1>How the Billing Agent Works</h1>
+  <p class="standfirst">The billing agent for Icon Technologies, taken apart layer by layer: how it is built, <strong>every path</strong> a run can take, and the reasoning behind each design choice.</p>
 </header>
 
 <dl class="facts">
@@ -430,16 +429,11 @@
 
   <p>The difference is Icon's margin, which is why <em>two rates, never from the reading</em> is the first rule in the repository's instructions file. Neither rate ever comes from an email, a timesheet, or the model. The bill rate must never appear in anything sent to a consultant, and the pay rate must never appear in anything sent to a client; tests read the generated email text and fail if the wrong number is present.</p>
 
-  <div class="lens">
-    <span class="tag">PM lens · scope as a boundary, not a wish</span>
-    <p>Notice what this agent explicitly does <em>not</em> do: it never pays anyone, never tracks whether a consultant was paid, never sends reminders, never acts on what a client writes, and has nothing to do with recruiting. Those exclusions are written down as rules. When a model or a contributor drifts toward "helpfully" adding payment reminders, there is a document to point at.</p>
-    <p><b>Ask on your own products:</b> what is the agent forbidden to do, and where is that written where an engineer (or a coding agent) will actually read it?</p>
-  </div>
 </section>
 
 <section id="p2">
   <h2><span class="partno">Part 2</span>The shape of the code: ports and adapters</h2>
-  <p class="deck">One architectural idea explains most of this codebase's layout. Learn it once and you can read almost any well-built agent.</p>
+  <p class="deck">One architectural idea explains most of this codebase's layout.</p>
 
   <p>The code is split into five folders, and the split is a rule about which folder is allowed to know about which:</p>
 
@@ -523,11 +517,6 @@
     <li><strong>Failure is testable.</strong> A fake can be told to fail: the mailbox down, Claude overloaded, QuickBooks refusing an invoice, the machine dying mid-send. Every one of those has a test. You cannot get that assurance by poking at production.</li>
   </ul>
 
-  <div class="lens">
-    <span class="tag">PM lens · the question that reveals the architecture</span>
-    <p>When a team tells you a feature "can only be tested against the live API," you are usually looking at code where the business logic and the vendor's SDK are tangled together. The symptom is a staging environment full of real invoices and a test suite nobody trusts.</p>
-    <p><b>Ask:</b> <em>"Can you run the whole flow on my laptop with the network off? What does the fake version of the payment provider do when I tell it to fail?"</em> The answer tells you how fast the team will be able to move in six months.</p>
-  </div>
 </section>
 
 <section id="p3">
@@ -612,16 +601,6 @@
     <figcaption><b>The order is the design.</b> Two places in the run are chosen so that a crash costs nothing: the mailbox cursor moves only after every fetched message is safely stored, and every outgoing email exists as a database row before the mail server is ever contacted. Part 4 shows the same run as a decision diagram, with every branch.</figcaption>
   </figure>
 
-  <div class="lens">
-    <span class="tag">PM lens · "agent" is not one shape</span>
-    <p>The word covers at least three very different products, and the choice drives cost, latency, reviewability and failure modes:</p>
-    <ul>
-      <li><strong>A scheduled pipeline</strong> — like this one. Fixed steps, model called at known points, every decision traceable, cheap to test. Best when the task is repetitive and the cost of a wrong action is high.</li>
-      <li><strong>A conversational assistant</strong> — the model drives, a human is in the loop every turn. Best when the task is open-ended and a human is present anyway.</li>
-      <li><strong>An autonomous loop</strong> — the model plans, calls tools, observes, re-plans. Most capable, hardest to test, and hardest to explain to an auditor.</li>
-    </ul>
-    <p><b>Ask:</b> <em>"Which of these are we building, and why not the simpler one?"</em> Teams reach for the autonomous loop by default because it demos well. This project deliberately did not, because Kevin's money is real and a fixed pipeline is auditable.</p>
-  </div>
 </section>
 
 <section id="p4">
@@ -664,7 +643,6 @@ flowchart TD
     send --&gt; tracking["Rewrite the tracking sheet"]
     tracking --&gt; done(["Run ends"])
 </pre></div>
-  <p class="say"><b>Say it like this</b>"Each run fetches mail, refreshes its picture of the engagements at most once a day, handles each message, writes down everything it intends to send, then sends. A run that finds nothing to do costs nothing."</p>
 
   <h3>2 · What an email is</h3>
   <p>Decided by <strong>code, from the sender's address</strong>, never by reading the email. An unknown address gets one second chance: a fresh copy of QuickBooks, because a new consultant looks exactly like a stranger until you check.</p>
@@ -686,7 +664,6 @@ flowchart TD
     unknown -- "yes" --&gt; asidemail["Set aside; email Kevin with replies and the setup form (C6)"]
     unknown -- "no" --&gt; asidequiet["Set aside; listed in the Monday summary (C7)"]
 </pre></div>
-  <p class="say"><b>Say it like this</b>"Classification is deterministic. The model never decides whether something is a timesheet, so a cleverly worded email can't talk its way into the invoicing path."</p>
 
   <h3>3 · A timesheet</h3>
   <p>The longest picture, and the core of the product. Most branches end in a review for Kevin, not a failure. A check that finds a problem does not stop the others: everything wrong goes on one list, so Kevin gets one email instead of five.</p>
@@ -723,7 +700,6 @@ flowchart TD
     covered -- "no" --&gt; wait["Kept; waits for the rest (E8)"]
     covered -- "yes" --&gt; isready["Hours summed, amounts worked out: ready, picture 5"]
 </pre></div>
-  <p class="say"><b>Say it like this</b>"The model fills in a form; code places it, checks it and prices it. The rates are fetched fresh from QuickBooks for that one engagement at the moment the timesheet is read. If QuickBooks can't confirm them, the timesheet is kept and the invoice waits."</p>
 
   <h3>4 · What a record goes through</h3>
   <p>The nine statuses and the only legal moves between them. An illegal move raises an error rather than being saved, and every move writes a line of history in the same transaction.</p>
@@ -749,7 +725,6 @@ stateDiagram-v2
     ignored --&gt; [*]
     cancelled --&gt; [*]
 </pre></div>
-  <p class="say"><b>Say it like this</b>"The happy path is one line: waiting, received, ready, waiting for approval, sent, paid. Everything interesting is a legal detour, and the newest one is 'wrong client', which puts a record back to waiting for its own timesheet instead of cancelling it."</p>
 
   <h3>5 · Ready to invoice, and Kevin's answer</h3>
   <p>Where the human approves. The invoice is created in QuickBooks <em>before</em> Kevin is asked, so he approves the real document the client will receive. Nothing reaches the client until his "approve".</p>
@@ -770,7 +745,6 @@ flowchart TD
     wrong --&gt; six["Picture 6, then back to picture 3 for the right client"]
     answer -- "anything else" --&gt; askwords["Short reply: approve, cancel or wrong client (H6)"]
 </pre></div>
-  <p class="say"><b>Say it like this</b>"Approval replies are matched by code on the first words: approve, cancel, or wrong client. Only free-text answers to review questions go through the model, and even then code applies the answer."</p>
 
   <h3>6 · A set-aside email, and setting something up in QuickBooks</h3>
   <p>What happens to email the agent couldn't place. This is also the one place a rate can enter QuickBooks through the agent, and it is the most guarded path in the system: read by code, shown back in full, made only after "confirm" plus a one-time number.</p>
@@ -800,7 +774,6 @@ flowchart TD
     create -- "done" --&gt; madeit["Set up in QuickBooks: what was made and reused"]
     madeit --&gt; handle
 </pre></div>
-  <p class="say"><b>Say it like this</b>"The confirmation number is the defence against a forged email. Anyone can send mail that claims to be from Kevin, but only Kevin can see the number in his inbox."</p>
 
   <h3>7 · When something outside the agent fails</h3>
   <p>Every outside dependency has a failure path, and none of them loses work. The design question is <em>when to bother a person</em>: one-run blips are ordinary on a fifteen-minute schedule, so Kevin hears only about failures that last an hour, or about ones that can never clear by themselves.</p>
@@ -818,13 +791,7 @@ flowchart TD
     f7 -- "yes" --&gt; f9["Kevin told once; told again when it works (A6, D5)"]
     which -- "filing an email in a folder" --&gt; f10["Logged; the email is still handled once (A7)"]
 </pre></div>
-  <p class="say"><b>Say it like this</b>"Nothing is marked done until it is, so an outage only delays work. The alerting has a grace period to avoid alert fatigue, but a refused password skips the grace, because waiting won't fix it."</p>
 
-  <div class="lens">
-    <span class="tag">PM lens · a path map is a spec, a test plan and a gap finder</span>
-    <p>Writing the path checklist found three places where the agent did less than its own documents claimed: a broken mailbox stopped the run and told nobody, Claude being down did the same, and client replies were filed silently even though the docs said they were forwarded. None would have shown up in a demo.</p>
-    <p><b>Ask:</b> <em>"Is there one list of every path through this system, with what decides it, what the user sees, and which test covers it?"</em> If not, the gaps are still in there.</p>
-  </div>
 </section>
 
 <section id="p5">
@@ -875,18 +842,6 @@ flowchart TD
   <h3>A failed read is a failure, not a guess</h3>
   <p>If the model refuses, or runs out of output space mid-answer, the code raises an error that becomes <code>CANT_READ_ATTACHMENT</code>. There is no partial reading that quietly proceeds with three of five fields filled in. And if Claude cannot be reached at all, that is a different error with a different meaning: nothing is wrong with the document, so it waits and is read on a later run.</p>
 
-  <div class="lens">
-    <span class="tag">PM lens · specify the seam, not the prompt</span>
-    <p>Most PM energy goes into prompts. The higher-leverage artifact is the <em>schema</em> — the exact shape of what the model hands back, and therefore what it is and is not responsible for. Prompts drift and get rewritten; the schema is the contract that survives.</p>
-    <p><b>Ask on any feature that uses a model:</b></p>
-    <ul>
-      <li>What exactly is the model responsible for producing, field by field?</li>
-      <li>What does it never see? (Here: rates, recipient addresses, anything about money.)</li>
-      <li>Can each field be traced to a source, or does the system just trust the output?</li>
-      <li>What happens on a refusal, a timeout, or a truncated answer — and are those told apart?</li>
-    </ul>
-    <p>Two practical notes worth knowing the names of: the long, stable part of the prompt is marked for <b>caching</b>, so repeated calls are cheaper and faster; and the response is requested as a <b>structured output</b> validated against the schema, so a malformed answer fails loudly instead of being parsed hopefully with string matching.</p>
-  </div>
 </section>
 
 <section id="p6">
@@ -913,11 +868,6 @@ flowchart TD
 
   <p>Every way the copy can fail ends in an email to Kevin saying what he can reply. QuickBooks unreachable for the day's copy: the run uses yesterday's, Kevin is told once, and the question closes by itself when QuickBooks answers. And the daily look for ended billing periods is not counted as done on a stale copy, so an outage cannot hide a missing timesheet until tomorrow.</p>
 
-  <div class="lens">
-    <span class="tag">PM lens · freshness is a product requirement</span>
-    <p>"Add a cache" is an engineering answer to a product question. The real question is, per piece of data: what is the cost of being stale, and what is the cost of asking? Here, a stale address costs one extra refresh; a stale rate costs a wrong invoice. Same system, opposite answers.</p>
-    <p><b>Ask:</b> <em>"For each thing this agent reads, how stale can it be, what happens on a miss, and what happens when the source is down?"</em></p>
-  </div>
 </section>
 
 <section id="p7">
@@ -956,12 +906,6 @@ flowchart TD
   </ol>
   <p>Guardrail 5 is the interesting one, because it catches errors nobody predicted. It does not know <em>why</em> an invoice is unusual; it only knows this engagement normally bills about $21,000 and this one says $4,000. That is precisely the class of mistake — a misread period, a half-submitted timesheet — that field-level confidence scores miss entirely.</p>
 
-  <div class="lens">
-    <span class="tag">PM lens · confidence is not probability</span>
-    <p>A model's self-reported "high confidence" is a useful signal and a terrible guarantee. It is well correlated with being right and it is not calibrated: a confidently wrong reading is an ordinary event, not an anomaly.</p>
-    <p>So confidence is used here to decide <em>whether to ask a human</em>, never to decide whether an answer is true. The things that actually catch errors are structural: code re-does the arithmetic, quotes are verified against the document, and the amount is compared to history.</p>
-    <p><b>Ask:</b> <em>"What catches a confidently wrong answer?"</em> If the only answer is "the confidence score," the feature has no error detection.</p>
-  </div>
 
   <h3>Twenty-four ways to ask</h3>
   <p>Every reason the agent can need a person is a named, fixed code: a closed set that can be counted, tested, and put in a spreadsheet column. Adding one requires editing the documentation first, and a test fails if the code and the docs disagree.</p>
@@ -997,11 +941,6 @@ flowchart TD
   <h3>Right consultant, wrong client</h3>
   <p>A consultant starting at a second client while still at the first sends a timesheet whose dates only the first engagement covers, so it lands there. Kevin catches it at approval and replies <code>wrong client</code>. The draft is voided, the first client's period goes back to <em>waiting for its own timesheet</em> (cancelling it would have swallowed the real one), and the timesheet is set aside with the setup form. It is remembered as <em>never this client again</em> and, once the right one is set up, <em>pinned</em> to it. A new approval comes for the right client.</p>
 
-  <div class="lens">
-    <span class="tag">PM lens · a human in the loop is an interface, so design it</span>
-    <p>"A human approves" is where many agent specs stop. The questions that matter come after: What can the human say? What does each answer do, and is it reversible? Who reads the answer, the model or code? What stops a forged answer? What happens to an answer that arrives after the question is moot?</p>
-    <p><b>Ask:</b> <em>"List every reply the human can give, and for each: who interprets it, what it changes, and how it's authenticated."</em></p>
-  </div>
 </section>
 
 <section id="p9">
@@ -1070,18 +1009,6 @@ flowchart TD
 
   <p>The same pattern covers invoice creation and setup in QuickBooks, and QuickBooks' own total is compared against the agent's computed total. A mismatch voids the invoice and raises a review rather than letting two systems quietly disagree about what a client owes.</p>
 
-  <div class="lens">
-    <span class="tag">PM lens · at-least-once is the default, and it is not what you want</span>
-    <p>Almost every retry mechanism in software gives you <em>at-least-once</em> delivery: if we are unsure, do it again. That is correct for reading and catastrophic for acting. Any agent that sends, charges, posts, books, or files needs the pattern above, and it needs it designed in from the start.</p>
-    <p><b>Ask on any agent that acts in the world:</b></p>
-    <ul>
-      <li>What is the <b>idempotency key</b> for this action, and where is it stored?</li>
-      <li>Is the intention written down <em>before</em> the action, or only the result after it?</li>
-      <li>On restart, do we ask the provider what happened, or assume?</li>
-      <li>Is there a test that kills the process mid-action?</li>
-    </ul>
-    <p>"We'll retry on failure" is not an answer to any of these. It is a description of the bug.</p>
-  </div>
 </section>
 
 <section id="p10">
@@ -1098,16 +1025,6 @@ flowchart TD
   <p>While building backup and restore, the round-trip test failed: back up a populated folder, restore it elsewhere, and an invoice item had vanished. Nothing was corrupt and no error had been raised.</p>
   <p>The cause: SQLite in its default high-performance mode keeps recently committed data in a companion file alongside the database, folding it in later. Copying just the database file is therefore a <em>quietly incomplete</em> backup. The fix is one line telling the database to fold everything in before the copy. The lesson is the shape of the bug: <strong>a backup that appears to succeed and cannot be restored is worse than no backup</strong>, because it removes the pressure to have a real one.</p>
 
-  <div class="lens">
-    <span class="tag">PM lens · sort actions by how hard they are to take back</span>
-    <ul>
-      <li><b>Reversible and invisible</b> — reading mail, writing a draft. Let the agent do it freely.</li>
-      <li><b>Reversible but visible</b> — creating an invoice or a customer in an accounting system. Recoverable (void it), but someone sees. Needs idempotency, and here a confirmed human request.</li>
-      <li><b>Irreversible</b> — an email to a client. There is no unsend. Needs the full apparatus: written down first, keyed, reconciled, and a human approving each one.</li>
-      <li><b>Irreversible and financial</b> — moving money. Deliberately out of scope: the agent tells Kevin what is owed and never pays.</li>
-    </ul>
-    <p><b>Ask:</b> <em>"Which tier is each action in, and does its safety machinery match?"</em> This is the single most useful frame you can bring to an agent design review.</p>
-  </div>
 </section>
 
 <section id="p11">
@@ -1146,17 +1063,6 @@ flowchart TD
     <li><strong>The timesheets are invented.</strong> None came from Icon. That is why the roadmap gates live sending behind a full billing cycle in dry run with Kevin checking every reading against his own work. No test can substitute for that.</li>
   </ul>
 
-  <div class="lens">
-    <span class="tag">PM lens · the eval set is a product asset</span>
-    <p>For a model-backed feature, the eval set is more durable than the prompt, the model choice, or often the code. It is what lets you answer "did that change make things better?"</p>
-    <ul>
-      <li>How many examples are in the eval set, and where did they come from?</li>
-      <li>What is the metric, and what is the floor we refuse to ship below?</li>
-      <li>Does the set include the cases we expect to fail — the bad scan, the ambiguous date, the half-filled form?</li>
-      <li>Who is responsible for growing it when production surprises us?</li>
-    </ul>
-    <p>Also worth insisting on: <b>every prompt is a versioned file</b>. When "try again" became a new kind of reply, the reply prompt became <code>reply_v2</code> rather than an edit to <code>reply_v1</code>, and every stored reading records which model and prompt version produced it.</p>
-  </div>
 </section>
 
 <section id="p12">
@@ -1173,22 +1079,11 @@ flowchart TD
     <li><strong>A self-check command.</strong> <code>fops doctor</code> checks every credential and setting and sends nothing to a client, including that the agent logs in to its own mailbox and never Kevin's. Its QuickBooks checks and <code>docs/quickbooks-setup.md</code> are one specification written twice: the checks say what the agent expects, the document tells Kevin what to click.</li>
   </ul>
 
-  <div class="lens">
-    <span class="tag">PM lens · the operability checklist</span>
-    <ul>
-      <li>How does the person who depends on this <b>stop</b> it, in under a minute, without an engineer?</li>
-      <li>How do they know it ran, and that it ran <em>correctly</em>, without reading logs?</li>
-      <li>What happens when a credential expires — a warning before, or an incident after?</li>
-      <li>When a dependency is down, who hears about it, how soon, and how often?</li>
-      <li>What is in the logs that should not be, given who can read them?</li>
-      <li>Has anyone actually performed a restore from backup?</li>
-    </ul>
-  </div>
 </section>
 
 <section id="p13">
-  <h2><span class="partno">Part 13</span>The vocabulary, and the questions</h2>
-  <p class="deck">Terms you can now use precisely, and the review questions they unlock.</p>
+  <h2><span class="partno">Part 13</span>Vocabulary, and where things stand</h2>
+  <p class="deck">The terms used on this page and in the code, as they apply here.</p>
 
   <div class="tablewrap">
   <table>
@@ -1213,63 +1108,17 @@ flowchart TD
   </table>
   </div>
 
-  <h3>Twelve questions for any agent team</h3>
-  <ol class="questions">
-    <li><b>What is the agent forbidden to do, and where is that written?</b><span>Scope as an enforced boundary, not an intention.</span></li>
-    <li><b>Can the whole flow run with the network off?</b><span>Reveals whether business logic and vendor SDKs are tangled.</span></li>
-    <li><b>What exactly is the model responsible for, field by field — and what does it never see?</b><span>The schema is the contract; the prompt is an implementation detail.</span></li>
-    <li><b>What catches a confidently wrong answer?</b><span>If the answer is "the confidence score," there is no error detection.</span></li>
-    <li><b>Is there one list of every path, with the test that covers each?</b><span>Writing it is how gaps are found.</span></li>
-    <li><b>For each thing the agent reads, how stale can it be?</b><span>And what happens on a miss, and when the source is down?</span></li>
-    <li><b>What can the human reply, who interprets it, and how is it authenticated?</b><span>A human in the loop is an interface.</span></li>
-    <li><b>What is the idempotency key for each outward action?</b><span>And is the intention stored before the action, or the result after?</span></li>
-    <li><b>Which tier of reversibility is each action in?</b><span>And does its safety machinery match the tier?</span></li>
-    <li><b>How many examples in the eval set, what is the metric, what is the floor?</b><span>Plus: who grows it when production surprises us?</span></li>
-    <li><b>How does a non-engineer stop it in under a minute?</b><span>And how do they know it ran correctly without reading logs?</span></li>
-    <li><b>When a dependency fails, who is told, how soon, and how often?</b><span>Too eager trains people to ignore it; too quiet loses a day.</span></li>
-  </ol>
 
   <h3>Where this project actually stands</h3>
-  <p>The agent is built and runs end to end on fakes: 1,064 tests, 58 recorded decisions. What remains is mostly work only a person can do, and the roadmap keeps those boxes unticked on purpose: proving the reader on real timesheets, a full billing cycle in dry run with Kevin checking every reading, moving to a server, the first live invoices in ask-first, and trying each new QuickBooks setup path in the sandbox. Ticking those on the strength of a fake would have been easy and dishonest. Noticing that distinction is most of what a technical PM for agents is for.</p>
+  <p>The agent is built and runs end to end on fakes: 1,064 tests, 58 recorded decisions. What remains is mostly work only a person can do, and the roadmap keeps those boxes unticked on purpose: proving the reader on real timesheets, a full billing cycle in dry run with Kevin checking every reading, moving to a server, the first live invoices in ask-first, and trying each new QuickBooks setup path in the sandbox. Ticking those on the strength of a fake would have been easy and dishonest.</p>
 </section>
 
-<section id="p14">
-  <h2><span class="partno">Part 14</span>Telling it in an interview</h2>
-  <p class="deck">What to be able to say without notes, in the order an interviewer usually asks.</p>
-
-  <h3>The thirty-second version</h3>
-  <p class="say"><b>Say it like this</b>"It's an email-driven billing agent for a staffing firm. Consultants email approved timesheets; Claude reads each one into a structured form; code matches it to the engagement, checks it, takes both rates fresh from QuickBooks, and makes the invoice. The administrator approves every invoice by replying to an email before anything reaches a client. The model reads; code decides everything that touches money or recipients."</p>
-
-  <h3>Five decisions, and the trade-off behind each</h3>
-  <div class="tablewrap">
-  <table>
-    <thead><tr><th>Decision</th><th>Why</th><th>What it cost</th></tr></thead>
-    <tbody>
-      <tr><td>A scheduled pipeline, not an autonomous loop</td><td>Auditable, testable, cheap; the task is repetitive and mistakes are expensive</td><td>Less flexible; new situations need code, not a prompt</td></tr>
-      <tr><td>Model reads, code decides</td><td>Arithmetic, rates and recipients can't be wrong or manipulated through the document</td><td>More code to write than "ask the model for the invoice"</td></tr>
-      <tr><td>Ask first in production</td><td>The administrator sees every invoice before the client; makes "wrong client" safely correctable</td><td>One reply per invoice for him; automatic mode left unused</td></tr>
-      <tr><td>Cache the directory, never the money</td><td>Quiet runs cost nothing; a rate changed this morning is still the one billed</td><td>A refresh-on-miss path and its failure handling to build and test</td></tr>
-      <tr><td>Setup from email, with a one-time code</td><td>A new consultant can be set up without leaving the inbox, and a forged email can't do it</td><td>The one deliberate exception to "rates never come from email", written down as a decision</td></tr>
-    </tbody>
-  </table>
-  </div>
-
-  <h3>Questions you should expect, and the short answer</h3>
-  <ol class="questions">
-    <li><b>"What happens if the model misreads the hours?"</b><span>Code re-adds the daily hours and compares them with the printed total; a mismatch is a review. The quote is checked against the document. And Kevin approves the invoice before it goes.</span></li>
-    <li><b>"What if someone emails a fake timesheet?"</b><span>The sender's address decides what an email is, an unknown address is set aside for Kevin, and nothing in an email can change a rate or a recipient.</span></li>
-    <li><b>"How do you stop double billing?"</b><span>Write the intention down before acting, key it, and reconcile after a crash by asking the mail server and QuickBooks what really happened. Plus a database constraint on one record per consultant per period.</span></li>
-    <li><b>"What happens when QuickBooks or Claude is down?"</b><span>Nothing is lost, because nothing is marked done until it is. Work waits; the administrator is told once if it lasts an hour; the question closes itself when it recovers.</span></li>
-    <li><b>"How do you know it works?"</b><span>Tests for the code, an eval set for the model, a checklist of every path with its test, mutation checks on the important tests, and a dry-run billing cycle a person checks by hand before anything goes live.</span></li>
-    <li><b>"What would you do differently?"</b><span>Map every path earlier. Writing that list found three silent failures the demos never showed.</span></li>
-  </ol>
-</section>
 
 <footer>
   finance-ops-agent · Icon Technologies<br>
   1,064 tests · 8 ports · 24 review codes · 82 paths mapped · 58 recorded decisions<br>
   Read the code alongside this: <code>docs/README.md</code> is the map, <code>docs/how-it-works.md</code> has the pictures, <code>docs/pathways.md</code> is every path, <code>docs/decisions.md</code> is why.<br>
-  This page's source is <code>docs/study/anatomy.html</code> in the repository; its diagrams are checked against <code>docs/how-it-works.md</code> by a test.
+  This page is <code>docs/overview/overview.html</code>; its diagrams are copied from <code>docs/how-it-works.md</code> by <code>sync_diagrams.py</code>, and a test fails if they drift.
 </footer>
 </main>
 </div>

@@ -1,11 +1,11 @@
-"""Copy the pictures from docs/how-it-works.md into the study page.
+"""Copy the pictures from docs/how-it-works.md into the overview page.
 
-    uv run python docs/study/sync_diagrams.py
+    uv run python docs/overview/sync_diagrams.py
 
-The study page (`anatomy.html`, published as the "Anatomy of a Billing Agent"
-page) shows the same seven diagrams as `how-it-works.md`. This puts the
-current ones in place; `tests/unit/test_study_page.py` fails until it has run
-after a picture changes. The words around the pictures are written by hand.
+The overview (`overview.html`) shows the same seven diagrams as
+`how-it-works.md`. This puts the current ones in place;
+`tests/unit/test_overview_page.py` fails until it has run after a picture
+changes. The words around the pictures are written by hand.
 """
 
 import html
@@ -14,7 +14,7 @@ from pathlib import Path
 
 DOCS = Path(__file__).resolve().parent.parent
 HOW = DOCS / "how-it-works.md"
-PAGE = DOCS / "study" / "anatomy.html"
+PAGE = DOCS / "overview" / "overview.html"
 BLOCK = re.compile(r'<pre class="mermaid" data-diagram="(\d+)">\n(.*?)</pre>', re.S)
 
 
