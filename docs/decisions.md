@@ -36,7 +36,7 @@ QuickBooks Online has no draft invoices, and a sent email cannot be unsent. So t
 
 ## 9. Approval and review answers by email reply, from Kevin only
 
-A reply is the simplest possible action for Kevin. Only replies from `kevin@icon-technologies.com` in the original thread are accepted; approvals must start with `approve` or `cancel`. Consequence: no web page; the spoofing risk is limited to someone who can already send mail as Kevin.
+A reply is the simplest possible action for Kevin. Only replies from `kevin@icon-technologies.com` in the original thread are accepted; approvals must start with `approve` or `cancel` (decision 54 adds plain words alongside). Consequence: no web page; the spoofing risk is limited to someone who can already send mail as Kevin.
 
 ## 10. Three modes: dry run, ask first, automatic
 
@@ -534,3 +534,20 @@ Decision 52 set the direction: what QuickBooks has no field for goes in as label
 - **A vendor with no email is a to-do, not a failure, while timesheets are forwarded** (decision 25), and a failure once nobody forwards: no timesheet could be recognised for that consultant.
 
 Rates history ("Rates from") does not come across: the product holds today's rate, taken when the timesheet is read (decision 43), and the start date stands in for "rates from".
+
+## 54. Kevin answers in his own words; code checks each request and says what it did
+
+Testing the first live cycle showed how brittle the replies were. QuickBooks refused Manoj's invoice because a leftover already held its number. Kevin replied, reasonably, "append -revised to the number so it can go through, and send it back to me as a draft for approval". The agent had no way to take a new number, so it answered with a fixed list of example phrases, none of which fitted. Approvals were stricter still: anything that did not start with `approve` or `cancel` got the same short refusal (decision 9).
+
+Decision: **a reply is read for what Kevin asks, in whatever words he uses, and every request is checked by code before anything happens.** Claude still only reads (decision 14). The reading is now a list of typed requests, so one reply can ask for several things, and the list is longer:
+
+- **New kinds:** `approve`, `cancel`, `invoice_number` (the whole number, spelled out: "add -revised" becomes `083126MT-MK-revised`), `try_again` (he fixed something outside the agent) and `show_me_first` (he wants to approve it himself before it goes out).
+- **The reader is told what the reply is about:** consultant, client, period and invoice number. A rate or an address is never included, the same rule as for timesheets.
+- **Code checks every request.** A number must be one QuickBooks will take (21 characters, no spaces, not ending like `-VOID`) and must not be held by another of the agent's invoices. An invoice that already exists cannot be renumbered from a reply. Hours must parse. Anything it cannot check becomes `unclear`.
+- **Requests that change an invoice must quote Kevin.** `approve`, `cancel`, `invoice_number`, `try_again` and `show_me_first` are only acted on when the words the model relied on are really in the reply. The model's say-so alone never sends, cancels or renumbers anything.
+- **Approval in plain words.** A reply starting with `approve` or `cancel` is still taken as it stands, without the model. Anything else is read. It approves only when approval is the one thing asked for: "approve, but make it 150 hours" is not an approval, because the invoice he was shown would not be the one sent. Kevin is told it can only be sent as it is or cancelled.
+- **Kevin always hears back** in the same thread: what the agent understood, what it did, and what it could not do and why, with one question to answer. A reply to that follow-up is about the same thing as the original, so answering "approve" to it approves.
+- **A number QuickBooks already has is its own failure** (`AccountingNumberTaken`, Intuit's error 6140). The review email says how to settle it from his inbox: delete the leftover and reply "try again", or reply with the number to use.
+- **`show_me_first` holds back an automatic invoice.** In automatic mode that item goes to Kevin for approval like any other in ask first.
+
+What this departs from: decision 9's "approvals must start with `approve` or `cancel`". The plain word still works exactly as before. The new path adds to it and gives way to it.

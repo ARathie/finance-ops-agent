@@ -86,7 +86,7 @@ Tables (key columns only; the domain objects mirror them):
 
 ## Kevin's replies
 
-Replies from Kevin's address that are in the thread of a review or approval email are matched to the item by the `In-Reply-To` and `References` headers, which name the agent's own Message-ID, and by an item reference in the original subject as a fallback. Approval replies are checked by code: the first word must be `approve` or `cancel`. Review replies are read by Claude into a structured answer (which field, what value) and applied by code; if the reading is not confident, the agent replies asking again. Replies from anyone else are ignored and reported in the summary.
+Replies from Kevin's address that are in the thread of a review or approval email are matched to the item by the `In-Reply-To` and `References` headers, which name the agent's own Message-ID, and by an item reference in the original subject as a fallback. A reply that starts with `approve` or `cancel` is taken as it stands. Every other reply, to an approval or a review, is read by Claude into a list of typed requests, each quoting Kevin's words. Code checks each one and does it or says why not, and the agent always replies in the thread with what it did and what it still needs (decision 54). Replies from anyone else are ignored and reported in the summary.
 
 ## Modes and guardrails
 

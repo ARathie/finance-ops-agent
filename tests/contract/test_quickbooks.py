@@ -16,6 +16,7 @@ import pytest
 from finance_ops_agent.adapters.quickbooks.client import (
     QuickBooksClient,
     QuickBooksFailed,
+    QuickBooksNumberTaken,
     QuickBooksReconnect,
 )
 from finance_ops_agent.adapters.quickbooks.online import (
@@ -239,6 +240,18 @@ class TestCreateInvoice:
         assert "Custom transaction numbers" in message  # and what to turn on
         assert any("operation=void" in url for _, url in replay.calls)
         assert replay.bodies[-1] == {"Id": "145", "SyncToken": "0"}
+
+    def test_a_number_another_invoice_holds_is_its_own_failure(self, tmp_path: Path) -> None:
+        """Error 6140 is something Kevin can settle by reply -- delete the
+        leftover or name another number -- so it is told apart (decision 54)."""
+        replay = replay_from("test_invoice_duplicate_number")
+        accounting, _, _ = build(replay, tmp_path)
+
+        with pytest.raises(QuickBooksNumberTaken) as error:
+            accounting.create_invoice(worked_example_invoice(), item_id=1)
+
+        assert error.value.number == "083126AC-PS"
+        assert isinstance(error.value, QuickBooksFailed)  # still a QuickBooks failure
 
     def test_intuits_trace_id_is_kept_and_repeated_back(self, tmp_path: Path) -> None:
         """Intuit's support team asks for intuit_tid first, so it is captured

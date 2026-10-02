@@ -19,5 +19,6 @@ What needs your review:
 
 You can fix or add the row in the engagement list, or just reply to this
 email with the answer, or reply "ignore".
-Replies that work: "this is for Acme", "use 152 hours",
-"approved by Jane Doe on 9/3", "use the new one", "ignore".
+Write it however you like, for example:
+"this is for Acme", "use 152 hours", "approved by Jane Doe on 9/3",
+"use the new one", "ignore".

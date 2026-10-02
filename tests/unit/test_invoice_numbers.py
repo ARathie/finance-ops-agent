@@ -13,6 +13,7 @@ from finance_ops_agent.domain.invoice_numbers import (
     initials,
     invoice_number,
     is_voided_number,
+    problem_with_chosen_number,
     voided_number,
     with_last_name,
 )
@@ -109,3 +110,26 @@ class TestACancelledNumber:
         assert not is_voided_number("083126AC-PS")
         assert not is_voided_number("083126AC-PS-2")
         assert not is_voided_number("")
+
+
+class TestANumberKevinChose:
+    """Kevin may name any number in a reply (decision 54), as long as
+    QuickBooks will take it and it cannot pass for a voided invoice."""
+
+    def test_his_own_suffix_is_fine(self) -> None:
+        assert problem_with_chosen_number("083126MT-MK-revised") is None
+
+    def test_too_long_for_quickbooks(self) -> None:
+        problem = problem_with_chosen_number("083126MT-MK-revised-again")
+        assert problem is not None and str(MAX_LENGTH) in problem
+
+    def test_spaces_are_refused(self) -> None:
+        assert problem_with_chosen_number("083126MT MK") is not None
+
+    def test_empty_is_refused(self) -> None:
+        assert problem_with_chosen_number("") is not None
+
+    def test_a_voided_looking_number_is_refused(self) -> None:
+        """The agent skips its own voided invoices when it looks for its work,
+        so a live invoice must never be named like one."""
+        assert problem_with_chosen_number("083126MT-MK-void") is not None

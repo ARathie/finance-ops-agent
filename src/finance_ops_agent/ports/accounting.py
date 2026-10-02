@@ -22,6 +22,18 @@ class AccountingFailed(Exception):
     """
 
 
+class AccountingNumberTaken(AccountingFailed):
+    """The accounting system already has an invoice under this number.
+
+    Its own kind because Kevin can settle it from his inbox: delete the old
+    invoice and say "try again", or name a different number (decision 54).
+    """
+
+    def __init__(self, message: str, number: str) -> None:
+        super().__init__(message)
+        self.number = number
+
+
 class AccountingNeedsReconnect(AccountingFailed):
     """The connection is no longer usable (becomes QUICKBOOKS_RECONNECT).
 

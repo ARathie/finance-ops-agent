@@ -109,3 +109,27 @@ def invoice_number(
     stamp = period_end.strftime("%m%d%y")
     room = MAX_LENGTH - len(stamp) - len(client_code) - 1 - len(suffix)
     return f"{stamp}{client_code.upper()}-{consultant_code[:room]}{suffix}"
+
+
+_ALLOWED_IN_A_CHOSEN_NUMBER = frozenset("-_/.")
+
+
+def problem_with_chosen_number(number: str) -> str | None:
+    """Why a number Kevin asked for cannot be used, in his words, or None.
+
+    Kevin may pick any number he likes -- it is his numbering -- but it has to
+    be one QuickBooks will take, and it must never look like one of the agent's
+    voided invoices, which the agent skips when it looks for its own work.
+    """
+    if not number:
+        return "that number is empty"
+    if len(number) > MAX_LENGTH:
+        return f"QuickBooks allows {MAX_LENGTH} characters and {number} has {len(number)}"
+    if any(
+        not (character.isalnum() or character in _ALLOWED_IN_A_CHOSEN_NUMBER)
+        for character in number
+    ):
+        return f"{number} has characters an invoice number can't hold (spaces, for one)"
+    if is_voided_number(number.upper()):
+        return f"{number} ends the way the agent marks a voided invoice"
+    return None

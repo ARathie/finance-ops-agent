@@ -31,7 +31,7 @@ Input: the attachment (see above), the email text, and, for spelling only, the l
 
 ### 3. Read Kevin's reply
 
-Input: Kevin's reply text and the review reasons that were asked. Output (structured): for each reason, the answer as a typed value (`consultant_name`, `client_name`, `period_start` / `period_end`, `hours`, `approval_note`, `ignore`, `use_new_one`, `unclear`). Code applies it; `unclear` means the agent asks again. Approval replies (`approve` / `cancel`) are matched by code without the model.
+Input: Kevin's reply text, what was asked (an approval, or review reasons with their codes), and the item's consultant, client, period and invoice number. Never a rate or an address. Output (structured, prompt `reply_v2`): a list of requests. Each has the reason it answers, a kind, a value and Kevin's own words. The kinds are `consultant_name`, `client_name`, `period_start` / `period_end`, `hours`, `approval_note`, `ignore`, `use_new_one`, `approve`, `cancel`, `invoice_number`, `try_again`, `show_me_first` and `unclear`. It also returns a plain sentence of what he asked for and, if needed, one question back. Code checks each request; the ones that change an invoice are only acted on when their quote is really in the reply. A reply that starts with `approve` or `cancel` is taken without the model (decision 54).
 
 ## Prompt versions
 

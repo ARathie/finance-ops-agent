@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from finance_ops_agent.domain.invoices import Invoice
 from finance_ops_agent.ports.accounting import (
     AccountingEngagement,
+    AccountingNumberTaken,
     AccountingParty,
     CreatedInvoice,
     EngagementListing,
@@ -38,6 +39,8 @@ class FakeAccounting:
         # payee, by the id an engagement's rates carry.
         self.customers: dict[str, AccountingParty] = {}
         self.payees: dict[str, AccountingParty] = {}
+        # Numbers another invoice already holds, as a leftover in QuickBooks would.
+        self.taken_numbers: set[str] = set()
         self.create_attempts = 0
         self._counter = 0
 
@@ -48,6 +51,10 @@ class FakeAccounting:
         existing = self.find_invoice(item_id)
         if existing is not None:
             return existing
+        if invoice.number in self.taken_numbers:
+            raise AccountingNumberTaken(
+                f"Duplicate Document Number Error: {invoice.number}", invoice.number
+            )
         self._counter += 1
         created = CreatedInvoice(
             number=invoice.number, external_id=f"ext-{self._counter}", pdf=b"%PDF-fake"

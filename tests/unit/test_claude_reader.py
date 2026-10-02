@@ -19,6 +19,7 @@ from finance_ops_agent.domain.reading import (
     EmailClassification,
     ReplyAnswer,
     ReplyAnswerKind,
+    ReplyContext,
     ReplyReading,
 )
 from finance_ops_agent.ports.reader import CantReadAttachmentError
@@ -169,6 +170,29 @@ def test_read_reply() -> None:
     )
     assert result == expected
     assert "use 152 hours" in stub.calls[0]["messages"][0]["content"][0]["text"]
+
+
+def test_read_reply_is_told_what_the_reply_is_about() -> None:
+    """ "Add -revised to it" means nothing without the number it is added to,
+    so the reader is given the item's names, period and invoice number --
+    never a rate, never an address (decision 54)."""
+    expected = ReplyReading(answers=[], understood="", still_unclear="")
+    reader, stub, _ = make_reader(StubResponse(parsed_output=expected))
+    reader.read_reply(
+        "append -revised and send it to me first",
+        [("QUICKBOOKS_FAILED", "QuickBooks already has an invoice numbered 083126MT-MK.")],
+        ReplyContext(
+            asked="review",
+            consultant="Manoj Koottappilly",
+            client="MasTec North America, Inc.",
+            period="Aug 1–31, 2026",
+            invoice_number="083126MT-MK",
+        ),
+    )
+    text = stub.calls[0]["messages"][0]["content"][0]["text"]
+    assert "Invoice number: 083126MT-MK" in text
+    assert "Manoj Koottappilly" in text
+    assert "append -revised" in text
 
 
 def test_token_usage_is_recorded_so_a_live_run_can_be_costed() -> None:

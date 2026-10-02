@@ -74,7 +74,7 @@ The code is what the software uses; the message is what Kevin sees. Every review
 | `CORRECTION` | This looks like a corrected version of a timesheet I already handled. | Reply "use the new one" or "ignore". See `status-tracking.md`. |
 | `SEND_FAILED` | I couldn't send the billing email. I'll keep trying; please check the mailbox. | Usually fixes itself; otherwise check the mailbox connection. |
 | `SEND_UNCERTAIN` | I sent the billing email for <item> but couldn't confirm it left the server. You're on CC: reply "received" if you got it, or "resend". | Reply "received" or "resend". |
-| `QUICKBOOKS_FAILED` | I couldn't create the invoice in QuickBooks. I'll keep trying; please check the connection. | Reconnect QuickBooks (steps are in the email). |
+| `QUICKBOOKS_FAILED` | I couldn't create the invoice in QuickBooks. I'll keep trying; please check the connection. When QuickBooks already has an invoice under the number, the email says so. | Reconnect QuickBooks (steps are in the email). For a number already taken: delete the leftover and reply "try again", or reply with the number to use ("use 083126MT-MK-revised"). |
 | `MAILBOX_PROBLEM` | I can't read the mailbox. | Follow the steps in the email. |
 | `QUICKBOOKS_RECONNECT` | QuickBooks needs to be reconnected. | Follow the steps in the email. |
 

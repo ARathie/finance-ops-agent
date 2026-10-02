@@ -18,6 +18,7 @@ from finance_ops_agent.adapters.claude.quotes import check_quotes, pdf_text
 from finance_ops_agent.domain.reading import (
     EmailClassification,
     ReadingHints,
+    ReplyContext,
     ReplyReading,
     TimesheetReading,
 )
@@ -26,7 +27,7 @@ from finance_ops_agent.ports.reader import CantReadAttachmentError, TokenUsage
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 TIMESHEET_PROMPT_VERSION = "timesheet_v3"
 CLASSIFY_PROMPT_VERSION = "classify_v1"
-REPLY_PROMPT_VERSION = "reply_v1"
+REPLY_PROMPT_VERSION = "reply_v2"
 MAX_TOKENS = 16000
 
 _M = TypeVar("_M", bound=BaseModel)
@@ -148,10 +149,28 @@ class ClaudeReader:
             EmailClassification, CLASSIFY_PROMPT_VERSION, [{"type": "text", "text": text}]
         )
 
-    def read_reply(self, reply_text: str, questions: list[tuple[str, str]]) -> ReplyReading:
+    def read_reply(
+        self,
+        reply_text: str,
+        questions: list[tuple[str, str]],
+        context: ReplyContext | None = None,
+    ) -> ReplyReading:
         asked = "\n".join(f"- {code}: {message}" for code, message in questions)
-        text = (
-            "The review reasons that were asked:\n"
-            f"{asked}\n\nThe administrator's reply:\n{reply_text}"
-        )
+        parts: list[str] = []
+        if context is not None:
+            what = (
+                "an invoice for the administrator to approve"
+                if context.asked == "approval"
+                else "a review question"
+            )
+            parts.append(
+                f"The agent's email was {what}.\n"
+                f"Consultant: {context.consultant or '(not known)'}\n"
+                f"Client: {context.client or '(not known)'}\n"
+                f"Period: {context.period or '(not known)'}\n"
+                f"Invoice number: {context.invoice_number or '(none yet)'}"
+            )
+        parts.append(f"What was asked:\n{asked}")
+        parts.append(f"The administrator's reply:\n{reply_text}")
+        text = "\n\n".join(parts)
         return self._parse(ReplyReading, REPLY_PROMPT_VERSION, [{"type": "text", "text": text}])

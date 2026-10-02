@@ -31,6 +31,7 @@ from finance_ops_agent import logs
 from finance_ops_agent.adapters.quickbooks.client import (
     QuickBooksClient,
     QuickBooksFailed,
+    QuickBooksNumberTaken,
     with_trace,
 )
 from finance_ops_agent.domain.invoice_numbers import is_voided_number
@@ -45,6 +46,8 @@ from finance_ops_agent.ports.accounting import (
 )
 
 PRIVATE_NOTE_PREFIX = "fops item"
+# What QuickBooks says when another invoice already holds the number asked for.
+_DUPLICATE_NUMBER = ("6140", "Duplicate Document Number")
 # A sentinel for "not asked yet", because "asked, and the company has no
 # default" is a real and different answer that must not be asked again.
 _UNREAD: Any = object()
@@ -424,7 +427,15 @@ class QuickBooksOnline:
             consultant=invoice.consultant,
             client=invoice.client_legal_name,
         )
-        created = self._client.post(self.company_url("/invoice"), json=body)
+        try:
+            created = self._client.post(self.company_url("/invoice"), json=body)
+        except QuickBooksFailed as error:
+            # 6140 is QuickBooks saying another invoice already holds this
+            # number: usually a leftover Kevin can delete, or a number he wants
+            # to change. Its own kind, so he is told exactly that (decision 54).
+            if any(marker in str(error) for marker in _DUPLICATE_NUMBER):
+                raise QuickBooksNumberTaken(str(error), invoice.number) from error
+            raise
         raw = created.get("Invoice", created)
         quickbooks_id = str(raw["Id"])
         total_cents = _cents(raw.get("TotalAmt", 0))
