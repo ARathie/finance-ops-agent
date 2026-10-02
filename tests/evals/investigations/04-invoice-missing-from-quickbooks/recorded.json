@@ -1,28 +1,27 @@
 {
   "investigation": {
-    "found": "The May invoice for Subramanian Arumugam at iStream (number 053125IS-SA) is in my records as sent, but it is no longer in our QuickBooks company at all — the invoice it pointed to is gone, and no other invoice there carries that number. The most likely reasons are that someone deleted it in QuickBooks, or it was originally created in a test/sandbox company rather than the real one. Until my record is corrected, my daily check for paid invoices keeps failing, so no payment on this item would be noticed.",
+    "found": "My records say invoice 053125IS-SA for Subramanian Arumugam's May 2025 work at iStream was made and sent, but the invoice that record points to is not in QuickBooks at all. It was either deleted, or it was made in a different QuickBooks company such as the test sandbox. Nothing in QuickBooks carries the number 053125IS-SA either, so no one has re-entered it by hand, and there is no second timesheet item for this consultant, client and month; while my record stays as it is, my daily check for paid invoices keeps failing on it.",
     "evidence": [
-      "My records: item 1, Subramanian Arumugam / iStream / May 1–31, 2025, invoice 053125IS-SA (QuickBooks id 153), marked sent.",
-      "QuickBooks has no invoice with id 153.",
-      "No invoice in QuickBooks is numbered 053125IS-SA, so it was not renumbered or re-entered by hand — the number is free.",
-      "No other timesheet item exists for this consultant or period, so this is not a duplicate or leftover of another item.",
-      "While the record stands, the daily paid-invoice check fails for this item."
+      "My records hold invoice 053125IS-SA, QuickBooks id 153, for this item, marked sent.",
+      "QuickBooks has no invoice with id 153, so it was deleted or made in another company such as the sandbox.",
+      "No invoice in QuickBooks carries the number 053125IS-SA, so that number is still free and nobody re-entered it by hand.",
+      "This is the only timesheet item for Subramanian Arumugam at iStream for May 2025, so it is not the same work recorded twice."
     ],
     "proposals": [
       {
-        "what_to_do": "If iStream never received a real invoice for May (it was a test, or it was made in the sandbox company), drop my record of it by running `uv run fops forget 1 --force`. I will then be able to raise the May invoice again properly in the real company.",
+        "what_to_do": "Ask the operator to clear my stale record by running uv run fops forget 1 --force. After that I can make the May 2025 invoice again under the same number 053125IS-SA, since that number is still free. Replying try again will not help here, because a record pointing at an invoice QuickBooks does not have can only be cleared by the operator, and an invoice re-entered by hand would get a new QuickBooks id that my record would still miss.",
         "reply_to_choose": "",
-        "why": "Right when no genuine invoice ever went out to the client for this period."
+        "why": "Right when the May 2025 work is genuinely unbilled and the earlier invoice was a test or was deleted."
       },
       {
-        "what_to_do": "If a real invoice for May was sent to iStream and someone deleted it in QuickBooks, re-enter it in QuickBooks by hand for iStream, dated May 31, 2025, using the number 053125IS-SA (that number is free), then reply to this email.",
-        "reply_to_choose": "try again",
-        "why": "Right when the client has the invoice and it only needs to exist again in QuickBooks."
+        "what_to_do": "First look in QuickBooks for any iStream invoice to Subramanian Arumugam covering May 2025 under some other number, and check whether a copy of 053125IS-SA ever went out to the client, so that the month is not billed twice.",
+        "reply_to_choose": "",
+        "why": "Worth doing first, because my records say this one was already sent and I cannot see what the client actually received."
       },
       {
-        "what_to_do": "If you are not sure whether iStream was ever invoiced for May, check the QuickBooks audit log for the deleted invoice and the sent mail to iStream before choosing one of the above; I will leave the item as it is in the meantime.",
-        "reply_to_choose": "",
-        "why": "Right when it is unclear whether the client already has a May invoice and billing twice would be a risk."
+        "what_to_do": "If that May 2025 work was not real billable work, or it has already been invoiced to iStream outside my records, tell me to drop this item.",
+        "reply_to_choose": "ignore",
+        "why": "Right when there is nothing left to bill iStream for this consultant and month."
       }
     ],
     "sure": true

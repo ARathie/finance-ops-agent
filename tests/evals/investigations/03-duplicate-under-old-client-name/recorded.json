@@ -1,10 +1,25 @@
 {
   "investigation": {
-    "found": "The same month of work for Manoj Koottappilly at MasTec is in the agent's list twice: once as \"MasTec\" and once as \"MasTec North America, Inc.\", both for Aug 1–31, 2026. The first one already has invoice 083126MT-MK sitting in QuickBooks waiting for your approval, so when the agent tried to invoice the second copy QuickBooks refused the number as already used. Nothing has gone to the client, and no hours have been billed twice — this is one timesheet counted twice, not a QuickBooks fault.</found>\n<evidence>[\"Item 2 (Manoj Koottappilly, MasTec North America, Inc., Aug 1–31, 2026) is ready and has no invoice; its only open review is the duplicate invoice number.\", \"Item 1 (Manoj Koottappilly, MasTec, Aug 1–31, 2026) already holds invoice 083126MT-MK, QuickBooks id 2, status created, waiting for approval.\", \"The agent's whole list is just these two items — same consultant, same billing period, client names differing only by the full legal name.\", \"A check of every invoice the agent has recorded found nothing deleted, renumbered or misfiled in QuickBooks, so the existing 083126MT-MK is genuine.\"]</evidence>\n<proposals><item>\n<what_to_do>If the invoice already waiting for your approval is the right one for Manoj's August work, treat this second copy as a duplicate and drop it. Nothing needs doing in QuickBooks; invoice 083126MT-MK stays as it is and you approve it as usual.</what_to_do>\n<reply_to_choose>ignore</reply_to_choose>\n<why>Best when the two entries are the same timesheet and the existing invoice is correct.</why>\n</item>\n<item>\n<what_to_do>If Manoj sent a corrected August timesheet and this second copy is the newer one, tell the agent the new one replaces the earlier entry. Then delete the old invoice 083126MT-MK in QuickBooks by hand (delete it, do not void it — a voided invoice keeps the number) and reply \"try again\" so the agent can raise the invoice fresh on the same number.</what_to_do>\n<reply_to_choose>use the new one</reply_to_choose>\n<why>Right when the later entry reflects a corrected timesheet and the invoice already made is out of date.</why>\n</item>\n<item>\n<what_to_do>If these really are two separate pieces of August work that both have to be billed, leave the existing invoice alone and give this one its own number.</what_to_do>\n<reply_to_choose>use 083126MT-MK-revised</reply_to_choose>\n<why>Only if you confirm both entries are genuine work and the client should receive two invoices.</why>\n</item>\n</proposals>\n<sure>true</sure>\n",
+    "found": "The same month of Manoj Koottappilly's work at MasTec has been recorded twice. An invoice numbered 083126MT-MK was already made for the first copy and is sitting waiting for approval, so QuickBooks refused to make a second invoice with the same number for this one. Nothing went to the client, and there is no second month of work here to bill — this item is simply a duplicate of the one already invoiced.",
     "evidence": [
-      "x"
+      "Item 2: Manoj Koottappilly, MasTec North America, Inc., Aug 1-31, 2026, status ready, invoice creation failed because number 083126MT-MK already exists.",
+      "Invoice 083126MT-MK (QuickBooks id 2) belongs to item 1, the invoice the agent made for that item.",
+      "Item 1: Manoj Koottappilly, MasTec, Aug 1-31, 2026, status waiting_for_approval, invoice 083126MT-MK created.",
+      "Both items are the same consultant, same client and the same billing period; the only difference is the short and full form of the client name.",
+      "These are the only two timesheet items on file."
     ],
-    "proposals": [],
+    "proposals": [
+      {
+        "what_to_do": "Drop this duplicate copy and let the invoice already made for August go ahead as normal.",
+        "reply_to_choose": "ignore",
+        "why": "Right when you agree this is the same August work as the invoice already waiting for approval."
+      },
+      {
+        "what_to_do": "If you believe these are genuinely two different pieces of work rather than one month recorded twice, check the two timesheets in the inbox and the invoice already in QuickBooks before anything is billed, and tell us which one is real. Do not give this item a new invoice number until that is settled, because a second invoice would bill MasTec twice for August.",
+        "reply_to_choose": "",
+        "why": "Right only if you have reason to think the two entries are not the same month of work."
+      }
+    ],
     "sure": true
   },
   "calls": [
@@ -12,13 +27,6 @@
       "name": "describe_item",
       "arguments": {
         "item_id": 2
-      },
-      "ok": true
-    },
-    {
-      "name": "describe_item",
-      "arguments": {
-        "item_id": 1
       },
       "ok": true
     },
@@ -31,15 +39,17 @@
       "ok": true
     },
     {
-      "name": "list_items",
+      "name": "describe_item",
       "arguments": {
-        "status": "any"
+        "item_id": 1
       },
       "ok": true
     },
     {
-      "name": "check_recorded_invoices",
-      "arguments": {},
+      "name": "list_items",
+      "arguments": {
+        "status": "any"
+      },
       "ok": true
     }
   ]

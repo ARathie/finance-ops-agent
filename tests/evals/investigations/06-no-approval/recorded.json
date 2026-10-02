@@ -1,28 +1,28 @@
 {
   "investigation": {
-    "found": "Priya Shah's August timesheet for Acme Corp came in with 156 hours, but nothing in it shows that anyone at Acme signed off on those hours — there is no approver name and no approval date. Because the agent only invoices hours the client has approved, it held the item instead of billing it. There is nothing else wrong: this is the only item for Priya, no invoice has been started, and the agent's invoice records are clean, so the single missing fact is who approved and when.",
+    "found": "Priya Shah's August timesheet for Acme Corp came in with 156 hours, but nothing in it shows that anyone at Acme signed off on those hours, so the agent held it back rather than invoicing. There is no other problem: this is the only item in the records, there is no invoice or invoice number involved, and no other open question. All that is missing is the name of the Acme approver and the date they approved.",
     "evidence": [
-      "Item 1: Priya Shah, Acme Corp, Aug 1–31 2026, status needs_review, 156.00 hours, approval: none shown",
-      "One open review on the item: NO_APPROVAL — no client approval visible",
-      "Item history shows only creation and the status change — no approval was ever recorded",
-      "This is the only timesheet item on file, so there is no second or corrected copy of this timesheet",
-      "No invoices recorded for this item and no invoice problems anywhere in QuickBooks"
+      "Item 1 is Priya Shah at Acme Corp, Aug 1-31 2026, status needs_review.",
+      "The only open review on it is NO_APPROVAL: client approval not visible in the timesheet.",
+      "NO_APPROVAL is the only question waiting on Kevin across all items.",
+      "This is the only timesheet item in the agent's records, so no duplicate or leftover item exists.",
+      "No invoice and no invoice number is recorded for this item, so QuickBooks is not involved."
     ],
     "proposals": [
       {
-        "what_to_do": "If you know who at Acme approved Priya's August hours, tell the agent the name and the date and it will invoice the 156 hours.",
+        "what_to_do": "Tell the agent who at Acme Corp approved the hours and on what date, and it will bill the 156 hours as read.",
         "reply_to_choose": "approved by Jane Doe on 9/3",
-        "why": "Right when the approval exists (a reply, a portal sign-off, a verbal OK) and only needs recording — replace the name and date with the real ones."
+        "why": "Right when you can confirm from the client's email or the signed timesheet who approved it and when."
       },
       {
-        "what_to_do": "Ask Priya or the Acme manager to send the approved timesheet, and when the approved copy arrives tell the agent to use it instead of the one it has.",
+        "what_to_do": "If Acme sent a corrected or properly signed timesheet for August after the one the agent read, forward or point to it and tell the agent to use the later one.",
         "reply_to_choose": "use the new one",
-        "why": "Right when no one has actually approved August yet and a signed-off timesheet is coming."
+        "why": "Right when a newer approved version of the same August timesheet exists."
       },
       {
-        "what_to_do": "If these hours are not real billable work for Acme — a duplicate submission or internal time — tell the agent to drop the item.",
+        "what_to_do": "If these hours should not be billed at all - for example they were never worked, or Acme already paid them another way - tell the agent to drop the item.",
         "reply_to_choose": "ignore",
-        "why": "Right when there is nothing to bill Acme for this period."
+        "why": "Right only when there is genuinely nothing to invoice for Priya Shah at Acme for August."
       }
     ],
     "sure": true
@@ -36,20 +36,15 @@
       "ok": true
     },
     {
-      "name": "list_items",
-      "arguments": {
-        "status": "any"
-      },
-      "ok": true
-    },
-    {
       "name": "list_open_reviews",
       "arguments": {},
       "ok": true
     },
     {
-      "name": "check_recorded_invoices",
-      "arguments": {},
+      "name": "list_items",
+      "arguments": {
+        "status": "any"
+      },
       "ok": true
     }
   ]
