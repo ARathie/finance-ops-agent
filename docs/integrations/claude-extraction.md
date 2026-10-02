@@ -35,7 +35,7 @@ Input: Kevin's reply text, what was asked (an approval, or review reasons with t
 
 ### 4. Look into a stuck item
 
-Input: the review Kevin is about to be emailed, and read-only tools over the agent's records, QuickBooks and the inbox (`application/agent_tools.py`). Every dollar amount is masked in both. Output: a short tool-use loop of at most eight turns, ended by an `answer` tool with `found`, `evidence`, one to three `proposals` (what to do, and the words Kevin replies to choose it), and `sure`. Prompt `investigate_v1`, adapter `adapters/claude/investigator.py`. Its answer only adds to Kevin's email. When it fails, refuses or runs out of turns, nothing changes (decision 56). It has its own eval set, `tests/evals/investigations/`, scored by `fops eval-investigator` (decision 57). Kevin's reply to it goes through call 3, which is now told which option each letter stood for (prompt `reply_v3`).
+Input: the review Kevin is about to be emailed, and read-only tools over the agent's records, QuickBooks and the inbox (`application/agent_tools.py`). Every dollar amount is masked in both. Output: a short tool-use loop of at most eight turns, ended by an `answer` tool with `found`, `evidence`, one to three `proposals` (what to do, and the words Kevin replies to choose it), and `sure`. Prompt `investigate_v2`, adapter `adapters/claude/investigator.py`. Its answer only adds to Kevin's email. When it fails, refuses or runs out of turns, nothing changes (decision 56). It has its own eval set, `tests/evals/investigations/`, scored by `fops eval-investigator` (decision 57). Kevin's reply to it goes through call 3, which is now told which option each letter stood for (prompt `reply_v3`).
 
 ## Prompt versions
 

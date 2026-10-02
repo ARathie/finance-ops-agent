@@ -321,3 +321,23 @@ def test_a_quote_must_be_his_whole_words(env: ScenarioEnv) -> None:
     env.run()
 
     assert "wasn't sure enough" in last_reply_body(env)
+
+
+def test_try_again_on_a_question_about_a_timesheet_is_not_taken(env: ScenarioEnv) -> None:
+    """It would close the question with nothing answered."""
+    env.add_email(PRIYA, scripted_reading=reading(AUG_START, AUG_END, approved=False))
+    env.run()
+    subject = next(s for s in env.sent_subjects() if s.startswith("Needs your review"))
+    env.replies["try again"] = ReplyReading(
+        answers=[
+            ReplyAnswer(
+                review_code="NO_APPROVAL", kind=ReplyAnswerKind.TRY_AGAIN, quote="try again"
+            )
+        ]
+    )
+    env.reply_from_kevin(subject, "try again")
+    env.run()
+
+    assert [r.code for r in env.store.open_reviews()] == ["NO_APPROVAL"]
+    assert env.the_item().status is ItemStatus.NEEDS_REVIEW
+    assert "nothing for me to try again" in last_reply_body(env)

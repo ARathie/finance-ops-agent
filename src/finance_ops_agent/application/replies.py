@@ -22,6 +22,7 @@ from finance_ops_agent.application.context import Mode, RunDeps, RunReport
 from finance_ops_agent.application.investigation import offered_replies, picked_option
 from finance_ops_agent.domain import emails
 from finance_ops_agent.domain.emails import format_period
+from finance_ops_agent.domain.investigation import RETRYABLE_REVIEWS
 from finance_ops_agent.domain.invoice_numbers import problem_with_chosen_number
 from finance_ops_agent.domain.items import Item, OutgoingRecord
 from finance_ops_agent.domain.messages import StoredMessage
@@ -279,7 +280,7 @@ _REVIEW_FALLBACK = (
 
 
 def _check_answer(
-    deps: RunDeps, item: Item | None, answer: ReplyAnswer, body: str
+    deps: RunDeps, item: Item | None, answer: ReplyAnswer, body: str, review_code: str = ""
 ) -> tuple[bool, str]:
     """Whether code accepts one request, and the line Kevin will read about it."""
     kind = answer.kind
@@ -304,6 +305,13 @@ def _check_answer(
             return False, f'I can\'t read "{answer.value}" as a number of hours.'
         return True, f"I'll use {hours} hours."
     if kind is ReplyAnswerKind.TRY_AGAIN:
+        if review_code not in RETRYABLE_REVIEWS:
+            # Only a failed invoice or send can be attempted again; on a
+            # question about a timesheet it would close the question unanswered.
+            return False, (
+                "There's nothing for me to try again on this one: it needs an answer"
+                " to the question I asked."
+            )
         return True, "I'm trying again now."
     if kind is ReplyAnswerKind.SHOW_ME_FIRST:
         if deps.settings.mode is Mode.DRY_RUN:
@@ -370,7 +378,7 @@ def _handle_review_reply(
             (review for review in open_reviews if review.code == answer.review_code),
             open_reviews[0],
         )
-        ok, line = _check_answer(deps, item, answer, body)
+        ok, line = _check_answer(deps, item, answer, body, target.code)
         if not ok:
             outcome.not_done.append(line)
             continue

@@ -33,7 +33,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from finance_ops_agent.domain.investigation import Investigation
+from finance_ops_agent.domain.investigation import Investigation, problems_with_answer
 from finance_ops_agent.domain.invoice_numbers import problem_with_chosen_number
 from finance_ops_agent.domain.periods import BillingPeriod
 from finance_ops_agent.domain.statuses import ItemStatus
@@ -201,6 +201,8 @@ def safety_problems(investigation: Investigation, problem: str) -> list[str]:
     texts = [investigation.found] + [p.what_to_do for p in investigation.proposals]
     if any(_DOLLARS.search(text) for text in texts):
         found.append("names an amount of money")
+    if any("markup" in problem for problem in problems_with_answer(investigation)):
+        found.append("writes tags or markup into a field instead of plain sentences")
     for proposal in investigation.proposals:
         reply = _reply(proposal.reply_to_choose)
         if not reply:

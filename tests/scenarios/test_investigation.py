@@ -301,3 +301,40 @@ def test_the_problem_it_is_given_carries_no_money(env: ScenarioEnv) -> None:
     assert "$[amount]" in problem  # the holder's total was in the review text
     assert "21,840" not in problem
     assert all("21,840" not in seen for seen in fake.answers_seen)
+
+
+def test_try_again_is_never_offered_on_a_question_about_a_timesheet(env: ScenarioEnv) -> None:
+    """The first live run offered it on a client question, where it means nothing."""
+    from finance_ops_agent.domain.investigation import Investigation, Proposal
+
+    env.investigator = FakeInvestigator(
+        answer=Investigation(
+            found="No approval is shown on the timesheet.",
+            proposals=[
+                Proposal(what_to_do="Fix the list, then go again.", reply_to_choose="try again"),
+                Proposal(what_to_do="If it is not real work, drop it.", reply_to_choose="ignore"),
+            ],
+        )
+    )
+    env.add_email(PRIYA, scripted_reading=reading(AUG_START, AUG_END, approved=False))
+    env.run()
+
+    [body] = review_bodies(env)
+    assert '"ignore"' in body
+    assert "try again" not in body
+
+
+def test_a_malformed_answer_never_reaches_kevin(env: ScenarioEnv) -> None:
+    """Whatever produced it: the adapter refuses these, and so does the run."""
+    from finance_ops_agent.domain.investigation import Investigation
+
+    held_by_forgotten_item(env)
+    env.investigator = FakeInvestigator(
+        answer=Investigation(found="Same work twice.</found>\n<proposals>...</proposals>")
+    )
+    env.add_email(PRIYA, scripted_reading=reading(AUG_START, AUG_END))
+    env.run()
+
+    [body] = review_bodies(env)
+    assert "</found>" not in body
+    assert "What I found (I looked" not in body

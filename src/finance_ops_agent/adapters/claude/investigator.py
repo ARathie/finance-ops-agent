@@ -5,6 +5,8 @@ is where the guarantees live (docs/decisions.md #56):
 
 - a fixed number of steps, after which it gives up rather than spends more;
 - every tool call recorded, with whether it worked;
+- an answer that is malformed (tags instead of plain fields, no ways out)
+  is refused back to the model to try again, never passed on;
 - any refusal, truncation or service failure ends it with None, never an
   exception, so a stuck investigation can only leave the review email as it
   would have been;
@@ -29,12 +31,13 @@ from finance_ops_agent.domain.investigation import (
     Investigation,
     InvestigationResult,
     ToolCall,
+    problems_with_answer,
 )
 from finance_ops_agent.ports.investigator import Toolbox
 from finance_ops_agent.ports.reader import TokenUsage
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
-INVESTIGATE_PROMPT_VERSION = "investigate_v1"
+INVESTIGATE_PROMPT_VERSION = "investigate_v2"
 MAX_TOKENS = 16000
 MAX_STEPS = 8  # model turns; each may call several tools
 ANSWER_TOOL = "answer"
@@ -132,9 +135,15 @@ class ClaudeInvestigator:
                 logs.log("investigation stopped", stop_reason=response.stop_reason)
                 return None
             uses = [block for block in response.content if block.type == "tool_use"]
+            refused = ""
             answer = next((block for block in uses if block.name == ANSWER_TOOL), None)
             if answer is not None:
-                return self._answer(answer.input, calls)
+                result, refused = self._answer(answer.input, calls)
+                if result is not None:
+                    return result
+                # Not usable as it is: say why and let it answer again, as
+                # another step. Kevin never sees a malformed answer.
+                logs.log("investigation answer refused", said=refused[:300])
             if not uses:
                 # It stopped talking without answering: one reminder, counted
                 # as a step like any other.
@@ -146,28 +155,42 @@ class ClaudeInvestigator:
             messages.append({"role": "assistant", "content": response.content})
             results: list[dict[str, Any]] = []
             for block in uses:
+                if block.name == ANSWER_TOOL:
+                    results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": f"Not accepted: {refused}. Call `{ANSWER_TOOL}` again"
+                            " with plain sentences in every field.",
+                            "is_error": True,
+                        }
+                    )
+                    continue
                 arguments = dict(block.input) if isinstance(block.input, dict) else {}
                 text, ok = toolbox.call(block.name, arguments)
                 calls.append(ToolCall(name=block.name, arguments=arguments, ok=ok))
                 logs.log("investigation looked", tool=block.name, arguments=arguments, ok=ok)
-                result: dict[str, Any] = {
+                result_block: dict[str, Any] = {
                     "type": "tool_result",
                     "tool_use_id": block.id,
                     "content": text,
                 }
                 if not ok:
-                    result["is_error"] = True
-                results.append(result)
+                    result_block["is_error"] = True
+                results.append(result_block)
             # Every result in one message, so parallel calls stay parallel.
             messages.append({"role": "user", "content": results})
         logs.log("investigation ran out of steps", steps=self._max_steps)
         return None
 
-    def _answer(self, raw: object, calls: list[ToolCall]) -> InvestigationResult | None:
+    def _answer(self, raw: object, calls: list[ToolCall]) -> tuple[InvestigationResult | None, str]:
+        """The answer, or None and why it cannot be used."""
         try:
             given = raw if isinstance(raw, dict) else json.loads(str(raw))
             investigation = Investigation.model_validate(given)
         except (ValidationError, ValueError) as error:
-            logs.log("investigation answer unusable", said=str(error)[:300])
-            return None
-        return InvestigationResult(investigation=investigation, calls=tuple(calls))
+            return None, f"it does not fit the form ({str(error)[:200]})"
+        problems = problems_with_answer(investigation)
+        if problems:
+            return None, "; ".join(problems)
+        return InvestigationResult(investigation=investigation, calls=tuple(calls)), ""

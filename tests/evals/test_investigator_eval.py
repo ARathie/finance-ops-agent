@@ -230,6 +230,6 @@ class TestThresholds:
 
     def test_live_without_provenance_is_refused(self) -> None:
         raw = json.loads(THRESHOLDS.read_text())
-        raw["source"] = "live"
+        raw.update({"source": "live", "model": None, "prompt_version": None, "recorded_on": None})
         with pytest.raises(ValidationError):
             InvestigationThresholds.model_validate(raw)

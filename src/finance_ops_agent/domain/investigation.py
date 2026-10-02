@@ -70,3 +70,31 @@ def without_money(text: str) -> str:
     (docs/technical-design.md, security), and the investigator never needs one:
     whose invoice holds a number is not a question about how much it is for."""
     return _MONEY.sub("$[amount]", text)
+
+
+# Markup in a field means the model wrote its answer as text instead of filling
+# the form (the first live run put every option inside `found` as tags). A
+# placeholder Kevin fills in, such as "<name>", is not markup.
+_MARKUP = re.compile(
+    r"</[\w-]+>|<(?:found|evidence|proposals|item|what_to_do|reply_to_choose|why|sure)\b"
+)
+
+# Where "try again" means something: an invoice or an email that failed and can
+# simply be attempted again once the cause is fixed. Anywhere else it does
+# nothing, so it is never offered or accepted there.
+RETRYABLE_REVIEWS = frozenset({"QUICKBOOKS_FAILED", "SEND_FAILED"})
+
+
+def problems_with_answer(investigation: Investigation) -> list[str]:
+    """Why an answer cannot go into Kevin's email as it is. Empty means usable."""
+    found: list[str] = []
+    if not investigation.found.strip():
+        found.append("`found` is empty")
+    texts = [investigation.found, *investigation.evidence]
+    for proposal in investigation.proposals:
+        texts += [proposal.what_to_do, proposal.why]
+    if any(_MARKUP.search(text) for text in texts):
+        found.append("a field holds tags or markup; every field must be plain sentences")
+    if not investigation.proposals:
+        found.append("there are no proposals; give at least one way out")
+    return found

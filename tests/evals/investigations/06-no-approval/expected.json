@@ -12,5 +12,8 @@
       "approved by .+",
       "ignore"
     ]
+  ],
+  "replies_forbidden": [
+    "try again"
   ]
 }

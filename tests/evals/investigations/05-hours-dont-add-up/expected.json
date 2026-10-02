@@ -15,5 +15,8 @@
       "use 152(\\.00)? hours",
       "use 160(\\.00)? hours"
     ]
+  ],
+  "replies_forbidden": [
+    "try again"
   ]
 }

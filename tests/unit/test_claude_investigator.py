@@ -136,9 +136,46 @@ def test_a_service_failure_is_no_answer_not_an_exception() -> None:
     assert investigator(StubClient(error)).investigate("p", RecordingToolbox()) is None
 
 
-def test_an_answer_that_does_not_fit_the_form_is_no_answer() -> None:
-    stub = StubClient(response(tool_use(ANSWER_TOOL, {"found": 3}, "t1")))
-    assert investigator(stub).investigate("p", RecordingToolbox()) is None
+def test_an_answer_that_does_not_fit_the_form_is_sent_back() -> None:
+    stub = StubClient(
+        response(tool_use(ANSWER_TOOL, {"found": 3}, "t1")),
+        response(tool_use(ANSWER_TOOL, ANSWER, "t2")),
+    )
+    result = investigator(stub).investigate("p", RecordingToolbox())
+
+    assert result is not None
+    refusal = stub.calls[1]["messages"][-1]["content"][0]
+    assert refusal["tool_use_id"] == "t1" and refusal["is_error"] is True
+    assert "does not fit the form" in refusal["content"]
+
+
+# What the first live run really returned for the duplicate case: every option
+# written into `found` as tags, and no proposals (decision 57).
+TAGGED = {
+    "found": "The same month is in the list twice.</found>\n<evidence>[...]</evidence>"
+    "\n<proposals><item><reply_to_choose>ignore</reply_to_choose></item></proposals>",
+    "evidence": ["x"],
+    "proposals": [],
+    "sure": True,
+}
+
+
+def test_options_written_as_tags_are_sent_back_and_never_kept() -> None:
+    stub = StubClient(
+        response(tool_use(ANSWER_TOOL, TAGGED, "t1")),
+        response(tool_use(ANSWER_TOOL, ANSWER, "t2")),
+    )
+    result = investigator(stub).investigate("p", RecordingToolbox())
+
+    assert result is not None
+    assert "</found>" not in result.investigation.found
+    refusal = stub.calls[1]["messages"][-1]["content"][0]["content"]
+    assert "markup" in refusal and "no proposals" in refusal
+
+
+def test_it_stops_after_its_steps_if_every_answer_is_malformed() -> None:
+    stub = StubClient(*[response(tool_use(ANSWER_TOOL, TAGGED, f"t{n}")) for n in range(3)])
+    assert investigator(stub, max_steps=3).investigate("p", RecordingToolbox()) is None
 
 
 def test_talking_without_answering_gets_one_reminder() -> None:

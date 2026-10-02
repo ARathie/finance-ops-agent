@@ -26,7 +26,13 @@ from finance_ops_agent.application.context import RunDeps, RunReport
 from finance_ops_agent.application.diagnosis import looking_at
 from finance_ops_agent.domain.emails import format_period
 from finance_ops_agent.domain.engagements import EngagementWorkbook
-from finance_ops_agent.domain.investigation import Investigation, Proposal, without_money
+from finance_ops_agent.domain.investigation import (
+    RETRYABLE_REVIEWS,
+    Investigation,
+    Proposal,
+    problems_with_answer,
+    without_money,
+)
 from finance_ops_agent.domain.items import OutgoingRecord, ReviewRecord
 from finance_ops_agent.ports.looking import StoreToLookAt
 
@@ -46,12 +52,17 @@ def offered_key(review_id: int) -> str:
     return f"offered:{review_id}"
 
 
-def _acceptable(proposal: Proposal) -> bool:
+_TRY_AGAIN = re.compile(r"^\s*try again\b", re.IGNORECASE)
+
+
+def _acceptable(proposal: Proposal, retryable: bool) -> bool:
     words = proposal.reply_to_choose.strip()
     if not proposal.what_to_do.strip():
         return False
     if _NEVER_OFFERED.search(words) or len(words) > _MAX_REPLY_WORDS:
         return False
+    if _TRY_AGAIN.search(words) and not retryable:
+        return False  # nothing failed that could be attempted again
     return "\n" not in words
 
 
@@ -114,11 +125,18 @@ def investigate_pending_reviews(
         toolbox = ReadOnlyToolbox(looking_at(deps, workbook))
         result = deps.investigator.investigate(problem_for(deps.store, record, reviews), toolbox)
         payload = dict(record.payload)
+        if result is not None and problems_with_answer(result.investigation):
+            # The adapter refuses these already; this is the last line, so a
+            # malformed answer can never reach Kevin whatever produced it.
+            result = None
         if result is None:
             payload["investigated"] = "no answer"
             deps.store.amend_pending_outgoing(record.idempotency_key, payload)
             continue
-        proposals = [p for p in result.investigation.proposals if _acceptable(p)][:MAX_PROPOSALS]
+        retryable = any(review.code in RETRYABLE_REVIEWS for review in reviews)
+        proposals = [p for p in result.investigation.proposals if _acceptable(p, retryable)][
+            :MAX_PROPOSALS
+        ]
         payload["body"] = f"{payload.get('body', '')}\n{_section(result.investigation, proposals)}"
         payload["investigated"] = "answered"
         payload["investigation"] = {
