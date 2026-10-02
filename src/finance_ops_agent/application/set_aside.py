@@ -48,6 +48,8 @@ from finance_ops_agent.ports.accounting import AccountingFailed
 
 SET_ASIDE_KEY = "set_aside"
 SENDER_IS_PREFIX = "sender_is:"  # + Message-ID: whose timesheet Kevin said it is
+CLIENT_IS_PREFIX = "client_is:"  # + Message-ID: which client it is for, once set up
+CLIENT_NOT_PREFIX = "client_not:"  # + Message-ID: the client Kevin said it is not for
 ATTEMPT_PREFIX = "attempt:"  # + Message-ID: how many times it has been handled again
 
 PLACEABLE = (ReviewCode.CONSULTANT_UNKNOWN.value, ReviewCode.ENGAGEMENT_UNCLEAR.value)
@@ -72,6 +74,8 @@ class SetAside:
     setup: dict[str, object] = field(default_factory=dict)
     confirm_code: str = ""
     confirmed: bool = False
+    # Kevin said "wrong client" about it (decision 57): never this one again.
+    not_client: str = ""
 
 
 def _load(deps: RunDeps) -> list[SetAside]:
@@ -92,6 +96,15 @@ def message_key(deps: RunDeps, message_id: str) -> str:
     about never saying anything new)."""
     attempt = deps.store.get_state(ATTEMPT_PREFIX + message_id)
     return f"{message_id}#{attempt}" if attempt else message_id
+
+
+def client_is(deps: RunDeps, message_id: str) -> tuple[str, str]:
+    """The client Kevin's setup pinned this email to, and the client he said
+    it is not for; either may be ""."""
+    return (
+        deps.store.get_state(CLIENT_IS_PREFIX + message_id) or "",
+        deps.store.get_state(CLIENT_NOT_PREFIX + message_id) or "",
+    )
 
 
 def sender_is(deps: RunDeps, message_id: str) -> str:
@@ -152,6 +165,8 @@ def set_aside(
     summary: TimesheetSummary | None = None,
     timesheet: EmailAttachment | None = None,
     also: list[tuple[str, str]] | None = None,
+    prefill_extra: dict[str, str] | None = None,
+    not_client: str = "",
 ) -> None:
     """Remember the email and, where it is worth his time, ask Kevin about it.
 
@@ -164,6 +179,9 @@ def set_aside(
         prefill[setup.CONSULTANT] = summary.consultant
     if summary is not None and summary.client != "unclear":
         prefill[setup.CLIENT] = summary.client
+    prefill.update(prefill_extra or {})
+    if not_client:
+        deps.store.set_state(CLIENT_NOT_PREFIX + message.message_id, not_client)
     entries = [entry for entry in _load(deps) if entry.message_id != message.message_id]
     entries.append(
         SetAside(
@@ -174,6 +192,7 @@ def set_aside(
             subject=message.subject,
             also=[[other_code, other] for other_code, other in also or []],
             prefill=prefill,
+            not_client=not_client,
         )
     )
     _save(deps, entries)
@@ -493,6 +512,8 @@ def _set_up(deps: RunDeps, engagements: Engagements, entry: SetAside, report: Ru
     report.note(f"set up {who} in QuickBooks")
     engagements.refresh_now("Kevin's setup was just made")
     entry.consultant = plan.consultant
+    # The email is for the engagement just made, whatever else covers its dates.
+    deps.store.set_state(CLIENT_IS_PREFIX + entry.message_id, plan.client)
     return True
 
 

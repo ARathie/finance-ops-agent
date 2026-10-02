@@ -41,6 +41,7 @@ An item starts as `waiting_for_timesheet` (the period ended and nothing has arri
 | | `needs_review` | Sending or creating the invoice failed, or a corrected timesheet arrived. |
 | | `cancelled` | Kevin cancels it. |
 | `waiting_for_approval` | `invoice_sent` | Kevin replies "approve". |
+| | `waiting_for_timesheet` | Kevin replies "wrong client": the timesheet was for another client. The invoice is voided, the timesheet is taken off this item to be handled for the right client, and this engagement's period waits for its own timesheet again (decision 57). |
 | | `needs_review` | Sending failed after Kevin approved, or a corrected timesheet arrived. |
 | | `cancelled` | Kevin replies "cancel". The invoice exists by then -- he was shown the real one (decision 33) -- so it is voided in QuickBooks and its number stays spent. |
 | `invoice_sent` | `client_paid` | QuickBooks Online shows it paid, or Kevin says so. |

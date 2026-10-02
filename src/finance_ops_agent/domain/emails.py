@@ -220,6 +220,8 @@ def approve_invoice(
         body="\n".join(
             [
                 'Everything checks out. Reply "approve" to send, or "cancel" to stop.',
+                'Right consultant but the wrong client? Reply "wrong client": I\'ll void'
+                " this invoice and help you set up the right one.",
                 "",
                 f"Client: {item.client}",
                 f"Billing email: {', '.join(item.snapshot.billing_emails)}",

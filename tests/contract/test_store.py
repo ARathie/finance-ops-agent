@@ -192,6 +192,50 @@ class TestMessages:
         assert again.attachments == message.attachments
 
 
+class TestPutBackToWaiting:
+    def test_the_timesheets_go_and_the_amounts_clear_in_one_change(self, store: Store) -> None:
+        """Kevin said "wrong client" (decision 57): the file must be readable
+        again, and the history must say why."""
+        made = store.create_item("Priya Shah", "Acme Corp", AUGUST, ItemStatus.RECEIVED, snapshot())
+        store.record_timesheet(
+            TimesheetRecord(
+                item_id=made.id,
+                sha256="b" * 64,
+                reading={},
+                model="m",
+                prompt_version="p",
+                is_duplicate=False,
+                is_correction=False,
+            )
+        )
+        store.set_item_amounts(made.id, Hours(15_600), Money(2_184_000), Money(1_560_000))
+        store.change_status(made.id, ItemStatus.READY, {})
+        store.change_status(made.id, ItemStatus.WAITING_FOR_APPROVAL, {})
+
+        back = store.put_back_to_waiting(made.id, "Kevin said wrong client")
+
+        assert back.status is ItemStatus.WAITING_FOR_TIMESHEET
+        assert (back.approved_hours, back.invoice_amount, back.amount_owed) == (None, None, None)
+        assert store.timesheets_for_item(made.id) == []
+        assert not store.timesheet_seen("b" * 64)
+        last = store.audit_entries(made.id)[-1]
+        assert last.details["why"] == "Kevin said wrong client"
+        assert last.details["timesheets_detached"] == ["b" * 64]
+
+    def test_only_from_waiting_for_approval(self, store: Store) -> None:
+        made = store.create_item("Priya Shah", "Acme Corp", AUGUST, ItemStatus.RECEIVED, snapshot())
+        with pytest.raises(DisallowedStatusChange):
+            store.put_back_to_waiting(made.id, "too early")
+        assert store.get_item(made.id).status is ItemStatus.RECEIVED
+
+    def test_a_message_is_found_by_its_id(self, store: Store) -> None:
+        store.record_message(_stored_message(), {})
+        store.mark_processed("<m1@example>")
+        found = store.get_message("<m1@example>")
+        assert found is not None and found.subject == "August timesheet"
+        assert store.get_message("<nothing@example>") is None
+
+
 class TestRatesTakenAgain:
     def test_a_new_snapshot_replaces_the_old_and_carries_its_id(self, store: Store) -> None:
         """An item made when its period ended takes the rates again when its

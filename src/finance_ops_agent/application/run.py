@@ -740,7 +740,28 @@ def _place(
     client_name: str | None = None
     period: BillingPeriod | None = None
     rate_row: Engagement | None = None
-    if consultant is not None:
+    pinned, ruled_out = set_aside.client_is(deps, message.message_id)
+    if consultant is not None and pinned:
+        # Kevin said which client (decision 57): it decides, as long as the
+        # consultant has an engagement there for it to be billed under.
+        has_one = any(
+            checks.names_match(row.consultant, consultant.name)
+            and checks.names_match(row.client, pinned)
+            for row in workbook.engagements
+        )
+        if has_one:
+            client_name = next(
+                row.client for row in workbook.engagements if checks.names_match(row.client, pinned)
+            )
+        else:
+            findings.append(
+                Finding(
+                    ReviewCode.ENGAGEMENT_UNCLEAR,
+                    f"You said this is for {pinned}, but {consultant.name} has no"
+                    f" engagement there.",
+                )
+            )
+    elif consultant is not None:
         client_names = {
             client.name: [client.name, client.legal_name, *client.names_on_timesheets]
             for client in workbook.clients
@@ -749,6 +770,16 @@ def _place(
             consultant, reading, workbook.engagements, client_names
         )
         findings.extend(engagement_findings)
+        if client_name is not None and ruled_out and checks.names_match(client_name, ruled_out):
+            # Kevin said it is not this one, and nothing else covers the dates.
+            findings.append(
+                Finding(
+                    ReviewCode.ENGAGEMENT_UNCLEAR,
+                    f"You said this is not for {ruled_out}, and {consultant.name} has no"
+                    " other engagement for these dates.",
+                )
+            )
+            client_name = None
     if consultant is not None and client_name is not None:
         rows = [
             row

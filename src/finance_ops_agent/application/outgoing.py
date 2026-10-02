@@ -81,6 +81,11 @@ def _active_timesheet_attachment(deps: RunDeps, item: Item) -> EmailAttachment |
     return EmailAttachment(filename=filename, sha256=sha)
 
 
+def active_timesheet_attachment(deps: RunDeps, item: Item) -> EmailAttachment | None:
+    """The timesheet that counts for this item, as an attachment."""
+    return _active_timesheet_attachment(deps, item)
+
+
 def _live_invoice_count(deps: RunDeps, item: Item) -> int:
     return len(deps.store.invoices_for_item(item.id))
 

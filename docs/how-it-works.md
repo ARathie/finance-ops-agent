@@ -69,7 +69,7 @@ What happens next depends on the mode the agent is running in:
 | **Ask first** | Emails Kevin "Approve this invoice?" with everything attached. When Kevin replies "approve", the agent creates the invoice (in QuickBooks Online once connected; until then it just makes the PDF, and Kevin enters the invoice into QuickBooks himself) and sends the billing email. "Cancel" stops it. |
 | **Automatic** | For engagements marked "send automatically" in the engagement list, the agent creates the invoice and sends the billing email without asking. Kevin is still on CC. Anything with a review item or any doubt still goes through "ask first". |
 
-Kevin chooses the mode with one setting. The agent starts in dry run, moves to ask first when Kevin is comfortable, and to automatic engagement by engagement.
+Kevin chooses the mode with one setting. The agent starts in dry run and moves to ask first when Kevin is comfortable. **Icon runs in ask first, in production too** (decision 57): Kevin sees every invoice before the client does. Automatic mode is still in the code but is not used.
 
 ### 7. What the consultant is owed
 

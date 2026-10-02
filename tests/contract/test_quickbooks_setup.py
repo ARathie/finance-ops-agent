@@ -12,6 +12,8 @@ import pytest
 
 from finance_ops_agent.adapters.quickbooks.client import QuickBooksFailed
 from finance_ops_agent.adapters.quickbooks.online import QuickBooksOnline
+from finance_ops_agent.application.from_quickbooks import workbook_from_accounting
+from finance_ops_agent.domain.engagements import EngagementWorkbook
 from finance_ops_agent.domain.money import Money
 from finance_ops_agent.domain.setup import EngagementSetup
 
@@ -68,12 +70,27 @@ class StubCompany:
         if json.get("sparse"):
             return {entity: json}
         self._next += 1
-        row = {**json, "Id": str(self._next), "SyncToken": "0"}
+        row = {**json, "Id": str(self._next), "SyncToken": "0", "Active": True}
+        # What QuickBooks itself fills in on the way back: the full name of a
+        # product under a category, and the name beside every reference.
+        if entity == "Item":
+            row["FullyQualifiedName"] = json["Name"]
         if entity == "Item" and "ParentRef" in json:
-            parent = next(r for r in self.rows["Item"] if r["Id"] == json["ParentRef"]["value"])
+            parent = self._by_id("Item", json["ParentRef"]["value"])
             row["FullyQualifiedName"] = f"{parent['Name']}:{json['Name']}"
+            row["ParentRef"] = {**json["ParentRef"], "name": parent["Name"]}
+        if "PrefVendorRef" in json:
+            vendor = self._by_id("Vendor", json["PrefVendorRef"]["value"])
+            row["PrefVendorRef"] = {**json["PrefVendorRef"], "name": vendor["DisplayName"]}
+        for field in ("SalesTermRef", "TermRef"):
+            if field in json:
+                term = self._by_id("Term", json[field]["value"])
+                row[field] = {**json[field], "name": term.get("Name", "")}
         self.rows.setdefault(entity, []).append(row)
         return {entity: row}
+
+    def _by_id(self, entity: str, reference: str) -> dict[str, Any]:
+        return next(row for row in self.rows[entity] if row["Id"] == reference)
 
     def created(self, entity: str) -> list[dict[str, Any]]:
         return [body for url, body in self.posts if f"/{entity}?" in url and "sparse" not in body]
@@ -232,3 +249,155 @@ class TestAClientQuickBooksHadAllAlong:
         sparse = [body for _, body in company.posts if body.get("sparse")]
         assert sparse[0]["Notes"] == "Net 30 always\nInvoice code: GX"
         assert "customer Globex" in done.reused
+
+
+def company_as_icon_has_it() -> StubCompany:
+    """Acme Corp with Priya Shah, set up by hand the way Kevin has done it
+    (tests/fixtures/qbo/from_quickbooks.json, quickbooks-setup.md)."""
+    company = StubCompany()
+    company.rows["Term"] = [
+        {"Id": "3", "Name": "Net 30", "DueDays": 30},
+        {"Id": "4", "Name": "Net 15", "DueDays": 15},
+    ]
+    company.rows["Customer"] = [
+        {
+            "Id": "58",
+            "SyncToken": "0",
+            "DisplayName": "Acme Corp",
+            "CompanyName": "Acme Corporation",
+            "PrimaryEmailAddr": {"Address": "ap@acme.example"},
+            "SalesTermRef": {"value": "3", "name": "Net 30"},
+            "Notes": "Invoice code: AC",
+        }
+    ]
+    company.rows["Vendor"] = [
+        {
+            "Id": "7",
+            "SyncToken": "0",
+            "DisplayName": "Priya Shah",
+            "PrimaryEmailAddr": {"Address": "priya@example.com"},
+            "TermRef": {"value": "4", "name": "Net 15"},
+        }
+    ]
+    company.rows["Item"] = [
+        {
+            "Id": "39",
+            "Name": "Acme Corp",
+            "FullyQualifiedName": "Acme Corp",
+            "Type": "Category",
+            "Active": True,
+        },
+        {
+            "Id": "40",
+            "Name": "Priya Shah",
+            "FullyQualifiedName": "Acme Corp:Priya Shah",
+            "Type": "Service",
+            "Active": True,
+            "SubItem": True,
+            "ParentRef": {"value": "39", "name": "Acme Corp"},
+            "UnitPrice": 140.0,
+            "PurchaseCost": 100.0,
+            "PrefVendorRef": {"value": "7", "name": "Priya Shah"},
+            "PurchaseDesc": "Start: 2026-08-01",
+            "IncomeAccountRef": ACCOUNTS[0],
+            "ExpenseAccountRef": ACCOUNTS[1],
+        },
+    ]
+    return company
+
+
+class TestWhatIsMadeIsReadBackAsToday:
+    """The proof that matters: a setup made through the agent is read by the
+    same code that bills every engagement today -- the engagement listing, the
+    customer and vendor records, the product's two rates -- and nothing about
+    it is incomplete (decisions 38, 43, 52, 53)."""
+
+    def _read_back(self, company: StubCompany) -> EngagementWorkbook:
+        # A new adapter, so nothing cached while setting up can stand in for
+        # what QuickBooks would really answer.
+        return workbook_from_accounting(adapter(company))
+
+    def test_a_new_client_and_a_consultant_through_a_firm(self) -> None:
+        company = company_as_icon_has_it()
+        adapter(company).set_up_engagement(plan())
+
+        built = self._read_back(company)
+
+        assert built.problems == []
+        globex = next(row for row in built.engagements if row.client == "Globex")
+        assert globex.consultant == "Sam Okafor"
+        assert globex.start_date == date(2026, 9, 1)
+        assert globex.bill_rate == Money(15_000)  # the product's sales price
+        assert globex.pay_rate == Money(11_000)  # the product's purchase cost
+        client = next(c for c in built.clients if c.name == "Globex")
+        assert client.legal_name == "Globex Corporation"
+        assert client.billing_emails == ("ap@globex.example",)
+        assert client.payment_terms_days == 30
+        assert client.invoice_code == "GX"
+        sam = next(c for c in built.consultants if c.name == "Sam Okafor")
+        assert sam.emails == ("sam@example.com",)  # his timesheets will be recognised
+        assert sam.vendor_company == "Okafor Consulting LLC"  # who Icon pays
+        assert sam.pay_timing_days == 15
+        # Acme and Priya, set up by hand, read exactly as before.
+        assert {(row.consultant, row.client) for row in built.engagements} == {
+            ("Priya Shah", "Acme Corp"),
+            ("Sam Okafor", "Globex"),
+        }
+
+    def test_the_product_prices_an_invoice_as_a_hand_made_one_does(self) -> None:
+        company = company_as_icon_has_it()
+        adapter(company).set_up_engagement(plan())
+
+        rates = adapter(company).engagement_rates("Sam Okafor", ["Globex"])
+
+        assert rates is not None
+        product = company.created("item")[-1]
+        assert rates.ref == company.rows["Item"][-1]["Id"]
+        assert (rates.bill_rate_cents, rates.pay_rate_cents) == (15_000, 11_000)
+        assert rates.payee == "Okafor Consulting LLC"
+        assert rates.payee_ref == product["PrefVendorRef"]["value"]
+        payee = adapter(company).payee(rates.payee_ref)
+        assert payee is not None and payee.payment_terms_days == 15
+        customer = adapter(company).customer("Globex")
+        assert customer is not None and customer.payment_terms_days == 30
+
+    def test_an_existing_consultant_at_a_new_client_keeps_one_vendor(self) -> None:
+        """Priya starts at Globex too: a second product under a second
+        category, paid to the vendor she already has (decision 36)."""
+        company = company_as_icon_has_it()
+        done = adapter(company).set_up_engagement(
+            plan(consultant="Priya Shah", consultant_email="priya@example.com", firm="")
+        )
+
+        assert "vendor Priya Shah" in done.reused
+        assert company.created("vendor") == []
+        built = self._read_back(company)
+        assert built.problems == []
+        assert {row.client for row in built.engagements if row.consultant == "Priya Shah"} == {
+            "Acme Corp",
+            "Globex",
+        }
+        (priya,) = [c for c in built.consultants if c.name == "Priya Shah"]
+        assert priya.emails == ("priya@example.com",)
+        rates = adapter(company).engagement_rates("Priya Shah", ["Globex"])
+        assert rates is not None
+        assert (rates.bill_rate_cents, rates.pay_rate_cents, rates.payee_ref) == (
+            15_000,
+            11_000,
+            "7",
+        )
+        acme = adapter(company).engagement_rates("Priya Shah", ["Acme Corp"])
+        assert acme is not None and acme.bill_rate_cents == 14_000  # untouched
+
+    def test_a_new_engagement_at_an_existing_client_uses_its_category(self) -> None:
+        company = company_as_icon_has_it()
+        done = adapter(company).set_up_engagement(
+            plan(client="Acme Corp", new_client=False, client_email="", invoice_code="")
+        )
+
+        assert {"customer Acme Corp", "category Acme Corp"} <= set(done.reused)
+        product = company.created("item")[-1]
+        assert product["ParentRef"] == {"value": "39"}
+        built = self._read_back(company)
+        assert built.problems == []
+        assert ("Sam Okafor", "Acme Corp") in {(r.consultant, r.client) for r in built.engagements}

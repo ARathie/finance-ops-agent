@@ -597,5 +597,22 @@ Decision 55 made every email or timesheet the agent cannot place a question for 
 
 **This changes rule 1 in CLAUDE.md**, deliberately and only this far: a rate can now reach QuickBooks from an email, but only Kevin's own setup form, read by code, shown back to him in full, and confirmed with the one-time number. Once there it is read back from the product like any other rate.
 
-**Not done:** a timesheet from a consultant who already has one engagement covering the dates is matched to that engagement whatever client the timesheet names (`checks.match_engagement`), so a consultant starting at a second client while still at the first is not asked about. Changing that rule needs its own decision, because timesheets often name an end client or a time system rather than Icon's client.
+**Not done here:** a timesheet from a consultant who already has one engagement covering the dates is matched to that engagement whatever client the timesheet names (`checks.match_engagement`), so a consultant starting at a second client while still at the first is not asked about. Decision 57 is how that is caught.
+
+## 57. Icon runs in ask first, and "wrong client" on the approval email puts it right
+
+**Ask first is the production mode.** Every invoice waits for Kevin's "approve" before anything goes to a client, in production as in testing. Automatic mode stays in the code but is not used; `running-it.md` and `how-it-works.md` say so. This is what makes the rest of this decision safe: a draft on the wrong client has been seen only by Kevin.
+
+**The gap it closes.** A consultant starting at a second client while still at the first sends a timesheet for dates only the first engagement covers, so the agent puts it there (decision 56 left this alone, because timesheets often name an end client rather than Icon's client). Kevin sees it in the approval email: right consultant, wrong client.
+
+**What "wrong client" does**, read by code from the first two words like "approve" and "cancel":
+
+1. **The draft is voided**, exactly as "cancel" voids it: renamed `-VOID` first so its number comes free, then voided (decisions 33 and 34). A void QuickBooks refuses is a review telling Kevin to do it by hand, as with "cancel".
+2. **The item is not cancelled. It goes back to `waiting_for_timesheet`** -- a new allowed change, `waiting_for_approval` to `waiting_for_timesheet` -- with the timesheet taken off it and its amounts cleared, in one change with one line of history naming the detached files. The first client's period still needs its own timesheet: the consultant still works there, and cancelling would have swallowed that timesheet when it came.
+3. **The email is set aside** as `ENGAGEMENT_UNCLEAR`, with the setup form (decision 56) filled in with the consultant, their address and the period's first day, and the client left for Kevin. It is remembered as **not for** the first client: however it is handled again, it is never put back there.
+4. **Then either:** Kevin fills in the form for the right client -- new, or existing with just the engagement missing -- and confirms with the number; or he sets it up by hand and replies "try again". Either way the email is handled again. After a setup through the agent it is **pinned** to the client just made, which matters when the timesheet names an end client and both engagements now cover the dates. A new **Approve this invoice?** comes for the right client, under its own invoice code.
+
+Nothing reaches the client or the consultant from the wrong draft: the billing email and the payment instruction are only written down once Kevin approves, and "wrong client" stands in place of approving. Replied after the invoice has gone, "wrong client" changes nothing and says so; that is a correction, which has its own path.
+
+`Store` gained `put_back_to_waiting` (the change above, as one transaction) and `get_message`.
 

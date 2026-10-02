@@ -58,6 +58,13 @@ class Store(Protocol):
         (docs/decisions.md #39)."""
         ...
 
+    def put_back_to_waiting(self, item_id: int, why: str) -> Item:
+        """The timesheets on this item were never its own: detach them, clear
+        the amounts worked out from them, and make it waiting_for_timesheet
+        again, in one change with one line of history (decision 57). The
+        files can then be read again for the engagement they belong to."""
+        ...
+
     def replace_snapshot(self, item_id: int, snapshot: EngagementSnapshot) -> Item:
         """The rates, payee and client details taken again when a timesheet is
         read, for an item made before it arrived (decision 43): an item made
@@ -102,6 +109,10 @@ class Store(Protocol):
     def unprocessed_messages(self) -> list[StoredMessage]: ...
 
     def mark_processed(self, message_id: str) -> None: ...
+
+    def get_message(self, message_id: str) -> StoredMessage | None:
+        """One stored message by its Message-ID, processed or not."""
+        ...
 
     def requeue_message(self, message_id: str, kind: MessageKind) -> None:
         """Handle a stored message again, as `kind`, on the next pass.
