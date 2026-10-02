@@ -46,6 +46,13 @@ When a change adds a path, add it here in the same pull request.
   Decided by: code -- each email is stored before it is handled and marked done after; every outgoing email and invoice is written down first.
   Outcome: the next run finishes exactly what was left; nothing is sent or created twice.
   Test: `test_run.py::TestNeverTwice`, `test_emails_and_invoices.py::TestNeverTwice`.
+- [ ] **A6. The mailbox can't be read.**
+  Decided by: code -- how long since it last answered, and whether it is a refused password.
+  Outcome: the run carries on with what is already stored; new mail is fetched once the mailbox answers (nothing lost). Kevin is told once after an hour, at once for a refused password, and again when it works; "ignore" closes the question.
+  Test: `test_outages.py::TestTheMailboxCannotBeRead`.
+- [ ] **A7. Filing an email in a folder fails.**
+  Outcome: logged; the email is still handled once and never again.
+  Test: `test_outages.py::TestFilingFails`.
 - [ ] **A5. Dry run.**
   When: `FOPS_MODE=dry_run`.
   Decided by: the setting; no command-line flag can override it.
@@ -92,8 +99,8 @@ Decided by code from the sender's address, never by reading the email.
   Outcome: handled as his reply (section H).
   Test: `test_emails_and_invoices.py::TestAskFirst`, `TestReviewReplies`.
 - [ ] **C4. From a client** (a billing or CC address, or the client's email domain).
-  Outcome: filed as processed. *See gap G3: Kevin is not told.*
-  Test: none yet.
+  Outcome: Kevin gets *From a client: …* with the text and attachments as they came; the agent acts on nothing in it; filed as processed. Sent once.
+  Test: `test_outages.py::TestAClientWrites`.
 - [ ] **C5. From an address not in the copy** *(QuickBooks mode)*.
   Decided by: code -- the address is missing, so one fresh copy is taken from QuickBooks.
   Outcome: if the fresh copy has the address (a new consultant added today), it is handled as a timesheet.
@@ -115,7 +122,7 @@ Decided by code from the sender's address, never by reading the email.
 - [ ] **D2. An attachment Claude can't read** (a refusal, a corrupt file). Outcome: `CANT_READ_ATTACHMENT` review with the file attached. Test: `test_run.py::TestReviews::test_unreadable_attachment`.
 - [ ] **D3. The same file sent again** (or forwarded by someone else). Decided by: code -- the file's fingerprint. Outcome: filed quietly in Ignored; no email. Test: `test_run.py::TestDuplicates`.
 - [ ] **D4. A timesheet and the firm's invoice in one email.** Decided by: code -- which reading shows approval. Outcome: both read; the timesheet is the one kept, shown to Kevin and sent to the client. Test: `test_emails_and_invoices.py::TestWhichFileIsAttached`.
-- [ ] **D5. Claude can't be reached at all** (API down). Outcome: the run stops; the email stays unhandled and is read on the next run. *See gap G2.* Test: none yet.
+- [ ] **D5. Claude can't be reached at all** (down, overloaded, key refused). Decided by: code -- how long since it last answered, and whether the failure can clear by itself. Outcome: this email and the ones after it wait and are read on a later run; Kevin is told once after an hour (at once for a refused key), and again when it works. Test: `test_outages.py::TestClaudeCannotBeReached`.
 
 ## E. A timesheet: placing it
 
@@ -145,11 +152,13 @@ Decided by code from the sender's address, never by reading the email.
 - [ ] **F9. QuickBooks can't confirm the rates for the timesheet in hand.** Outcome: the timesheet is kept; the invoice waits; Kevin told; every run asks again and it carries on by itself; "ignore" drops it. Test: `test_engagement_copy.py::TestRatesForTheEngagementInHand`.
 - [ ] **F10. No invoice code for the client, or the consultant's initials can't be worked out.** Outcome: review rather than a guessed invoice number. Test: `test_emails_and_invoices.py::TestInvoiceNumbering`.
 
-## G. Duplicates and corrections
+## K. Duplicates and corrections
 
-- [ ] **G1. A different file with the same dates, hours and approval.** Outcome: filed quietly as a duplicate. Test: `test_run.py::TestDuplicates`.
-- [ ] **G2. A corrected timesheet before the invoice went.** Outcome: `CORRECTION` review; "use the new one" replaces it. Test: `test_run.py::TestCorrections::test_corrected_before_sent`.
-- [ ] **G3. A corrected timesheet after the invoice went.** Outcome: `CORRECTION` review; "use the new one" voids and replaces the invoice under the next number. Test: `test_run.py::TestCorrections::test_corrected_after_sent`, `test_emails_and_invoices.py::TestInvoiceNumbering`.
+(Lettered K so its labels never clash with the gaps at the end, G1–G7.)
+
+- [ ] **K1. A different file with the same dates, hours and approval.** Outcome: filed quietly as a duplicate. Test: `test_run.py::TestDuplicates`.
+- [ ] **K2. A corrected timesheet before the invoice went.** Outcome: `CORRECTION` review; "use the new one" replaces it. Test: `test_run.py::TestCorrections::test_corrected_before_sent`.
+- [ ] **K3. A corrected timesheet after the invoice went.** Outcome: `CORRECTION` review; "use the new one" voids and replaces the invoice under the next number. Test: `test_run.py::TestCorrections::test_corrected_after_sent`, `test_emails_and_invoices.py::TestInvoiceNumbering`.
 
 ## H. The invoice, and Kevin's replies
 
@@ -194,9 +203,9 @@ Decided by code from the sender's address, never by reading the email.
 
 Paths where the agent does less than the other documents say, or nothing at all. Each needs deciding, not just testing.
 
-- **G1. A mailbox that can't be read.** `MAILBOX_PROBLEM` is a review reason on paper, but nothing raises it: the run stops with an error, and nothing tells Kevin. The heartbeat that would notice the agent has stopped (`fops serve`, roadmap PR 14) is not built yet.
-- **G2. Claude unreachable.** Same as G1: the run stops and retries next time, which is right, but nobody is told if it goes on for hours.
-- **G3. Client replies.** `emails.md` says they are listed in the Monday summary; they are filed and nothing else. Kevin never hears that a client wrote.
+- ~~**G1. A mailbox that can't be read.**~~ Closed by decision 58 (A6). What is left: if sending is down too -- the same provider -- the email to Kevin waits until it can go. Only the heartbeat (`fops serve`, roadmap PR 14) covers an agent that cannot say anything at all.
+- ~~**G2. Claude unreachable.**~~ Closed by decision 58 (D5).
+- ~~**G3. Client replies.**~~ Closed by decision 58 (C4): Kevin gets each one as it came.
 - **G4. A reply from Kevin the agent can't match** to anything it sent goes into the run report only, which Kevin never sees.
 - **G5. The Monday summary** does not yet list duplicates filed or unpaid invoices past due, which `emails.md` says it does.
 - **G6. `NO_BILLING_CONTACT`** has no whole-run test.

@@ -105,7 +105,7 @@ first** (decision 57).
 
 ```mermaid
 flowchart TD
-    start(["Run starts: one at a time"]) --> mail["Read new mail from the agent mailbox"]
+    start(["Run starts: one at a time"]) --> mail["Read new mail; if the mailbox can't be read, carry on with what is stored (A6)"]
     mail --> list{"Where do the engagements come from?"}
     list -- "spreadsheet" --> sheet["Read the engagement list, every run"]
     list -- "QuickBooks" --> today{"Copy of QuickBooks taken today?"}
@@ -146,7 +146,7 @@ flowchart TD
     who -- "Kevin" --> kevin["His reply: picture 5 or 6"]
     who -- "a consultant or their vendor" --> ts["A timesheet: picture 3"]
     who -- "a forwarder on the list" --> ts
-    who -- "a client address or domain" --> client["Filed as processed (C4)"]
+    who -- "a client address or domain" --> client["Kevin gets it as it came; nothing in it is acted on (C4)"]
     who -- "nobody in the engagements" --> mode{"QuickBooks mode, and no fresh copy yet this run?"}
     mode -- "yes" --> refresh["Take one fresh copy from QuickBooks"]
     refresh --> again{"Known now?"}
@@ -188,8 +188,8 @@ flowchart TD
     money -- "QuickBooks can't answer" --> hold["Kept; invoice waits; retried every run (F9)"]
     money -- "disagrees with the spreadsheet" --> differ["QuickBooks' figure used; Kevin told (F8)"]
     money --> same{"Another timesheet for this record and dates?"}
-    same -- "same hours and approval" --> quiet2["Filed quietly as a duplicate (G1)"]
-    same -- "different" --> corr["Review: CORRECTION (G2, G3)"]
+    same -- "same hours and approval" --> quiet2["Filed quietly as a duplicate (K1)"]
+    same -- "different" --> corr["Review: CORRECTION (K2, K3)"]
     same -- "no" --> told["Kevin gets Timesheet received for his records, every time"]
     told --> found{"Anything on the list to ask Kevin?"}
     found -- "yes" --> review["One Needs your review email listing everything (F6)"]
@@ -285,5 +285,8 @@ flowchart TD
     which -- "QuickBooks, the paid check" --> f4["Review; asked again next run (J7)"]
     which -- "QuickBooks, setting something up" --> f5["Kevin told once per reason; retried (I8)"]
     which -- "sending an email" --> f6["Retried; then SEND_FAILED or SEND_UNCERTAIN (J1-J3)"]
-    which -- "the mailbox, or Claude" --> f7["Run stops; everything picked up next run. Nobody is told yet (gaps G1, G2)"]
+    which -- "the mailbox, or Claude" --> f7{"Lasted an hour, or a refused password or key?"}
+    f7 -- "no" --> f8["Waits; picked up on a later run; nobody bothered (A6, D5)"]
+    f7 -- "yes" --> f9["Kevin told once; told again when it works (A6, D5)"]
+    which -- "filing an email in a folder" --> f10["Logged; the email is still handled once (A7)"]
 ```

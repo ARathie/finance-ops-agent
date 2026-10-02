@@ -9,7 +9,7 @@ review answers go through the reader, and code applies them.
 
 import re
 
-from finance_ops_agent.application import engagement_copy, outgoing, set_aside
+from finance_ops_agent.application import engagement_copy, outages, outgoing, set_aside
 from finance_ops_agent.application.completion import complete_if_covered
 from finance_ops_agent.application.context import RunDeps, RunReport
 from finance_ops_agent.domain import emails, setup
@@ -163,7 +163,7 @@ def _handle_wrong_client(
             },
             not_client=wrong,
         )
-        deps.inbox.move(message_id, NEEDS_REVIEW_FOLDER)
+        outages.file_in(deps, message_id, NEEDS_REVIEW_FOLDER)
 
 
 def _apply_answer(
@@ -222,6 +222,12 @@ def _handle_review_reply(
         return
     if record.payload.get("engagement_refresh"):
         engagement_copy.handle_reply(deps, message, record, body, report)
+        return
+    if record.payload.get("outage"):
+        # Read by code, not Claude: Claude may be the thing that is down.
+        if _first_word(body) == "ignore":
+            outages.close_review(deps, str(record.payload["outage"]))
+            report.note("Kevin closed the question about an outage")
         return
     item = None if record.item_id is None else deps.store.get_item(record.item_id)
     if record.payload.get("uncertain_key"):

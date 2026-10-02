@@ -22,6 +22,8 @@ class FakeReader:
     ) -> None:
         self.readings = readings
         self.replies = replies or {}
+        # Set to make Claude unreachable, as the real one sometimes is.
+        self.fail_with: Exception | None = None
 
     def read_timesheet(
         self,
@@ -30,12 +32,16 @@ class FakeReader:
         mime_type: str,
         hints: ReadingHints | None = None,
     ) -> TimesheetReading:
+        if self.fail_with is not None:
+            raise self.fail_with
         try:
             return self.readings[filename]
         except KeyError as error:
             raise CantReadAttachmentError(f"no scripted reading for {filename}") from error
 
     def read_reply(self, reply_text: str, questions: list[tuple[str, str]]) -> ReplyReading:
+        if self.fail_with is not None:
+            raise self.fail_with
         scripted = self.replies.get(reply_text.strip())
         if scripted is not None:
             return scripted

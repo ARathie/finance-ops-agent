@@ -16,8 +16,8 @@ from dataclasses import dataclass
 from datetime import date
 
 from finance_ops_agent import logs
+from finance_ops_agent.application import outages, paid_check, set_aside
 from finance_ops_agent.application import outgoing as outgoing_steps
-from finance_ops_agent.application import paid_check, set_aside
 from finance_ops_agent.application import replies as reply_steps
 from finance_ops_agent.application import summary as summary_steps
 from finance_ops_agent.application.completion import complete_if_covered
@@ -58,8 +58,13 @@ from finance_ops_agent.ports.accounting import (
     AccountingSystem,
     EngagementRates,
 )
-from finance_ops_agent.ports.inbox import IGNORED_FOLDER, NEEDS_REVIEW_FOLDER, PROCESSED_FOLDER
-from finance_ops_agent.ports.reader import CantReadAttachmentError
+from finance_ops_agent.ports.inbox import (
+    IGNORED_FOLDER,
+    NEEDS_REVIEW_FOLDER,
+    PROCESSED_FOLDER,
+    MailboxFailed,
+)
+from finance_ops_agent.ports.reader import CantReadAttachmentError, ReaderUnavailable
 
 MAILBOX_POSITION_KEY = "mailbox_position"
 LAST_EXPECTED_CHECK_KEY = "last_expected_check"
@@ -102,7 +107,15 @@ def _engagement_work(deps: RunDeps, report: RunReport) -> None:
     """
     today = deps.clock.today().isoformat()
     position = deps.store.get_state(MAILBOX_POSITION_KEY)
-    fetched, new_position = deps.inbox.new_messages(position)
+    mailbox_up = True
+    try:
+        fetched, new_position = deps.inbox.new_messages(position)
+    except MailboxFailed as error:
+        # Nothing is lost: the position does not move, so the same mail is
+        # fetched when the mailbox answers. Everything already stored is still
+        # handled below (decision 58).
+        outages.failed(deps, report, outages.MAILBOX, error, error.lasting)
+        mailbox_up, fetched, new_position = False, [], position or ""
     engagements = Engagements(deps, report)
     _report_list_problems(deps, engagements.workbook, report)
     if deps.store.get_state(LAST_EXPECTED_CHECK_KEY) != today:
@@ -111,7 +124,13 @@ def _engagement_work(deps: RunDeps, report: RunReport) -> None:
         # tries again rather than letting an outage hide a period for a day.
         if engagements.complete and asked:
             deps.store.set_state(LAST_EXPECTED_CHECK_KEY, today)
-    _ingest_mailbox(deps, engagements, fetched, new_position, report)
+    if mailbox_up:
+        try:
+            _ingest_mailbox(deps, engagements, fetched, new_position, report)
+        except MailboxFailed as error:
+            outages.failed(deps, report, outages.MAILBOX, error, error.lasting)
+        else:
+            outages.working(deps, report, outages.MAILBOX)
     _retry_unconfirmed(deps, engagements, report)
     _process_messages(deps, engagements, report)
     # After the messages, so a "try again" Kevin sent this run is acted on now.
@@ -647,35 +666,61 @@ def _ingest_mailbox(
 
 def _process_messages(deps: RunDeps, engagements: Engagements, report: RunReport) -> None:
     for message in deps.store.unprocessed_messages():
-        if message.kind is MessageKind.UNKNOWN_SENDER:
-            finding = Finding(
-                ReviewCode.UNKNOWN_SENDER,
-                f"This came from an address I don't recognise: {message.from_address}"
-                f' ("{message.subject}").',
-            )
-            _open_review(deps, report, None, finding)
-            # Kevin is emailed when it could be a timesheet; the rest wait in
-            # the Monday summary, as newsletters always have.
-            set_aside.set_aside(
-                deps,
-                message,
-                finding.code,
-                finding.message,
-                email_kevin=bool(message.attachments),
-            )
-            deps.inbox.move(message.message_id, NEEDS_REVIEW_FOLDER)
-            report.unknown_senders += 1
-        elif message.kind is MessageKind.TIMESHEET:
-            folder = _process_timesheet(deps, engagements, message, report)
-            deps.inbox.move(message.message_id, folder)
-        elif message.kind is MessageKind.KEVIN_REPLY:
-            reply_steps.handle_kevin_reply(deps, message, report)
-            deps.inbox.move(message.message_id, PROCESSED_FOLDER)
-        else:
-            # Client replies are recorded and listed in the Monday summary
-            # (forwarding them unchanged is later work).
-            deps.inbox.move(message.message_id, PROCESSED_FOLDER)
-        deps.store.mark_processed(message.message_id)
+        try:
+            _process_message(deps, engagements, message, report)
+        except ReaderUnavailable as error:
+            # The email stays unhandled and is read on a later run. The rest
+            # would need Claude too, so they wait with it (decision 58).
+            outages.failed(deps, report, outages.CLAUDE, error, error.lasting)
+            return
+        if message.kind in (MessageKind.TIMESHEET, MessageKind.KEVIN_REPLY):
+            outages.working(deps, report, outages.CLAUDE)
+
+
+def _process_message(
+    deps: RunDeps, engagements: Engagements, message: StoredMessage, report: RunReport
+) -> None:
+    if message.kind is MessageKind.UNKNOWN_SENDER:
+        finding = Finding(
+            ReviewCode.UNKNOWN_SENDER,
+            f"This came from an address I don't recognise: {message.from_address}"
+            f' ("{message.subject}").',
+        )
+        _open_review(deps, report, None, finding)
+        # Kevin is emailed when it could be a timesheet; the rest wait in
+        # the Monday summary, as newsletters always have.
+        set_aside.set_aside(
+            deps,
+            message,
+            finding.code,
+            finding.message,
+            email_kevin=bool(message.attachments),
+        )
+        outages.file_in(deps, message.message_id, NEEDS_REVIEW_FOLDER)
+        report.unknown_senders += 1
+    elif message.kind is MessageKind.TIMESHEET:
+        folder = _process_timesheet(deps, engagements, message, report)
+        outages.file_in(deps, message.message_id, folder)
+    elif message.kind is MessageKind.KEVIN_REPLY:
+        reply_steps.handle_kevin_reply(deps, message, report)
+        outages.file_in(deps, message.message_id, PROCESSED_FOLDER)
+    else:
+        # A client wrote. Kevin gets it as it came, attachments and all; the
+        # agent does nothing with what it says (decision 58).
+        email = emails.client_wrote(
+            deps.settings.admin_email,
+            message.from_address,
+            message.subject,
+            f"{message.received_at:%Y-%m-%d %H:%M}",
+            message.body_text,
+            tuple(EmailAttachment(a.filename, a.sha256) for a in message.attachments),
+        )
+        outgoing_steps.enqueue_email(
+            deps, "client_reply_email", f"client-reply:{message.message_id}", None, email
+        )
+        report.note(f"passed a client's email to Kevin: {message.subject}")
+        outages.file_in(deps, message.message_id, PROCESSED_FOLDER)
+    deps.store.mark_processed(message.message_id)
 
 
 def _reading_content_key(reading: TimesheetReading) -> str:

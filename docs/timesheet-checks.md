@@ -75,7 +75,8 @@ The code is what the software uses; the message is what Kevin sees. Every review
 | `SEND_FAILED` | I couldn't send the billing email. I'll keep trying; please check the mailbox. | Usually fixes itself; otherwise check the mailbox connection. |
 | `SEND_UNCERTAIN` | I sent the billing email for <item> but couldn't confirm it left the server. You're on CC: reply "received" if you got it, or "resend". | Reply "received" or "resend". |
 | `QUICKBOOKS_FAILED` | I couldn't create the invoice in QuickBooks. I'll keep trying; please check the connection. Also used, with its own wording, when QuickBooks could not be asked for a fresh copy of the engagements, or for the rates of a timesheet in hand (decision 55): those close by themselves once QuickBooks answers. | Usually nothing; otherwise check the connection and reply "try again", or reply "ignore". |
-| `MAILBOX_PROBLEM` | I can't read the mailbox. | Follow the steps in the email. |
+| `MAILBOX_PROBLEM` | I can't read the mailbox. | Raised once it has failed for an hour, or at once for a refused password; closes itself, with a "working again" email, when the mailbox answers (decision 58). Follow the steps in the email. |
+| `CLAUDE_UNAVAILABLE` | I can't reach Claude, which reads the timesheets. | The same: raised after an hour, or at once for a refused key; emails wait and are read when Claude answers. Check the Anthropic key or the service status (decision 58). |
 | `QUICKBOOKS_RECONNECT` | QuickBooks needs to be reconnected. | Follow the steps in the email. |
 
 Duplicates are not review items: a second copy of the same file, or a timesheet with exactly the same hours and dates for the same consultant and period, is filed with a note in the Monday summary and nothing else happens.

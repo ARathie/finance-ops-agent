@@ -60,6 +60,8 @@ Every Monday morning.
 
 Sent at most once a day per problem: the mailbox connection stopped working, QuickBooks Online needs to be reconnected (with the steps to do it), or the engagement list could not be opened.
 
+The mailbox and Claude are told about once per outage (decision 58): **Needs your review: the mailbox** or **Needs your review: Claude** once it has lasted an hour -- at once for a refused password or key -- with what it said and what to check, and **Working again: …** when it is over. A blip that clears within the hour is never mentioned. Nothing is lost meanwhile: emails wait and are handled when it answers.
+
 ## To the client
 
 ### 7. Billing email
@@ -93,4 +95,4 @@ The agent checks, and records that it checked, that: the billing email address i
 
 ## Client replies
 
-Replies from clients land in the agent's mailbox. The agent does not answer them. It forwards them to Kevin unchanged and lists them in the Monday summary. Emails in the mailbox that are not timesheets, replies from Kevin, or client replies are left in a *Needs Review* folder for Kevin to look at.
+Replies from clients land in the agent's mailbox. The agent does not answer them, and does nothing with what they say. Each one goes straight to Kevin as **From a client: <subject>**, with who sent it, when, the text (cut short past a few pages, saying so) and every attachment (decision 58). Emails in the mailbox that are not timesheets, replies from Kevin, or client replies are left in a *Needs Review* folder for Kevin to look at.

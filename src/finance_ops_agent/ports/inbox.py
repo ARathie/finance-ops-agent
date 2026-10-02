@@ -9,6 +9,19 @@ PROCESSED_FOLDER = "Processed"
 IGNORED_FOLDER = "Ignored"
 
 
+class MailboxFailed(Exception):
+    """The mailbox could not be reached or refused the login (MAILBOX_PROBLEM).
+
+    Defined here so the application can catch it without naming an adapter.
+    `lasting` is True when it will not clear by itself -- a refused password --
+    so Kevin is told at once rather than after the usual grace (decision 58).
+    """
+
+    def __init__(self, message: str, lasting: bool = False) -> None:
+        super().__init__(message)
+        self.lasting = lasting
+
+
 class EmailInbox(Protocol):
     def new_messages(self, position: str | None) -> tuple[list[InboundEmail], str]:
         """Messages that arrived since `position` (None = from the beginning),

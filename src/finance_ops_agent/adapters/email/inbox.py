@@ -12,6 +12,7 @@ from collections.abc import Callable
 from datetime import date, datetime
 
 from imapclient import IMAPClient
+from imapclient.exceptions import IMAPClientError
 
 from finance_ops_agent.adapters.email.client import (
     Folders,
@@ -57,6 +58,16 @@ class ImapInbox:
         self._cache: dict[str, ParsedMessage] = {}
 
     def new_messages(self, position: str | None) -> tuple[list[InboundEmail], str]:
+        try:
+            return self._new_messages(position)
+        except MailboxProblem:
+            raise
+        except (OSError, IMAPClientError) as error:
+            # A connection that drops part-way is the mailbox being unreachable
+            # too; nothing was stored or moved on, so the next run starts over.
+            raise MailboxProblem(f"the mailbox stopped answering: {error}") from error
+
+    def _new_messages(self, position: str | None) -> tuple[list[InboundEmail], str]:
         client = self._connect(self._account)
         try:
             info = client.select_folder(INBOX, readonly=True)
@@ -91,6 +102,14 @@ class ImapInbox:
         return [int(uid) for uid in client.search(["HEADER", "Message-ID", message_id])]
 
     def download_attachment(self, message_id: str, attachment_id: str) -> bytes:
+        try:
+            return self._download(message_id, attachment_id)
+        except MailboxProblem:
+            raise
+        except (OSError, IMAPClientError) as error:
+            raise MailboxProblem(f"the mailbox stopped answering: {error}") from error
+
+    def _download(self, message_id: str, attachment_id: str) -> bytes:
         parsed = self._cache.get(message_id)
         if parsed is None:
             client = self._connect(self._account)

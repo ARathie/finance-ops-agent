@@ -616,3 +616,17 @@ Nothing reaches the client or the consultant from the wrong draft: the billing e
 
 `Store` gained `put_back_to_waiting` (the change above, as one transaction) and `get_message`.
 
+## 58. An outage is told to Kevin once it lasts, and a client's email goes straight to him
+
+Writing `pathways.md` found three paths where the agent did less than the documents said (gaps G1-G3).
+
+**The mailbox or Claude cannot be reached.** Before, the run stopped with an error. Nothing was lost -- the mailbox position only moves once mail is stored, and an email is only marked handled once it has been -- but nobody was told, however long it went on. `MAILBOX_PROBLEM` was a review reason nothing raised.
+
+- **The run carries on.** A mailbox that cannot be read means no new mail this run; everything already stored is still handled, sends still go, QuickBooks is still checked. Claude unreachable means the email it was reading, and the ones after it, wait for a later run -- they would all need Claude.
+- **Filing an email in a folder can no longer stop a run.** It is a courtesy for a person looking at the mailbox; a failure there used to leave a handled email unmarked, to be handled again.
+- **Kevin is told once it has lasted an hour**, or at once when it cannot clear by itself: a refused mailbox password, or a refused Anthropic key or unknown model. One email per outage, with when it began, what was said, and what to check; one more, **Working again**, when it is over. The question closes itself. A blip that clears inside the hour is never mentioned: fifteen-minute runs make one-run failures ordinary, and an email for each would teach Kevin to ignore them. "ignore" closes the question, read by code because Claude may be what is down.
+- **A new review reason, `CLAUDE_UNAVAILABLE`.** `MAILBOX_PROBLEM` is now raised. The ports gained `MailboxFailed` and `ReaderUnavailable`, each saying whether it is `lasting`, so the application catches them without naming an adapter. The IMAP adapter now also wraps a connection dropping part-way, which used to escape as a raw error.
+- **What this does not cover:** sending goes through the same provider as the mailbox, so if both are down the email to Kevin waits in the outgoing table until it can go. An agent that cannot say anything at all is the heartbeat's job (`fops serve`, roadmap PR 14).
+
+**A client writes.** Before, a client's email was filed and nothing else; `emails.md` said it was forwarded and listed in the Monday summary, and neither was true. Now each one goes to Kevin at once as **From a client: <subject>**, with the sender, the time, the text (cut short past 6,000 characters, saying where the rest is) and every attachment as it came. The agent acts on nothing in it: a client asking to change where invoices go is Kevin's to read, not the agent's to follow (CLAUDE.md rule 7). It is written down once, like every email, so it is sent once.
+

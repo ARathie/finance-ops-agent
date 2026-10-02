@@ -16,6 +16,17 @@ class CantReadAttachmentError(Exception):
     """The attachment could not be read into a whole form (CANT_READ_ATTACHMENT)."""
 
 
+class ReaderUnavailable(Exception):
+    """Claude could not be asked at all: down, overloaded, or the key refused
+    (CLAUDE_UNAVAILABLE). Not about this document: the same email is read
+    again on a later run. `lasting` when it will not clear by itself
+    (decision 58)."""
+
+    def __init__(self, message: str, lasting: bool = False) -> None:
+        super().__init__(message)
+        self.lasting = lasting
+
+
 class TokenUsage(BaseModel):
     """What model calls cost in tokens. Tokens only - never money.
 

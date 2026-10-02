@@ -53,6 +53,10 @@ class EmailAttachment:
     sha256: str  # the content lives in the file store
 
 
+# How much of a client's email is copied into the one to Kevin.
+CLIENT_TEXT_LIMIT = 6000
+
+
 @dataclass(frozen=True)
 class OutgoingEmail:
     to: tuple[str, ...]
@@ -126,6 +130,41 @@ def _summary_lines(summary: TimesheetSummary) -> list[str]:
 
 
 # 1. Timesheet details for your records
+
+
+def client_wrote(
+    admin: str,
+    sender: str,
+    subject: str,
+    received: str,
+    body: str,
+    attachments: tuple[EmailAttachment, ...],
+) -> OutgoingEmail:
+    """A client's email to the agent's mailbox, passed to Kevin as it came.
+
+    The agent never acts on what a client writes: it is read by Kevin, not by
+    the agent (CLAUDE.md rule 7). Attachments go with it unchanged."""
+    text = body.strip()
+    if len(text) > CLIENT_TEXT_LIMIT:
+        cut = "[... cut short here; the whole email is in the agent's Processed folder]"
+        text = text[:CLIENT_TEXT_LIMIT].rstrip() + "\n" + cut
+    return OutgoingEmail(
+        to=(admin,),
+        subject=f"From a client: {subject or '(no subject)'}",
+        body="\n".join(
+            [
+                "A client wrote to the agent's mailbox. I haven't acted on it -- what a",
+                "client writes is for you to read, not for me to follow.",
+                "",
+                f"From: {sender}",
+                f"Received: {received}",
+                f"Subject: {subject or '(no subject)'}",
+                "",
+                text or "(no text)",
+            ]
+        ),
+        attachments=attachments,
+    )
 
 
 def timesheet_details(

@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from email.utils import make_msgid
 
+from finance_ops_agent import logs
 from finance_ops_agent.application.context import Mode, RunDeps, RunReport
 from finance_ops_agent.domain import emails
 from finance_ops_agent.domain.emails import EmailAttachment, OutgoingEmail
@@ -34,7 +35,7 @@ from finance_ops_agent.ports.accounting import (
     AccountingNeedsReconnect,
     CreatedInvoice,
 )
-from finance_ops_agent.ports.inbox import NEEDS_REVIEW_FOLDER
+from finance_ops_agent.ports.inbox import NEEDS_REVIEW_FOLDER, MailboxFailed
 from finance_ops_agent.ports.sender import NotSent, RecipientRefused
 
 MAX_SEND_ATTEMPTS = 3
@@ -52,6 +53,8 @@ EMAIL_KINDS = (
     # "Shall I set this up in QuickBooks?", answered "confirm" and a code
     # (decision 56).
     "setup_request",
+    # A client wrote to the agent's mailbox; Kevin gets it as it came (decision 58).
+    "client_reply_email",
 )
 
 
@@ -179,7 +182,11 @@ def refile_for_review(deps: RunDeps, item: Item) -> None:
     says the wrong thing is worse than none.
     """
     for message_id in deps.store.message_ids_for_item(item.id):
-        deps.inbox.move(message_id, NEEDS_REVIEW_FOLDER)
+        try:
+            deps.inbox.move(message_id, NEEDS_REVIEW_FOLDER)
+        except MailboxFailed as error:
+            # Filing is a courtesy; the review is the record (decision 58).
+            logs.log("could not file an email", said=str(error)[:200])
 
 
 def tell_kevin(
