@@ -338,3 +338,25 @@ def test_a_malformed_answer_never_reaches_kevin(env: ScenarioEnv) -> None:
     [body] = review_bodies(env)
     assert "</found>" not in body
     assert "What I found (I looked" not in body
+
+
+def test_a_missing_invoice_is_raised_once_not_every_morning(env: ScenarioEnv) -> None:
+    """Once Kevin has answered it, the next day's paid check must not ask again."""
+    env.mode = Mode.ASK_FIRST
+    env.add_email(PRIYA, scripted_reading=reading(AUG_START, AUG_END))
+    env.run()
+    approval = next(s for s in env.sent_subjects() if s.startswith("Approve?"))
+    env.reply_from_kevin(approval, "approve")
+    env.run()
+    item = env.the_item()
+    env.accounting.invoices.clear()  # QuickBooks no longer has it
+    env.store.set_state("last_paid_check", "")
+    env.run()
+    [review] = [r for r in env.store.open_reviews() if r.item_id == item.id]
+    env.store.answer_review(review.id, {"kind": "ignore"}, "ignored")
+
+    env.today = date(2026, 9, 9)  # the next morning
+    env.run()
+
+    assert [r for r in env.store.open_reviews() if r.item_id == item.id] == []
+    assert sum("Needs your review" in s for s in env.sent_subjects()) == 1

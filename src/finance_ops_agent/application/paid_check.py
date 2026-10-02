@@ -37,6 +37,12 @@ def _missing_invoices(deps: RunDeps, report: RunReport, failed: dict[str, int]) 
             continue
         missing.add(finding.about)
         message = f"{finding.what} {finding.next_step}"
+        if any(
+            review.message == message for review in deps.store.reviews_for_item(finding.item_id)
+        ):
+            # Kevin has been told once. If he answered or ignored it, asking
+            # again every morning would be nagging, not news.
+            continue
         if deps.store.open_review(finding.item_id, ReviewCode.QUICKBOOKS_FAILED.value, message):
             report.reviews_opened += 1
             item = deps.store.get_item(finding.item_id)
