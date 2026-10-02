@@ -8,7 +8,6 @@ waiting, or today's look for ended billing periods is still to do.
 """
 
 from collections import Counter
-from collections.abc import Sequence
 from datetime import date
 
 from finance_ops_agent.adapters.fakes.accounting import FakeAccounting
@@ -16,8 +15,6 @@ from finance_ops_agent.application.run import LAST_EXPECTED_CHECK_KEY
 from finance_ops_agent.domain.statuses import ItemStatus
 from finance_ops_agent.ports.accounting import (
     AccountingFailed,
-    AccountingParty,
-    EngagementListing,
     EngagementRates,
 )
 from tests.scenarios.conftest import PRIYA, ScenarioEnv, engagement_row, reading
@@ -25,37 +22,12 @@ from tests.scenarios.conftest import PRIYA, ScenarioEnv, engagement_row, reading
 AUG_START, AUG_END = date(2026, 8, 1), date(2026, 8, 31)
 
 
-class CountingAccounting(FakeAccounting):
-    """The fake, counting every question a run asks it."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.calls: Counter[str] = Counter()
-
-    def engagement_rates(self, consultant: str, clients: Sequence[str]) -> EngagementRates | None:
-        self.calls["engagement_rates"] += 1
-        return super().engagement_rates(consultant, clients)
-
-    def engagements(self) -> EngagementListing:
-        self.calls["engagements"] += 1
-        return super().engagements()
-
-    def customer(self, name: str) -> AccountingParty | None:
-        self.calls["customer"] += 1
-        return super().customer(name)
-
-    def payee(self, ref: str) -> AccountingParty | None:
-        self.calls["payee"] += 1
-        return super().payee(ref)
-
-
-def counting(env: ScenarioEnv) -> CountingAccounting:
-    accounting = CountingAccounting()
+def counting(env: ScenarioEnv) -> FakeAccounting:
+    accounting = env.accounting
     for consultant in ("Priya Shah", "Dana Cruz"):
         accounting.rates[(consultant, "Acme Corp")] = EngagementRates(
             ref=f"ref-{consultant}", bill_rate_cents=14_000, pay_rate_cents=10_000, payee=""
         )
-    env.accounting = accounting
     return accounting
 
 
@@ -161,12 +133,10 @@ class TestMailOnAQuietDay:
         assert report.timesheets_processed == 1
         assert waiting_periods(env) == set()
 
-    def test_an_item_already_in_hand_is_found_without_asking_quickbooks(
-        self, env: ScenarioEnv
-    ) -> None:
+    def test_only_the_engagement_in_hand_is_asked_about(self, env: ScenarioEnv) -> None:
         """August is already waiting for Priya, so her timesheet joins it by
-        name; QuickBooks is asked for an engagement's id only when the name
-        finds nothing, which is the one case a rename could be behind."""
+        name. Her rates are asked for again, because they are taken when the
+        timesheet is read (decision 43); nobody else's are."""
         accounting = counting(env)
         env.run()
         accounting.calls.clear()
@@ -174,4 +144,5 @@ class TestMailOnAQuietDay:
 
         env.run()
 
-        assert accounting.calls["engagement_rates"] == 0
+        assert accounting.calls["engagement_rates"] == 1
+        assert accounting.calls["engagements"] == 0

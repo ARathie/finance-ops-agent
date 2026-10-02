@@ -20,6 +20,7 @@ Sent when one or more checks fail (see `timesheet-checks.md`). One email per tim
 
 - **Subject:** `Needs your review: Priya Shah — Acme Corp — Aug 2026 — no approval found`
 - **Body:** what the agent found (same summary as above), each problem in plain words, and what Kevin can do: fix the engagement list, or reply with the answer, or reply "ignore". Examples of replies that work are included.
+- **Emails the agent set aside, and QuickBooks it could not ask** (decision 55) use the same email with their own "What you can do" list in place of the examples: add the address or consultant in QuickBooks and reply "try again", reply "this is from Priya Shah", or reply "ignore" for an email from an unknown address or a timesheet it could not place; "try again" or "ignore" when QuickBooks could not be asked for a fresh copy of the engagements, which also closes by itself once QuickBooks answers. If "try again" still finds nothing, a **Still needs your review** email says what it looked at.
 - **Attachments:** the original timesheet file -- the one showing approval, when the email carried more than one document.
 
 Kevin's reply is read by the agent. Only replies from `kevin@icon-technologies.com` in the same thread count. The agent re-runs the checks with the answer; if it still cannot proceed, it replies again saying what is still missing.

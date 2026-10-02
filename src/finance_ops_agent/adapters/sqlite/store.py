@@ -183,6 +183,16 @@ class SqliteStore:
             ).first()
             return None if row is None else _to_item(row)
 
+    def replace_snapshot(self, item_id: int, snapshot: EngagementSnapshot) -> Item:
+        with Session(self._engine) as session, session.begin():
+            row = session.get(ItemRow, item_id)
+            if row is None:
+                raise LookupError(f"there is no item {item_id}")
+            row.engagement_snapshot = snapshot.model_dump()
+            row.engagement_ref = snapshot.engagement_ref or None
+            session.flush()
+            return _to_item(row)
+
     def relabel_item(self, item_id: int, consultant: str, client: str) -> Item:
         """Names get tidied in the accounting system; the item keeps up.
 
@@ -328,6 +338,14 @@ class SqliteStore:
                 select(MessageRow).where(MessageRow.message_id == message_id)
             ).one()
             row.processed_at = self._now().isoformat()
+
+    def requeue_message(self, message_id: str, kind: MessageKind) -> None:
+        with Session(self._engine) as session, session.begin():
+            row = session.scalars(
+                select(MessageRow).where(MessageRow.message_id == message_id)
+            ).one()
+            row.kind = kind.value
+            row.processed_at = None
 
     def checkpoint(self) -> None:
         """Fold the write-ahead log into the database file (see the port)."""

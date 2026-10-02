@@ -164,7 +164,11 @@ def needs_review(
     summary: TimesheetSummary | None = None,
     timesheet: EmailAttachment | None = None,
     asking_again: bool = False,
+    what_you_can_do: list[str] | None = None,
 ) -> OutgoingEmail:
+    """`what_you_can_do` replaces the usual closing lines where the answers
+    that work are not the timesheet ones: an email from an address the agent
+    does not know, or QuickBooks that cannot be asked (decision 55)."""
     headline = problems[0].rstrip(".") if len(problems) == 1 else "several things to check"
     body_lines = [
         "I need your help with this one."
@@ -175,13 +179,16 @@ def needs_review(
         body_lines += ["", "What I read:", *_summary_lines(summary)]
     body_lines += ["", "What needs your review:"]
     body_lines += [f"- {problem}" for problem in problems]
-    body_lines += [
-        "",
-        "You can fix or add the row in the engagement list, or just reply to this",
-        'email with the answer, or reply "ignore".',
-        'Replies that work: "this is for Acme", "use 152 hours",',
-        '"approved by Jane Doe on 9/3", "use the new one", "ignore".',
-    ]
+    if what_you_can_do is not None:
+        body_lines += ["", "What you can do:", *[f"- {line}" for line in what_you_can_do]]
+    else:
+        body_lines += [
+            "",
+            "You can fix or add the row in the engagement list, or just reply to this",
+            'email with the answer, or reply "ignore".',
+            'Replies that work: "this is for Acme", "use 152 hours",',
+            '"approved by Jane Doe on 9/3", "use the new one", "ignore".',
+        ]
     return OutgoingEmail(
         to=(admin,),
         subject=f"Needs your review: {about} — {headline}",

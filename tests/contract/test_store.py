@@ -177,6 +177,38 @@ class TestMessages:
             "<ask@icon-technologies.com>",
         )
 
+    def test_a_set_aside_message_can_be_handled_again(self, store: Store) -> None:
+        """Kevin said who an unknown address is, so its email goes back in the
+        queue as a timesheet (decision 55)."""
+        message = replace(_stored_message(), kind=MessageKind.UNKNOWN_SENDER)
+        store.record_message(message, {})
+        store.mark_processed(message.message_id)
+
+        store.requeue_message(message.message_id, MessageKind.TIMESHEET)
+
+        [again] = store.unprocessed_messages()
+        assert again.message_id == message.message_id
+        assert again.kind is MessageKind.TIMESHEET
+        assert again.attachments == message.attachments
+
+
+class TestRatesTakenAgain:
+    def test_a_new_snapshot_replaces_the_old_and_carries_its_id(self, store: Store) -> None:
+        """An item made when its period ended takes the rates again when its
+        timesheet is read (decision 43); the id comes with them, so a later
+        rename still finds it (decision 39)."""
+        made = store.create_item(
+            "Priya Shah", "Acme Corp", AUGUST, ItemStatus.WAITING_FOR_TIMESHEET, snapshot()
+        )
+        fresh = snapshot().model_copy(update={"bill_rate_cents": 15_000, "engagement_ref": "42"})
+
+        updated = store.replace_snapshot(made.id, fresh)
+
+        assert updated.snapshot.bill_rate_cents == 15_000
+        assert store.get_item(made.id).snapshot.bill_rate_cents == 15_000
+        assert store.find_item_by_engagement("42", AUGUST) is not None
+        assert updated.status is ItemStatus.WAITING_FOR_TIMESHEET
+
 
 class TestTimesheetsReviewsOutgoingState:
     def test_timesheet_records(self, store: Store) -> None:

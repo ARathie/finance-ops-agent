@@ -26,7 +26,7 @@ from finance_ops_agent.ports.reader import CantReadAttachmentError, TokenUsage
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 TIMESHEET_PROMPT_VERSION = "timesheet_v3"
 CLASSIFY_PROMPT_VERSION = "classify_v1"
-REPLY_PROMPT_VERSION = "reply_v1"
+REPLY_PROMPT_VERSION = "reply_v2"
 MAX_TOKENS = 16000
 
 _M = TypeVar("_M", bound=BaseModel)

@@ -21,7 +21,7 @@ from finance_ops_agent.domain.items import (
     ReviewRecord,
     TimesheetRecord,
 )
-from finance_ops_agent.domain.messages import StoredMessage
+from finance_ops_agent.domain.messages import MessageKind, StoredMessage
 from finance_ops_agent.domain.money import Hours, Money
 from finance_ops_agent.domain.periods import BillingPeriod
 from finance_ops_agent.domain.statuses import ItemStatus
@@ -56,6 +56,12 @@ class Store(Protocol):
         """The item for this engagement and period, found by the accounting
         system's id rather than by name, so a rename does not orphan it
         (docs/decisions.md #39)."""
+        ...
+
+    def replace_snapshot(self, item_id: int, snapshot: EngagementSnapshot) -> Item:
+        """The rates, payee and client details taken again when a timesheet is
+        read, for an item made before it arrived (decision 43): an item made
+        when its period ended carries what QuickBooks said then."""
         ...
 
     def relabel_item(self, item_id: int, consultant: str, client: str) -> Item:
@@ -96,6 +102,14 @@ class Store(Protocol):
     def unprocessed_messages(self) -> list[StoredMessage]: ...
 
     def mark_processed(self, message_id: str) -> None: ...
+
+    def requeue_message(self, message_id: str, kind: MessageKind) -> None:
+        """Handle a stored message again, as `kind`, on the next pass.
+
+        For an email that was set aside -- an address the agent did not know,
+        or a timesheet it could not place -- once Kevin has said what it is or
+        fixed what was missing (decision 55)."""
+        ...
 
     def load_file(self, sha256: str) -> bytes: ...
 

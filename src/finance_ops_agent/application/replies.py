@@ -9,7 +9,7 @@ review answers go through the reader, and code applies them.
 
 import re
 
-from finance_ops_agent.application import outgoing
+from finance_ops_agent.application import engagement_copy, outgoing, set_aside
 from finance_ops_agent.application.completion import complete_if_covered
 from finance_ops_agent.application.context import RunDeps, RunReport
 from finance_ops_agent.domain import emails
@@ -112,6 +112,12 @@ def _apply_answer(
     )
     if answer.kind is ReplyAnswerKind.UNCLEAR or target is None:
         return False
+    if answer.kind is ReplyAnswerKind.TRY_AGAIN:
+        # Nothing to record: whatever waits on QuickBooks is asked again on
+        # every run anyway, and closing the review here would let an item go
+        # ahead on figures nobody confirmed (decision 55).
+        report.note("Kevin asked me to try again; I do on every run")
+        return True
     if answer.kind is ReplyAnswerKind.IGNORE:
         for review in open_reviews:
             deps.store.answer_review(review.id, {"kind": "ignore"}, "ignored")
@@ -140,6 +146,15 @@ def _handle_review_reply(
     body: str,
     report: RunReport,
 ) -> None:
+    # Answers about one set-aside email, or about QuickBooks being unreachable,
+    # go to their own handlers: put to the reader alongside every other open
+    # question without an item, an "ignore" would close them all (decision 55).
+    if record.payload.get("set_aside"):
+        set_aside.handle_reply(deps, message, record, body, report)
+        return
+    if record.payload.get("engagement_refresh"):
+        engagement_copy.handle_reply(deps, message, record, body, report)
+        return
     item = None if record.item_id is None else deps.store.get_item(record.item_id)
     if record.payload.get("uncertain_key"):
         outgoing.answer_send_uncertain(deps, record, body, report)

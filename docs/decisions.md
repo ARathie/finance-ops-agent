@@ -543,7 +543,37 @@ Now:
 
 - **The mailbox is read first**, and the rest follows from what is in it.
 - **Ended billing periods are looked for once a day**, on the day's first run. Periods end on dates, so a second look the same day cannot find anything the first missed. A look during which QuickBooks could not be asked, or a QuickBooks-mode run that fell back to the spreadsheet, is not counted as done, and the next run looks again: an outage must not hide a period until tomorrow.
-- **In QuickBooks mode the engagement list is built only when it is needed**: mail has arrived, a message is still waiting to be handled, or the day's look is still to do. The spreadsheet costs nothing to read, so in list mode it is still read every run and a broken edit is still reported within 15 minutes.
+- **In QuickBooks mode the engagement list is built only when it is needed**: mail has arrived, a message is still waiting to be handled, or the day's look is still to do. *(Replaced by decision 55: the run now works from its own copy, taken once a day and again on a miss.)* The spreadsheet costs nothing to read, so in list mode it is still read every run and a broken edit is still reported within 15 minutes.
 - **An item is found by name first, and by QuickBooks' id only when the name finds nothing.** The name is a question for the agent's own store. A rename (decision 39) is exactly the case where the name finds nothing, so it is still caught; an item already in hand no longer costs a QuickBooks lookup to confirm.
 
 What still asks QuickBooks, and why: a timesheet that arrives (its rates are taken when it is read, decision 43), an invoice that is due, the daily look and the daily paid check. Each is about something in front of the agent.
+
+## 55. The agent keeps its own copy of the engagements, and every way that goes wrong is a question for Kevin
+
+Decision 54 stopped quiet runs asking QuickBooks anything, but a run with mail still rebuilt the whole engagement list -- every product, customer and vendor -- to recognise one sender. Who works for which client, from which address, on which schedule, changes a few times a year. The money changes more often and matters more.
+
+**What is kept.** The engagement list built from QuickBooks (decision 53) is stored in the agent's own state, as it was built: clients, consultants, vendors, engagements, and the problems found building it. A run reads that copy. It is taken again:
+
+- **on the day's first run**, so a change in QuickBooks is picked up the same day and the daily look for ended periods works from today's picture;
+- **when something does not match it**: an email from an address the copy does not have, or a timesheet naming a consultant or client it cannot place. A new consultant, or one whose address changed, looks exactly like that. At most once a run, however many emails miss;
+- **when Kevin replies "try again"** to one of the emails below.
+
+**What is not taken from the copy alone: the money.** The bill rate, pay rate, payee, billing emails and terms are asked of QuickBooks for the engagement in hand when its timesheet is read (decision 43), a few calls for that one engagement. That now includes an item made earlier, when its period ended or by an earlier timesheet in the same period: its figures are taken again, so a rate Kevin changed in between is the one invoiced. Before this, such an item kept the figures from the day it was made.
+
+**Every way it can go wrong ends in an email to Kevin that says what he can reply.**
+
+| What went wrong | What Kevin is told | Replies that work | What happens by itself |
+|---|---|---|---|
+| QuickBooks could not be asked for a fresh copy | `QUICKBOOKS_FAILED` (or `QUICKBOOKS_RECONNECT`): which copy the agent is working from, and that anyone added since will not be recognised | "try again" (looks on the next run whatever the date), "ignore" (closes it; told again only after QuickBooks has answered once) | Every run tries again; the review closes itself once QuickBooks answers; the daily look is not counted done on an old copy |
+| An address not in a fresh copy (with an attachment) | `UNKNOWN_SENDER`, with what to add in QuickBooks | "try again" (after adding the address; takes a fresh copy and handles the email), "this is from Priya Shah" (handled as hers), "ignore" | An address that appears in the next day's copy is handled without a reply |
+| A timesheet naming someone a fresh copy cannot place | `CONSULTANT_UNKNOWN` or `ENGAGEMENT_UNCLEAR`, with the reading and the file | "try again" (reads it again against a fresh copy), "this is from Priya Shah" (consultant only), "ignore" | Nothing: reading it again costs a call to Claude, so it waits for Kevin |
+| QuickBooks could not confirm the rates or billing details for the timesheet in hand | `QUICKBOOKS_FAILED` (or `_RECONNECT`) on the item: the invoice waits | "ignore" drops the timesheet; "try again" is accepted and changes nothing, since it is retried anyway | Every run asks again for that engagement only; once QuickBooks answers, the review closes and the item carries on |
+
+- **An email from an unknown address with no attachment** is not emailed about: it is a review that waits in the Monday summary, as newsletters always have been. It is still picked up by itself if the address turns up in a later copy.
+- **Answers about one set-aside email are read against that email's question alone**, so an "ignore" can never close another review. Before this, every review without an item was put to the reader together.
+- **This changes decision 38 in one place.** QuickBooks that cannot answer while a timesheet is read used to let the item go ahead on the engagement list's figures. Now the timesheet is still read and kept, and Kevin still hears about it, but the invoice waits for QuickBooks to confirm the figures. In QuickBooks mode the invoice could not be made during the outage anyway. In manual mode nothing changes: the manual adapter has nothing to be unable to answer.
+- **Reply "try again"** is a new kind of answer (`try_again`), read by a new reply prompt (`reply_v2`). A name given with it ("that's Priya, try again") counts as the name.
+- **A set-aside email handled again is a new attempt**: its emails go under a new key, so Kevin hears the outcome rather than nothing.
+
+`Store` gained `requeue_message` (an email goes back in the queue as a timesheet) and `replace_snapshot` (an item's figures taken again).
+

@@ -5,6 +5,7 @@ out (docs/decisions.md #27) and keeps its own external id, which is the thing
 the accounting system knows the invoice by.
 """
 
+from collections import Counter
 from collections.abc import Sequence
 
 from finance_ops_agent.domain.invoices import Invoice
@@ -27,6 +28,9 @@ class FakeAccounting:
         # Tests set these to make the accounting system misbehave the way a
         # real one does: a refusal, or a connection that needs renewing.
         self.fail_with: Exception | None = None
+        # Only creating an invoice fails: QuickBooks answered every question
+        # about the engagement, then refused the invoice itself.
+        self.fail_create_with: Exception | None = None
         # Keyed by (consultant, client); tests set what the accounting system
         # says an engagement is billed and paid at.
         self.rates: dict[tuple[str, str], EngagementRates] = {}
@@ -39,12 +43,18 @@ class FakeAccounting:
         self.customers: dict[str, AccountingParty] = {}
         self.payees: dict[str, AccountingParty] = {}
         self.create_attempts = 0
+        # Every question asked, by method name: how tests see that a run asks
+        # QuickBooks only about what is in front of it (decisions 54 and 55).
+        self.calls: Counter[str] = Counter()
         self._counter = 0
 
     def create_invoice(self, invoice: Invoice, item_id: int) -> CreatedInvoice:
+        self.calls["create_invoice"] += 1
         self.create_attempts += 1
         if self.fail_with is not None:
             raise self.fail_with
+        if self.fail_create_with is not None:
+            raise self.fail_create_with
         existing = self.find_invoice(item_id)
         if existing is not None:
             return existing
@@ -56,16 +66,19 @@ class FakeAccounting:
         return created
 
     def customer(self, name: str) -> AccountingParty | None:
+        self.calls["customer"] += 1
         if self.fail_with is not None:
             raise self.fail_with
         return self.customers.get(name)
 
     def payee(self, ref: str) -> AccountingParty | None:
+        self.calls["payee"] += 1
         if self.fail_with is not None:
             raise self.fail_with
         return self.payees.get(ref)
 
     def engagements(self) -> EngagementListing:
+        self.calls["engagements"] += 1
         if self.fail_with is not None:
             raise self.fail_with
         return EngagementListing(
@@ -73,6 +86,7 @@ class FakeAccounting:
         )
 
     def engagement_rates(self, consultant: str, clients: Sequence[str]) -> EngagementRates | None:
+        self.calls["engagement_rates"] += 1
         if self.fail_with is not None:
             raise self.fail_with
         for client in clients:
@@ -82,12 +96,14 @@ class FakeAccounting:
         return None
 
     def find_invoice(self, item_id: int) -> CreatedInvoice | None:
+        self.calls["find_invoice"] += 1
         created = self.invoices.get(item_id)
         if created is not None and created.external_id in self.cancelled:
             return None
         return created
 
     def cancel_invoice(self, external_id: str, renamed_to: str | None = None) -> None:
+        self.calls["cancel_invoice"] += 1
         if self.fail_with is not None:
             raise self.fail_with
         self.cancelled.append(external_id)
@@ -95,6 +111,7 @@ class FakeAccounting:
             self.renamed[external_id] = renamed_to
 
     def paid_status(self, external_ids: list[str]) -> dict[str, bool]:
+        self.calls["paid_status"] += 1
         if self.fail_with is not None:
             raise self.fail_with
         self.asked.extend(external_ids)

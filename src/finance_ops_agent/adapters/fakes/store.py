@@ -21,7 +21,7 @@ from finance_ops_agent.domain.items import (
     ReviewRecord,
     TimesheetRecord,
 )
-from finance_ops_agent.domain.messages import StoredMessage
+from finance_ops_agent.domain.messages import MessageKind, StoredMessage
 from finance_ops_agent.domain.money import Hours, Money
 from finance_ops_agent.domain.periods import BillingPeriod
 from finance_ops_agent.domain.statuses import (
@@ -109,6 +109,12 @@ class FakeStore:
                 return item
         return None
 
+    def replace_snapshot(self, item_id: int, snapshot: EngagementSnapshot) -> Item:
+        item = self._items[item_id]
+        updated = replace(item, snapshot=snapshot, engagement_ref=snapshot.engagement_ref)
+        self._items[item_id] = updated
+        return updated
+
     def relabel_item(self, item_id: int, consultant: str, client: str) -> Item:
         item = self._items[item_id]
         relabelled = replace(item, consultant=consultant, client=client)
@@ -166,6 +172,9 @@ class FakeStore:
 
     def mark_processed(self, message_id: str) -> None:
         self._messages[message_id] = replace(self._messages[message_id], processed=True)
+
+    def requeue_message(self, message_id: str, kind: MessageKind) -> None:
+        self._messages[message_id] = replace(self._messages[message_id], kind=kind, processed=False)
 
     def checkpoint(self) -> None:
         return  # nothing on disk to fold in

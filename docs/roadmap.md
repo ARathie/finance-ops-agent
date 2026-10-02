@@ -222,7 +222,9 @@ Done when:
 - [ ] **Needs a person:** `FOPS_ENGAGEMENTS=quickbooks` is set, `fops doctor` passes, and a forwarded timesheet goes through `fops dry-run` with the right client, hours and amount.
 - [ ] Step 2: after one full cycle with QuickBooks deciding, the cross-check columns and then the workbook itself stop being read.
 - [x] Decision 54: a run asks QuickBooks only about what is in front of it -- the mailbox is read first, ended periods are looked for once a day (again next run if QuickBooks could not be asked), the QuickBooks-built engagement list is built only when there is mail or the daily look is due, and an item is found by name before QuickBooks is asked for its id; a quiet run asks QuickBooks nothing (tested, no network).
-- [ ] **Needs a person:** on the real machine, after the day's first run, a run over an empty mailbox logs `nothing new in the mailbox` (with `FOPS_ENGAGEMENTS=quickbooks`) and no `quickbooks product found` lines.
+- [x] Decision 55: the agent keeps its own copy of the engagements -- taken on the day's first run, again when an email or a timesheet does not match it, and on Kevin's "try again"; the rates of the engagement in hand are still asked for when its timesheet is read, including for an item made earlier; QuickBooks that cannot be asked, an unknown address, a timesheet that cannot be placed and rates that cannot be confirmed each email Kevin with the replies that work ("try again", "this is from ...", "ignore"), and close by themselves where they can (tested, no network).
+- [ ] **Needs a person:** on the real machine with `FOPS_ENGAGEMENTS=quickbooks`, `data/fops.log` shows `taking a fresh copy of the engagements from quickbooks` once on the day's first run and not on later runs that day, and no `quickbooks product found` lines on runs over an empty mailbox.
+- [ ] **Needs a person:** Kevin receives one of the new emails for real -- for example a test timesheet sent from an address not in QuickBooks -- reads it, replies "try again" after adding the address to the vendor in QuickBooks, and the timesheet is then handled. He says whether the wording made it clear what to do.
 
 ## Later, if wanted
 

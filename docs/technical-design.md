@@ -7,12 +7,13 @@ For the people (and coding agents) building the agent. The business behaviour is
 One small Python program that does a run every 15 minutes. In production it runs as a container on a small always-on server (`fops serve`); for the first real-life test it runs from a Mac (`fops run` on a launchd timer). It never depends on anyone's personal computer being on (decision 22). Each run:
 
 1. reads new mail from the agent mailbox since the last run;
-2. loads the engagement list and validates it -- in QuickBooks mode only when there is mail to handle or the day's look for ended billing periods is still to do, since building it there means asking QuickBooks about every engagement (decision 54);
+2. loads the engagement list and validates it -- in QuickBooks mode from the agent's own copy, taken on the day's first run and again when an email or a timesheet does not match it (decision 55);
 3. once a day, notes every billing period that has ended with no timesheet yet;
-4. for each new email: decides what it is (timesheet, Kevin's reply, client reply, other), stores it and its attachments, and processes it through the checks;
-5. sends whatever emails are due (details for records, review requests, approval requests, billing emails, payment instructions);
-6. once a day, asks QuickBooks Online which of our invoices are paid; on Mondays, sends the summary;
-7. rewrites `tracking.xlsx`.
+4. for each new email: decides what it is (timesheet, Kevin's reply, client reply, other), stores it and its attachments, and processes it through the checks, asking QuickBooks for the rates of that one engagement;
+5. looks again at emails it set aside, where Kevin has answered or the address is now known;
+6. sends whatever emails are due (details for records, review requests, approval requests, billing emails, payment instructions);
+7. once a day, asks QuickBooks Online which of our invoices are paid; on Mondays, sends the summary;
+8. rewrites `tracking.xlsx`.
 
 A run over an empty mailbox, once the day's look is done, asks QuickBooks nothing.
 
