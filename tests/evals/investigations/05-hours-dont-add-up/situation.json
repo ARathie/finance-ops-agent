@@ -1,0 +1,28 @@
+{
+  "description": "The printed total (160.00) and the daily hours (152.00) disagree. The tools cannot say which is right; only Kevin can.",
+  "items": [
+    {
+      "key": "priya",
+      "consultant": "Priya Shah",
+      "client": "Acme Corp",
+      "period_start": "2026-08-01",
+      "period_end": "2026-08-31",
+      "status": "needs_review",
+      "client_code": "AC",
+      "consultant_code": "PS"
+    }
+  ],
+  "review": {
+    "item": "priya",
+    "code": "HOURS_DONT_ADD_UP",
+    "message": "The daily hours don't add up to the total."
+  },
+  "what_i_read": [
+    "Consultant: Priya Shah",
+    "Client: Acme Corp",
+    "Period: Aug 1–31, 2026",
+    "Total hours printed: 160.00",
+    "Daily hours add up to: 152.00",
+    "Approval: approved by Jane Doe on 9/2"
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "investigation": {
+    "found": "The agent's records say invoice 053125IS-SA was sent, but QuickBooks has no invoice with that id. It is most likely from testing in the QuickBooks sandbox, under iStream, the client's old name.",
+    "evidence": [
+      "the agent recorded invoice 053125IS-SA as QuickBooks id 153",
+      "QuickBooks has no invoice with id 153"
+    ],
+    "proposals": [
+      {
+        "what_to_do": "If it was a test, have the operator remove the agent's record with `uv run fops forget 1 --force`.",
+        "reply_to_choose": "",
+        "why": "Nothing real was billed."
+      },
+      {
+        "what_to_do": "If it was a real invoice someone deleted, make it again in QuickBooks first, then tell the operator.",
+        "reply_to_choose": "",
+        "why": "The client really was billed."
+      }
+    ],
+    "sure": false
+  },
+  "calls": [
+    {
+      "name": "describe_item",
+      "arguments": {
+        "item_id": 1
+      },
+      "ok": true
+    },
+    {
+      "name": "check_recorded_invoices",
+      "arguments": {},
+      "ok": true
+    }
+  ]
+}

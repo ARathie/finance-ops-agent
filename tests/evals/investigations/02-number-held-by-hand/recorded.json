@@ -1,0 +1,39 @@
+{
+  "investigation": {
+    "found": "QuickBooks already has an invoice numbered 083126MT-MK that someone made by hand; it carries none of the agent's notes. It may be Manoj's August invoice entered manually, in which case making another would bill August twice.",
+    "evidence": [
+      "invoice 083126MT-MK has no note naming one of the agent's items",
+      "it is for MasTec North America, Inc., dated 2026-09-29"
+    ],
+    "proposals": [
+      {
+        "what_to_do": "Check invoice 083126MT-MK in QuickBooks. If it is Manoj's August invoice made by hand, nothing more is needed here.",
+        "reply_to_choose": "ignore",
+        "why": "If August was already billed by hand."
+      },
+      {
+        "what_to_do": "If it is something else, make this one under a new number.",
+        "reply_to_choose": "use 083126MT-MK-revised",
+        "why": "If the two are different work."
+      }
+    ],
+    "sure": false
+  },
+  "calls": [
+    {
+      "name": "describe_item",
+      "arguments": {
+        "item_id": 1
+      },
+      "ok": true
+    },
+    {
+      "name": "explain_invoice_number",
+      "arguments": {
+        "number": "083126MT-MK",
+        "item_id": 1
+      },
+      "ok": true
+    }
+  ]
+}

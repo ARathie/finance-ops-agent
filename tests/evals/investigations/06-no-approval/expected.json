@@ -1,0 +1,16 @@
+{
+  "must_call_any": [
+    "describe_item"
+  ],
+  "found_mentions": [
+    [
+      "approv"
+    ]
+  ],
+  "replies_wanted": [
+    [
+      "approved by .+",
+      "ignore"
+    ]
+  ]
+}

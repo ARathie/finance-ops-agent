@@ -1,0 +1,30 @@
+{
+  "investigation": {
+    "found": "The timesheet shows no sign that the client approved Priya's August hours, and nothing in the records says otherwise.",
+    "evidence": [
+      "approval: none shown"
+    ],
+    "proposals": [
+      {
+        "what_to_do": "If the client approved these hours by email or phone, say who and when.",
+        "reply_to_choose": "approved by <name> on <date>",
+        "why": "The approval happened outside the timesheet."
+      },
+      {
+        "what_to_do": "If they are not approved yet, wait; nothing is billed until they are.",
+        "reply_to_choose": "",
+        "why": "The hours still need the client's approval."
+      }
+    ],
+    "sure": true
+  },
+  "calls": [
+    {
+      "name": "describe_item",
+      "arguments": {
+        "item_id": 1
+      },
+      "ok": true
+    }
+  ]
+}

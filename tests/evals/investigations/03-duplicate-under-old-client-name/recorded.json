@@ -1,0 +1,41 @@
+{
+  "investigation": {
+    "found": "The number is already on the invoice the agent made for the same work: Manoj's August timesheet was also recorded under the client's old name, MasTec, and that invoice is waiting for your approval. Making a second invoice would bill August twice.",
+    "evidence": [
+      "invoice 083126MT-MK belongs to the August item for Manoj at MasTec, waiting for approval",
+      "this item is Manoj at MasTec North America, Inc. for the same August period"
+    ],
+    "proposals": [
+      {
+        "what_to_do": "Treat this one as the duplicate, and approve or cancel the waiting invoice from its own approval email.",
+        "reply_to_choose": "ignore",
+        "why": "Both items are the same August work."
+      }
+    ],
+    "sure": true
+  },
+  "calls": [
+    {
+      "name": "describe_item",
+      "arguments": {
+        "item_id": 2
+      },
+      "ok": true
+    },
+    {
+      "name": "explain_invoice_number",
+      "arguments": {
+        "number": "083126MT-MK",
+        "item_id": 2
+      },
+      "ok": true
+    },
+    {
+      "name": "describe_item",
+      "arguments": {
+        "item_id": 1
+      },
+      "ok": true
+    }
+  ]
+}

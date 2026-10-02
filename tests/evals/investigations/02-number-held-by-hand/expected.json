@@ -1,0 +1,26 @@
+{
+  "must_call_any": [
+    "explain_invoice_number",
+    "describe_item"
+  ],
+  "found_mentions": [
+    [
+      "by hand",
+      "not made by",
+      "someone",
+      "manually",
+      "outside"
+    ]
+  ],
+  "found_must_not": [
+    "forgot",
+    "removed with"
+  ],
+  "replies_wanted": [
+    [
+      "use 083126mt-mk-\\S+",
+      "try again",
+      "ignore"
+    ]
+  ]
+}

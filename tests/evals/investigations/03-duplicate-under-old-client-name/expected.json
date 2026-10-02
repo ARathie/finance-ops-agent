@@ -1,0 +1,27 @@
+{
+  "must_call_any": [
+    "explain_invoice_number",
+    "describe_item",
+    "list_items"
+  ],
+  "found_mentions": [
+    [
+      "same",
+      "duplicate",
+      "twice",
+      "already"
+    ],
+    [
+      "mastec"
+    ]
+  ],
+  "replies_wanted": [
+    [
+      "ignore"
+    ]
+  ],
+  "replies_forbidden": [
+    "use \\S+"
+  ],
+  "sure": true
+}

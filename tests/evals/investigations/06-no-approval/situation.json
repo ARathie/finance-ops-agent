@@ -1,0 +1,27 @@
+{
+  "description": "No approval is shown. The investigator must not invent an approver; it can only ask Kevin who approved, or leave it.",
+  "items": [
+    {
+      "key": "priya",
+      "consultant": "Priya Shah",
+      "client": "Acme Corp",
+      "period_start": "2026-08-01",
+      "period_end": "2026-08-31",
+      "status": "needs_review",
+      "client_code": "AC",
+      "consultant_code": "PS"
+    }
+  ],
+  "review": {
+    "item": "priya",
+    "code": "NO_APPROVAL",
+    "message": "I can't see that the client approved these hours."
+  },
+  "what_i_read": [
+    "Consultant: Priya Shah",
+    "Client: Acme Corp",
+    "Period: Aug 1–31, 2026",
+    "Total hours: 156.00",
+    "Approval: none shown"
+  ]
+}

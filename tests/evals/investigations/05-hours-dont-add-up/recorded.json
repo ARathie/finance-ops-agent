@@ -1,0 +1,31 @@
+{
+  "investigation": {
+    "found": "The timesheet prints a total of 160.00 hours, but its daily hours add up to 152.00. One of the two is wrong, and nothing in the records says which.",
+    "evidence": [
+      "printed total 160.00 hours",
+      "daily hours add up to 152.00"
+    ],
+    "proposals": [
+      {
+        "what_to_do": "If the daily hours are right, bill 152 hours.",
+        "reply_to_choose": "use 152 hours",
+        "why": "The days are usually what the client approved."
+      },
+      {
+        "what_to_do": "If the printed total is right, bill 160 hours.",
+        "reply_to_choose": "use 160 hours",
+        "why": "If a day is missing from the list."
+      }
+    ],
+    "sure": false
+  },
+  "calls": [
+    {
+      "name": "describe_item",
+      "arguments": {
+        "item_id": 1
+      },
+      "ok": true
+    }
+  ]
+}

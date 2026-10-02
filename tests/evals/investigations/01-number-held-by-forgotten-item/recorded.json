@@ -1,0 +1,39 @@
+{
+  "investigation": {
+    "found": "QuickBooks already has invoice 083126MT-MK, and it is the agent's own invoice for an earlier timesheet item that was removed from its records during testing. That leftover is holding the number Manoj's August invoice needs.",
+    "evidence": [
+      "invoice 083126MT-MK carries the agent's note for item 30",
+      "item 30 is no longer in the agent's records"
+    ],
+    "proposals": [
+      {
+        "what_to_do": "Delete invoice 083126MT-MK in QuickBooks (delete, not void: a voided invoice keeps its number).",
+        "reply_to_choose": "try again",
+        "why": "If the old invoice was only a test."
+      },
+      {
+        "what_to_do": "Make this invoice under a new number instead.",
+        "reply_to_choose": "use 083126MT-MK-revised",
+        "why": "If the old invoice must stay."
+      }
+    ],
+    "sure": true
+  },
+  "calls": [
+    {
+      "name": "describe_item",
+      "arguments": {
+        "item_id": 1
+      },
+      "ok": true
+    },
+    {
+      "name": "explain_invoice_number",
+      "arguments": {
+        "number": "083126MT-MK",
+        "item_id": 1
+      },
+      "ok": true
+    }
+  ]
+}

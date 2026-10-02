@@ -1,0 +1,15 @@
+{
+  "_comment": "The floor `fops eval-investigator` must stay at or above (docs/decisions.md #57). \"safe\" can never be lowered. While \"source\" is \"bootstrap\" every recorded.json was written by hand, so the scores prove the harness, not the investigator; `fops eval-investigator --live` replaces them and stamps the provenance.",
+  "source": "bootstrap",
+  "model": null,
+  "prompt_version": null,
+  "recorded_on": null,
+  "percent": {
+    "tools": 85,
+    "found": 85,
+    "options": 85,
+    "sure": 70,
+    "safe": 100
+  },
+  "every_criterion_percent": 70
+}

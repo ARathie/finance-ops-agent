@@ -28,6 +28,7 @@ from finance_ops_agent.domain.emails import format_period
 from finance_ops_agent.domain.engagements import EngagementWorkbook
 from finance_ops_agent.domain.investigation import Investigation, Proposal, without_money
 from finance_ops_agent.domain.items import OutgoingRecord, ReviewRecord
+from finance_ops_agent.ports.looking import StoreToLookAt
 
 MAX_PER_RUN = 3  # a run with more stuck items sends the rest as they are
 MAX_PROPOSALS = 3
@@ -72,9 +73,11 @@ def _section(investigation: Investigation, proposals: list[Proposal]) -> str:
     return "\n".join(lines)
 
 
-def _problem(deps: RunDeps, record: OutgoingRecord, reviews: list[ReviewRecord]) -> str:
+def problem_for(store: StoreToLookAt, record: OutgoingRecord, reviews: list[ReviewRecord]) -> str:
+    """What the investigator is told: the item, the questions, and the email as
+    written so far, with every amount masked. The eval builds it the same way."""
     assert record.item_id is not None
-    item = deps.store.get_item(record.item_id)
+    item = store.get_item(record.item_id)
     asked = "\n".join(f"- [{review.code}] {review.message}" for review in reviews)
     return without_money(
         f"The stuck item is item {item.id}: {item.consultant} at {item.client},"
@@ -109,7 +112,7 @@ def investigate_pending_reviews(
             return
         looked += 1
         toolbox = ReadOnlyToolbox(looking_at(deps, workbook))
-        result = deps.investigator.investigate(_problem(deps, record, reviews), toolbox)
+        result = deps.investigator.investigate(problem_for(deps.store, record, reviews), toolbox)
         payload = dict(record.payload)
         if result is None:
             payload["investigated"] = "no answer"

@@ -232,6 +232,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="overwrite a data folder that is not empty",
     )
 
+    investigator_eval = commands.add_parser(
+        "eval-investigator",
+        help="score the investigator against made-up stuck situations (decision 57)",
+    )
+    investigator_eval.add_argument("--cases", type=Path, default=Path("tests/evals/investigations"))
+    investigator_eval.add_argument(
+        "--thresholds", type=Path, default=Path("tests/evals/investigations/thresholds.json")
+    )
+    investigator_eval.add_argument(
+        "--live",
+        action="store_true",
+        help="call the real model (costs money; needs ANTHROPIC_API_KEY)"
+        " and overwrite each case's recorded.json",
+    )
+
     evaluate = commands.add_parser(
         "eval", help="score the timesheet reader against the made-up test set"
     )
@@ -1289,6 +1304,10 @@ def main(argv: list[str] | None = None) -> int:
         return _command_status(args)
     if args.command == "eval":
         return _command_eval(args)
+    if args.command == "eval-investigator":
+        from finance_ops_agent.cli.investigation_eval import run_investigator_eval
+
+        return run_investigator_eval(args)
     if args.command == "doctor":
         return _command_doctor(args)
     if args.command == "run":
