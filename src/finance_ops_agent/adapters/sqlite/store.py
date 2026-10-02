@@ -322,6 +322,13 @@ class SqliteStore:
             )
             return [self._stored_message(session, row) for row in rows]
 
+    def has_message(self, message_id: str) -> bool:
+        with Session(self._engine) as session:
+            found = session.scalars(
+                select(MessageRow.id).where(MessageRow.message_id == message_id)
+            ).first()
+            return found is not None
+
     def mark_processed(self, message_id: str) -> None:
         with Session(self._engine) as session, session.begin():
             row = session.scalars(

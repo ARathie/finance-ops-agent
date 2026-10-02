@@ -219,6 +219,8 @@ It is a testing tool. It refuses an item whose invoice actually reached the clie
 
 Two things it does not do. The timesheet file itself is still in whichever mailbox folder the agent moved it to (`INBOX.Agent.Processed`), so move it back to the inbox or forward a fresh copy to send it through again. And the stored attachment files under `data/` stay where they are: they are named by their contents, nothing points at them once the rows are gone, and deleting one another item shares would be worse than leaving an orphan.
 
+Run the forget first, **then** move the email back. An email moved back while the agent still has it on record is skipped as already handled, and the agent reads past it. `fops diagnose` says when that has happened and what to do.
+
 Take a backup first. `fops backup` writes `data/backups/fops-backup-YYYY-MM-DD.zip` containing everything the agent cannot rebuild: the database, the stored timesheets and invoice PDFs, the QuickBooks tokens, and the mailbox position. It checkpoints the database first, so the copy is complete rather than missing the last few minutes of work.
 
 - In stage 2, `fops serve` runs the backup nightly and uploads it to the bucket in `FOPS_BACKUP_TARGET`; daily backups are kept 90 days and the first of each month forever (financial records). In stage 1, copy the zip somewhere off the Mac; if that is OneDrive or SharePoint, turn **Files On Demand off** for that folder, or the "backup" is a placeholder that points at the machine you are backing up.
@@ -236,7 +238,14 @@ Take a backup first. `fops backup` writes `data/backups/fops-backup-YYYY-MM-DD.z
 ## When something looks wrong
 
 1. `fops doctor` (in stage 2: `docker compose exec fops fops doctor`): settings, engagement list, database, the mailbox login, QuickBooks, the heartbeat URL, the backup target. Sends nothing to a client. A failing QuickBooks check is something set up in the QuickBooks web app rather than anything on the server; `quickbooks-setup.md` says what each one wants, and the doctor names it on the way out.
-2. `fops status`: every item, its status, and the open reviews.
-3. `tail -50 data/fops.log`, or `docker compose logs --tail 50`: what the last runs did.
-4. Nothing in the log for an hour, or a heartbeat alert? In stage 2: `docker compose ps` (is the container up?), disk space (`df -h`), and whether Rackspace is reachable from the server. In stage 1: the Mac went to sleep, logged out, or the launchd job is not loaded (`launchctl print`).
-5. If you need the agent to stop acting immediately, set `FOPS_MODE=dry_run` in `.env` and restart (`docker compose up -d`, or just wait for the next launchd run). The next run reads and reports but sends nothing.
+2. `fops diagnose`: what is stuck and why, in plain words, with what to do about each one. It changes nothing. It covers:
+   - invoices in the agent's records that QuickBooks does not have. This is what makes "could not check paid invoices" appear on every run.
+   - who holds an invoice number QuickBooks refused as a duplicate: the agent's own invoice for a forgotten item, another item, or one made by hand.
+   - emails in the inbox the next run will not read, and why: already handled, dated before the mail start date, or already read past.
+   - items that match no engagement any more, and engagements waiting on suspiciously many months.
+
+   `fops diagnose --item 6` shows everything about one item: its invoices, reviews, emails and history. `fops diagnose --number 083126MT-MK` says which QuickBooks invoice holds a number and whose work it is. `--no-mail` skips the inbox.
+3. `fops status`: every item, its status, and the open reviews.
+4. `tail -50 data/fops.log`, or `docker compose logs --tail 50`: what the last runs did.
+5. Nothing in the log for an hour, or a heartbeat alert? In stage 2: `docker compose ps` (is the container up?), disk space (`df -h`), and whether Rackspace is reachable from the server. In stage 1: the Mac went to sleep, logged out, or the launchd job is not loaded (`launchctl print`).
+6. If you need the agent to stop acting immediately, set `FOPS_MODE=dry_run` in `.env` and restart (`docker compose up -d`, or just wait for the next launchd run). The next run reads and reports but sends nothing.

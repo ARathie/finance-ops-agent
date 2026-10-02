@@ -43,11 +43,14 @@ from finance_ops_agent.ports.accounting import (
     CreatedInvoice,
     EngagementListing,
     EngagementRates,
+    InvoiceLookup,
 )
 
 PRIVATE_NOTE_PREFIX = "fops item"
 # What QuickBooks says when another invoice already holds the number asked for.
 _DUPLICATE_NUMBER = ("6140", "Duplicate Document Number")
+# What QuickBooks says when asked for an invoice it does not have.
+_NOT_FOUND = ('"code":"610"', "Object Not Found")
 # A sentinel for "not asked yet", because "asked, and the company has no
 # default" is a real and different answer that must not be asked again.
 _UNREAD: Any = object()
@@ -107,6 +110,19 @@ def _escape(value: str) -> str:
 def _cents(amount: Any) -> int:
     """QuickBooks sends money as a JSON number; compare in whole cents only."""
     return round(float(amount) * 100)
+
+
+def _lookup_from(row: dict[str, Any]) -> InvoiceLookup:
+    customer = row.get("CustomerRef") or {}
+    return InvoiceLookup(
+        external_id=str(row.get("Id", "")),
+        number=str(row.get("DocNumber") or ""),
+        total_cents=_cents(row.get("TotalAmt", 0)),
+        balance_cents=_cents(row.get("Balance", 0)),
+        customer=_clean(customer.get("name")) if isinstance(customer, dict) else "",
+        item_id=item_id_from_note(str(row.get("PrivateNote") or "")),
+        issued=str(row.get("TxnDate") or ""),
+    )
 
 
 def client_names(invoice: Invoice) -> list[str]:
@@ -745,6 +761,24 @@ class QuickBooksOnline:
             invoice = raw.get("Invoice", raw)
             paid[external_id] = _cents(invoice.get("Balance", 0)) == 0
         return paid
+
+    # --- looking, for diagnosis (docs/decisions.md #55); never writes ---
+
+    can_look_up_invoices = True
+
+    def invoice_lookup(self, external_id: str) -> InvoiceLookup | None:
+        try:
+            raw = self._client.get(self.company_url(f"/invoice/{external_id}"))
+        except QuickBooksFailed as error:
+            # 610 is "Object Not Found": deleted, or never in this company.
+            if any(marker in str(error) for marker in _NOT_FOUND):
+                return None
+            raise
+        return _lookup_from(raw.get("Invoice", raw))
+
+    def invoices_numbered(self, number: str) -> list[InvoiceLookup]:
+        rows = self._client.query(f"SELECT * FROM Invoice WHERE DocNumber = '{_escape(number)}'")
+        return [_lookup_from(row) for row in rows]
 
     def remaining_balance(self, external_id: str) -> Money:
         raw = self._client.get(self.company_url(f"/invoice/{external_id}"))

@@ -15,6 +15,7 @@ from finance_ops_agent.ports.accounting import (
     CreatedInvoice,
     EngagementListing,
     EngagementRates,
+    InvoiceLookup,
 )
 
 
@@ -41,6 +42,10 @@ class FakeAccounting:
         self.payees: dict[str, AccountingParty] = {}
         # Numbers another invoice already holds, as a leftover in QuickBooks would.
         self.taken_numbers: set[str] = set()
+        # Invoices someone made outside the agent, or that outlived the item
+        # they were made for, as QuickBooks would hold them. Keyed by id.
+        self.other_invoices: dict[str, InvoiceLookup] = {}
+        self.lookups: list[str] = []  # what diagnosis asked, so tests can see it
         self.create_attempts = 0
         self._counter = 0
 
@@ -106,3 +111,32 @@ class FakeAccounting:
             raise self.fail_with
         self.asked.extend(external_ids)
         return {external_id: external_id in self.paid for external_id in external_ids}
+
+    can_look_up_invoices = True
+
+    def _held(self) -> list[InvoiceLookup]:
+        held = list(self.other_invoices.values())
+        for item_id, created in self.invoices.items():
+            held.append(
+                InvoiceLookup(
+                    external_id=created.external_id,
+                    number=self.renamed.get(created.external_id, created.number),
+                    total_cents=0 if created.external_id in self.cancelled else 1,
+                    balance_cents=0 if created.external_id in self.paid else 1,
+                    customer="",
+                    item_id=item_id,
+                )
+            )
+        return held
+
+    def invoice_lookup(self, external_id: str) -> InvoiceLookup | None:
+        self.lookups.append(external_id)
+        if self.fail_with is not None:
+            raise self.fail_with
+        return next((held for held in self._held() if held.external_id == external_id), None)
+
+    def invoices_numbered(self, number: str) -> list[InvoiceLookup]:
+        self.lookups.append(number)
+        if self.fail_with is not None:
+            raise self.fail_with
+        return [held for held in self._held() if held.number == number]

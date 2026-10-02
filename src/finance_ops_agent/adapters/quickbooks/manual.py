@@ -12,7 +12,7 @@ is the same question QuickBooksOnline answers by reading the private note.
 from collections.abc import Sequence
 
 from finance_ops_agent.domain.invoices import Invoice
-from finance_ops_agent.ports.accounting import CreatedInvoice, EngagementListing
+from finance_ops_agent.ports.accounting import CreatedInvoice, EngagementListing, InvoiceLookup
 from finance_ops_agent.ports.pdf import PdfRenderer
 from finance_ops_agent.ports.store import Store
 
@@ -66,3 +66,13 @@ class ManualQuickBooks:
     def paid_status(self, external_ids: list[str]) -> dict[str, bool]:
         # Manual mode cannot see payments; QuickBooks Online (PR 9) can.
         return dict.fromkeys(external_ids, False)
+
+    # Nothing to look up: the agent's own records are the only copy, so there
+    # is nothing for them to disagree with (docs/decisions.md #55).
+    can_look_up_invoices = False
+
+    def invoice_lookup(self, external_id: str) -> InvoiceLookup | None:
+        return None
+
+    def invoices_numbered(self, number: str) -> list[InvoiceLookup]:
+        return []

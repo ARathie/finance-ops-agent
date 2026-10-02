@@ -367,6 +367,55 @@ class TestReading:
         assert subjects_in(env.server, AGENT, f"Agent.{PROCESSED_FOLDER}") == ["August timesheet"]
 
 
+class TestLookingAtTheInbox:
+    """`fops diagnose` asks which inbox mail the next run will read, on a real
+    IMAP server, and looking changes nothing (decision 55)."""
+
+    def test_mail_already_read_past_is_told_apart_from_new_mail(self, env: Env) -> None:
+        deliver(env.server, timesheet_email(message_id="<one@example>"))
+        inbox = env.inbox()
+        _, position = inbox.new_messages(None)
+        deliver(env.server, timesheet_email(message_id="<two@example>", subject="Second"))
+
+        listing = inbox.inbox_listing(position)
+
+        assert [(e.message_id, e.after_position) for e in listing] == [
+            ("<one@example>", False),
+            ("<two@example>", True),
+        ]
+        # Looking moved nothing and read nothing: the run still finds the new one.
+        emails, _ = inbox.new_messages(position)
+        assert [email.message_id for email in emails] == ["<two@example>"]
+        assert subjects_in(env.server, AGENT) == ["August timesheet", "Second"]
+
+    def test_an_email_moved_back_in_is_new_again(self, env: Env) -> None:
+        """Moving it out and back gives it a new UID, which is why that works."""
+        deliver(env.server, timesheet_email())
+        inbox = env.inbox()
+        _, position = inbox.new_messages(None)
+        inbox.move("<aug@example>", PROCESSED_FOLDER)
+        client = open_imap(env.server.account())
+        try:
+            client.select_folder(f"Agent.{PROCESSED_FOLDER}")
+            client.move(client.search(["ALL"]), "INBOX")
+        finally:
+            client.logout()
+
+        [entry] = inbox.inbox_listing(position)
+
+        assert entry.after_position
+
+    def test_mail_before_the_start_date_is_flagged(self, env: Env) -> None:
+        deliver(env.server, timesheet_email())
+        tomorrow = date.today() + timedelta(days=1)
+        inbox = ImapInbox(env.server.account(), AGENT, tomorrow)
+
+        [entry] = inbox.inbox_listing(None)
+
+        assert entry.after_position
+        assert not entry.on_or_after_start
+
+
 class TestFolders:
     """Folder names follow the server: its delimiter, and whether everything
     lives under INBOX. Real servers differ (Rackspace uses "/" at the top level,

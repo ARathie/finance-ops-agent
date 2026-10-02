@@ -2,7 +2,7 @@
 
 from typing import Protocol
 
-from finance_ops_agent.domain.messages import InboundEmail
+from finance_ops_agent.domain.messages import InboundEmail, InboxEntry
 
 NEEDS_REVIEW_FOLDER = "Needs Review"
 PROCESSED_FOLDER = "Processed"
@@ -23,4 +23,10 @@ class EmailInbox(Protocol):
     def move(self, message_id: str, folder: str) -> None:
         """Move the message into the agent's folder of that name. A courtesy for
         a human looking at the mailbox; the database is the record."""
+        ...
+
+    def inbox_listing(self, position: str | None) -> list[InboxEntry]:
+        """Every message in the inbox now, read without changing anything, and
+        whether the next run will pick each one up from `position`. For
+        `fops diagnose`; a run never calls it."""
         ...

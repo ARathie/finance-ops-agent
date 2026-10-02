@@ -138,6 +138,24 @@ class CreatedInvoice:
     pdf: bytes
 
 
+@dataclass(frozen=True)
+class InvoiceLookup:
+    """An invoice as the accounting system holds it right now.
+
+    For diagnosis only (docs/decisions.md #55). `item_id` is the agent's own
+    item, read from the marker it writes on every invoice it makes; None means
+    the invoice carries no such marker, so someone made it by hand.
+    """
+
+    external_id: str
+    number: str
+    total_cents: int
+    balance_cents: int
+    customer: str
+    item_id: int | None
+    issued: str = ""  # the invoice date as the accounting system writes it
+
+
 class AccountingSystem(Protocol):
     def create_invoice(self, invoice: Invoice, item_id: int) -> CreatedInvoice:
         """Create the invoice under the number it already carries, and return
@@ -187,3 +205,18 @@ class AccountingSystem(Protocol):
         ...
 
     def paid_status(self, external_ids: list[str]) -> dict[str, bool]: ...
+
+    @property
+    def can_look_up_invoices(self) -> bool:
+        """Whether there is an accounting system to ask. Manual mode says no:
+        its invoices live only in the agent's own records."""
+        ...
+
+    def invoice_lookup(self, external_id: str) -> InvoiceLookup | None:
+        """The invoice the accounting system knows by this id, or None if it
+        has no such invoice (deleted, or made in a different company)."""
+        ...
+
+    def invoices_numbered(self, number: str) -> list[InvoiceLookup]:
+        """Every invoice holding this number, voided ones included."""
+        ...

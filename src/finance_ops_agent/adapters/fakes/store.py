@@ -154,6 +154,9 @@ class FakeStore:
         self._items[item_id] = changed
         return changed
 
+    def has_message(self, message_id: str) -> bool:
+        return message_id in self._messages
+
     def record_message(self, message: StoredMessage, files: dict[str, bytes]) -> bool:
         if message.message_id in self._messages:
             return False

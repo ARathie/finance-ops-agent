@@ -551,3 +551,25 @@ Decision: **a reply is read for what Kevin asks, in whatever words he uses, and 
 - **`show_me_first` holds back an automatic invoice.** In automatic mode that item goes to Kevin for approval like any other in ask first.
 
 What this departs from: decision 9's "approvals must start with `approve` or `cancel`". The plain word still works exactly as before. The new path adds to it and gives way to it.
+
+## 55. Diagnosis is read-only, typed so, and written to become an agent's tools
+
+Every dead end in the first live cycle was a diagnosis problem, not a reading problem, and each one was worked out by hand:
+
+- an invoice in the agent's records that only ever existed in the sandbox, which made the daily paid check fail on every run;
+- a number QuickBooks refused as a duplicate, which turned out to be the agent's own invoice for an item that had been forgotten;
+- an email moved back into the inbox that the agent would never read, once because it had already read past it, and once because it was dated before the mail start date;
+- items left from testing under old client names, and sixteen months of one consultant's timesheets expected because the engagement's start date was a year early.
+
+Decision: **a diagnosis layer that only reads**, in `application/diagnosis.py`, run today by `fops diagnose`. It is the first step towards an agent that investigates a stuck item on its own. It comes first because it is useful by itself and cannot do harm.
+
+- **Read-only by type, not by promise.** Diagnosis is written against `ports/looking.py`: the read half of the store, two lookups on the accounting system, and an inbox listing. `mypy --strict` refuses a write from it. A scenario test also runs every check through stand-ins that fail on any write, and confirms the records, the mailbox position and the mail folders are unchanged.
+- **New reads, all side-effect free.**
+  - `invoice_lookup` and `invoices_numbered` on the accounting port. In QuickBooks these are GETs only, and error 610 means "no such invoice", which is not a failure.
+  - `inbox_listing` on the inbox port: BODY.PEEK and a read-only select, so no read flags, folders or position change.
+  - `has_message` on the store.
+  - Manual mode has nothing to look up, and says so with `can_look_up_invoices = False`.
+- **Each finding says what is the case and what a person can do**, in plain words with the exact command. Findings are not review codes: nothing here opens a review or emails Kevin. When an agent exists, deciding what to tell him will be its job.
+- **Shaped as tools.** Each check takes plain arguments (an item id, a number) and returns plain data. An agent loop can call them as they are.
+
+Not decided here: the agent itself, what it may change, and when it runs. Those need their own decision, and they change rule 7 ("Claude reads; code decides"). What this one guarantees is that whatever an agent does with these tools, the tools cannot change anything.

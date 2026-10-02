@@ -1705,3 +1705,51 @@ class TestTheEngagementsFromQuickBooksAlone:
         (problem,) = built.problems
         assert "Dana Cruz" in problem.message
         assert "Start:" in problem.message
+
+
+class TestLookingUpInvoices:
+    """Read-only lookups for `fops diagnose` (decision 55)."""
+
+    def test_an_invoice_it_has_names_the_item_it_was_made_for(self, tmp_path: Path) -> None:
+        replay = replay_from("invoice_lookups")
+        accounting, _, _ = build(replay, tmp_path)
+
+        held = accounting.invoice_lookup("146")
+
+        assert held is not None
+        assert (held.number, held.item_id, held.customer) == ("083126AC-PS", 30, "Acme Corporation")
+        assert (held.total_cents, held.balance_cents, held.issued) == (
+            2_184_000,
+            2_184_000,
+            "2026-09-03",
+        )
+
+    def test_an_invoice_it_does_not_have_is_none_not_a_failure(self, tmp_path: Path) -> None:
+        """Error 610 is the answer the paid check kept failing on: production
+        QuickBooks asked for an invoice id that only ever existed in the sandbox."""
+        replay = replay_from("invoice_lookups")
+        accounting, _, _ = build(replay, tmp_path)
+
+        assert accounting.invoice_lookup("153") is None
+
+    def test_every_invoice_holding_a_number_voided_ones_included(self, tmp_path: Path) -> None:
+        replay = replay_from("invoice_lookups")
+        accounting, _, _ = build(replay, tmp_path)
+
+        held = accounting.invoices_numbered("083126AC-PS")
+
+        assert [(h.external_id, h.item_id, h.total_cents) for h in held] == [
+            ("146", 30, 2_184_000),
+            ("201", None, 0),
+        ]
+        assert accounting.invoices_numbered("083126AC-XX") == []
+
+    def test_looking_never_writes(self, tmp_path: Path) -> None:
+        replay = replay_from("invoice_lookups")
+        accounting, _, _ = build(replay, tmp_path)
+
+        accounting.invoice_lookup("146")
+        accounting.invoice_lookup("153")
+        accounting.invoices_numbered("083126AC-PS")
+
+        assert {method for method, _ in replay.calls} == {"GET"}

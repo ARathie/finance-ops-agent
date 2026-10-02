@@ -203,6 +203,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="forget it even though its invoice reached the client",
     )
 
+    diagnose = commands.add_parser(
+        "diagnose",
+        help="say what is stuck and why, changing nothing: invoices QuickBooks does not"
+        " have, numbers already taken, inbox mail that will not be read, leftover items",
+    )
+    diagnose.add_argument("--item", type=int, default=None, help="everything about one item")
+    diagnose.add_argument(
+        "--number", default="", help="which QuickBooks invoice holds this number, and whose it is"
+    )
+    diagnose.add_argument(
+        "--no-mail", action="store_true", help="skip the inbox (no mailbox connection)"
+    )
+
     backup_cmd = commands.add_parser("backup", help="zip the data folder")
     backup_cmd.add_argument(
         "--to",
@@ -1033,6 +1046,49 @@ def _command_forget(args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_diagnose(args: argparse.Namespace) -> int:
+    """Read-only: builds nothing that writes, and never moves the start date."""
+    from finance_ops_agent.adapters.clock import SystemClock
+    from finance_ops_agent.adapters.email.inbox import ImapInbox
+    from finance_ops_agent.application.diagnosis import Looking
+    from finance_ops_agent.application.from_quickbooks import workbook_from_accounting
+    from finance_ops_agent.application.run import MAILBOX_POSITION_KEY
+    from finance_ops_agent.cli.diagnose import run_diagnosis
+    from finance_ops_agent.config import Config, MailSettings
+    from finance_ops_agent.domain.engagements import EngagementWorkbook, parse_workbook
+    from finance_ops_agent.ports.accounting import AccountingFailed
+
+    config = Config.from_env()
+    store = _open_store(config.data_dir)
+    clock = SystemClock(config.timezone)
+    accounting = _accounting(config, store, TextPdfRenderer(), clock.today())
+    inbox = None
+    start_date = None
+    if not args.no_mail:
+        mail = MailSettings.from_env()
+        remembered = store.get_state(START_DATE_KEY)
+        start_date = mail.start_date or (date.fromisoformat(remembered) if remembered else None)
+        inbox = ImapInbox(_mail_account(mail), config.agent_mailbox, start_date)
+    looking = Looking(
+        store=store,
+        accounting=accounting,
+        inbox=inbox,
+        mailbox_position=store.get_state(MAILBOX_POSITION_KEY),
+        mail_start_date=start_date,
+    )
+
+    def workbook() -> EngagementWorkbook | None:
+        try:
+            if config.engagements_from == "quickbooks":
+                return workbook_from_accounting(accounting)
+            return parse_workbook(_engagement_list(config, store).load())
+        except (AccountingFailed, OSError, ValueError) as error:
+            print(f"(could not read the engagements, so items were not checked: {error})")
+            return None
+
+    return run_diagnosis(args, looking, workbook)
+
+
 def _command_backup(args: argparse.Namespace) -> int:
     from finance_ops_agent.application.backup import back_up
     from finance_ops_agent.config import Config, MissingSettingError
@@ -1243,6 +1299,8 @@ def main(argv: list[str] | None = None) -> int:
         return _command_engagements(args)
     if args.command == "forget":
         return _command_forget(args)
+    if args.command == "diagnose":
+        return _command_diagnose(args)
     if args.command == "backup":
         return _command_backup(args)
     if args.command == "restore":
