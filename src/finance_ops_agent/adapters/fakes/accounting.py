@@ -9,12 +9,14 @@ from collections import Counter
 from collections.abc import Sequence
 
 from finance_ops_agent.domain.invoices import Invoice
+from finance_ops_agent.domain.setup import EngagementSetup
 from finance_ops_agent.ports.accounting import (
     AccountingEngagement,
     AccountingParty,
     CreatedInvoice,
     EngagementListing,
     EngagementRates,
+    SetupDone,
 )
 
 
@@ -31,6 +33,8 @@ class FakeAccounting:
         # Only creating an invoice fails: QuickBooks answered every question
         # about the engagement, then refused the invoice itself.
         self.fail_create_with: Exception | None = None
+        self.fail_setup_with: Exception | None = None
+        self.set_up: list[EngagementSetup] = []  # every setup actually made
         # Keyed by (consultant, client); tests set what the accounting system
         # says an engagement is billed and paid at.
         self.rates: dict[tuple[str, str], EngagementRates] = {}
@@ -116,3 +120,72 @@ class FakeAccounting:
             raise self.fail_with
         self.asked.extend(external_ids)
         return {external_id: external_id in self.paid for external_id in external_ids}
+
+    def set_up_engagement(self, setup: EngagementSetup) -> SetupDone:
+        """Find-or-create, as the real adapter does: a second call after the
+        first succeeded creates nothing more."""
+        self.calls["set_up_engagement"] += 1
+        if self.fail_with is not None:
+            raise self.fail_with
+        if self.fail_setup_with is not None:
+            raise self.fail_setup_with
+        created: list[str] = []
+        reused: list[str] = []
+        if setup.client in self.customers:
+            reused.append(f"customer {setup.client}")
+        else:
+            self.customers[setup.client] = AccountingParty(
+                ref=f"c-{setup.client}",
+                name=setup.client,
+                company=setup.client_legal_name,
+                email=setup.client_email,
+                payment_terms_days=setup.client_pays_within_days,
+                notes=f"Invoice code: {setup.invoice_code}",
+            )
+            created.append(f"customer {setup.client}")
+        vendor_ref = next(
+            (
+                ref
+                for ref, party in self.payees.items()
+                if party.email.casefold() == setup.consultant_email.casefold()
+            ),
+            "",
+        )
+        if vendor_ref:
+            reused.append(f"vendor {setup.consultant}")
+        else:
+            vendor_ref = f"v-{setup.consultant}"
+            self.payees[vendor_ref] = AccountingParty(
+                ref=vendor_ref,
+                name=setup.consultant,
+                company=setup.firm,
+                email=setup.consultant_email,
+                payment_terms_days=setup.pay_within_days,
+            )
+            created.append(f"vendor {setup.consultant}")
+        ref = f"p-{setup.consultant}-{setup.client}"
+        if any(live.ref == ref for live in self.live):
+            reused.append(f"product {setup.client}:{setup.consultant}")
+        else:
+            self.live.append(
+                AccountingEngagement(
+                    ref=ref,
+                    consultant=setup.consultant,
+                    client=setup.client,
+                    bill_rate_cents=setup.bill_rate.cents,
+                    pay_rate_cents=setup.pay_rate.cents,
+                    payee=setup.firm or setup.consultant,
+                    payee_ref=vendor_ref,
+                    notes=f"Start: {setup.start.isoformat()}",
+                )
+            )
+            created.append(f"product {setup.client}:{setup.consultant}")
+        self.rates[(setup.consultant, setup.client)] = EngagementRates(
+            ref=ref,
+            bill_rate_cents=setup.bill_rate.cents,
+            pay_rate_cents=setup.pay_rate.cents,
+            payee=setup.firm or setup.consultant,
+            payee_ref=vendor_ref,
+        )
+        self.set_up.append(setup)
+        return SetupDone(created=created, reused=reused)

@@ -25,22 +25,26 @@ asks: reading it costs a call to Claude, and doing it every day unasked would
 email him the same question every day.
 """
 
+import hashlib
 import json
+import re
+import secrets
 from dataclasses import asdict, dataclass, field
 
 from finance_ops_agent import logs
 from finance_ops_agent.application import engagement_copy
 from finance_ops_agent.application import outgoing as outgoing_steps
-from finance_ops_agent.application.context import RunDeps, RunReport
+from finance_ops_agent.application.context import Mode, RunDeps, RunReport
 from finance_ops_agent.application.engagement_copy import Engagements
 from finance_ops_agent.application.senders import decide_kind
-from finance_ops_agent.domain import checks, emails
+from finance_ops_agent.domain import checks, emails, setup
 from finance_ops_agent.domain.emails import EmailAttachment, TimesheetSummary
-from finance_ops_agent.domain.engagements import Consultant
+from finance_ops_agent.domain.engagements import Consultant, EngagementWorkbook
 from finance_ops_agent.domain.items import OutgoingRecord
 from finance_ops_agent.domain.messages import MessageKind, StoredMessage
 from finance_ops_agent.domain.reading import ReplyAnswerKind
 from finance_ops_agent.domain.review import ReviewCode
+from finance_ops_agent.ports.accounting import AccountingFailed
 
 SET_ASIDE_KEY = "set_aside"
 SENDER_IS_PREFIX = "sender_is:"  # + Message-ID: whose timesheet Kevin said it is
@@ -61,6 +65,13 @@ class SetAside:
     # The other questions the same email raised, as [code, message]: closed
     # with it when it is handled again, since handling it again asks afresh.
     also: list[list[str]] = field(default_factory=list)
+    # Setting it up in QuickBooks (decision 56): what the form was filled in
+    # with, the plan Kevin's answers made, the one-time code he must send back
+    # to confirm it, and whether he has.
+    prefill: dict[str, str] = field(default_factory=dict)
+    setup: dict[str, object] = field(default_factory=dict)
+    confirm_code: str = ""
+    confirmed: bool = False
 
 
 def _load(deps: RunDeps) -> list[SetAside]:
@@ -91,7 +102,23 @@ def sender_is(deps: RunDeps, message_id: str) -> str:
 # --- setting aside ---
 
 
-def _what_you_can_do(code: str) -> list[str]:
+def _can_set_up(deps: RunDeps) -> bool:
+    """Only where the engagements live in QuickBooks: that is where a new one
+    is made, and where the agent will look for it afterwards."""
+    return deps.settings.engagements_from == "quickbooks"
+
+
+def _setup_lines(prefill: dict[str, str]) -> list[str]:
+    return [
+        "To set it up, copy these lines into your reply and fill them in. I'll show",
+        "you exactly what I'll create in QuickBooks, and change nothing until you",
+        "confirm:",
+        "",
+        *setup.form(prefill),
+    ]
+
+
+def _what_you_can_do(code: str, offer_setup: bool = False) -> list[str]:
     if code == ReviewCode.UNKNOWN_SENDER.value:
         where = (
             "Add the address to the consultant's vendor in QuickBooks (or their row in"
@@ -105,6 +132,12 @@ def _what_you_can_do(code: str) -> list[str]:
         lines.append(
             'Reply with who it is from, for example "this is from Priya Shah", and I'
             " will handle it as their timesheet."
+        )
+    if offer_setup:
+        lines.append(
+            "If this is a new consultant, client or engagement -- or one that was"
+            " never put in QuickBooks -- I can set it up for you: fill in the form"
+            " below."
         )
     lines.append('Reply "ignore" if it is not a timesheet; it stays in Needs Review.')
     return lines
@@ -123,6 +156,14 @@ def set_aside(
     """Remember the email and, where it is worth his time, ask Kevin about it.
 
     The review itself is opened by the caller, as every review is."""
+    prefill: dict[str, str] = {}
+    forwarders = {address.casefold() for address in deps.settings.timesheet_forwarders}
+    if message.from_address.casefold() not in forwarders:
+        prefill[setup.CONSULTANT_EMAIL] = message.from_address
+    if summary is not None and summary.consultant != "unclear":
+        prefill[setup.CONSULTANT] = summary.consultant
+    if summary is not None and summary.client != "unclear":
+        prefill[setup.CLIENT] = summary.client
     entries = [entry for entry in _load(deps) if entry.message_id != message.message_id]
     entries.append(
         SetAside(
@@ -132,6 +173,7 @@ def set_aside(
             sender=message.from_address,
             subject=message.subject,
             also=[[other_code, other] for other_code, other in also or []],
+            prefill=prefill,
         )
     )
     _save(deps, entries)
@@ -148,7 +190,8 @@ def set_aside(
         [review_message, *(other for _code, other in also or [])],
         summary,
         timesheet,
-        what_you_can_do=_what_you_can_do(code.value),
+        what_you_can_do=_what_you_can_do(code.value, _can_set_up(deps)),
+        then=_setup_lines(prefill) if _can_set_up(deps) else None,
     )
     outgoing_steps.enqueue_email(
         deps,
@@ -174,10 +217,17 @@ def _the_review(deps: RunDeps, entry: SetAside) -> list[int]:
 
 
 def _ask_again(
-    deps: RunDeps, record: OutgoingRecord, reply: StoredMessage, entry: SetAside, why: str
+    deps: RunDeps,
+    record: OutgoingRecord,
+    reply: StoredMessage,
+    entry: SetAside,
+    why: str,
+    form_values: dict[str, str] | None = None,
 ) -> None:
     lines = [why, "", "What you can do:"]
-    lines += [f"- {line}" for line in _what_you_can_do(entry.code)]
+    lines += [f"- {line}" for line in _what_you_can_do(entry.code, _can_set_up(deps))]
+    if _can_set_up(deps):
+        lines += ["", *_setup_lines(form_values if form_values is not None else entry.prefill)]
     ask = emails.OutgoingEmail(
         to=(deps.settings.admin_email,),
         subject=f"Re: {record.payload.get('subject', '')}",
@@ -204,6 +254,14 @@ def handle_reply(
     entry = next((entry for entry in entries if entry.message_id == message_id), None)
     if entry is None:
         return  # already handled; nothing left to answer
+    if record.payload.get("setup_confirm"):
+        _handle_confirmation(deps, reply, record, body, entry, report)
+        _save(deps, entries)
+        return
+    if setup.looks_like_a_setup(body):
+        _handle_setup_form(deps, reply, record, body, entry, report)
+        _save(deps, entries)
+        return
     reading = deps.reader.read_reply(body, [(entry.code, entry.review_message)])
     kinds = {answer.kind for answer in reading.answers}
     named = next(
@@ -239,6 +297,205 @@ def handle_reply(
     _save(deps, entries)
 
 
+# --- setting it up in QuickBooks (decision 56) ---
+
+
+def _handle_setup_form(
+    deps: RunDeps,
+    reply: StoredMessage,
+    record: OutgoingRecord,
+    body: str,
+    entry: SetAside,
+    report: RunReport,
+) -> None:
+    """Kevin filled in the form. Code reads it -- never the model, because the
+    rates are on it -- and checks it against the engagements as last seen.
+    A good plan is put back to him to confirm; nothing is created yet."""
+    if not _can_set_up(deps):
+        _ask_again(
+            deps,
+            record,
+            reply,
+            entry,
+            "I can only set things up in QuickBooks when I take the engagements from"
+            " QuickBooks (FOPS_ENGAGEMENTS=quickbooks). Add it to the engagement list"
+            ' instead, then reply "try again".',
+        )
+        return
+    workbook = engagement_copy.stored_copy(deps)
+    if workbook is None:
+        workbook = EngagementWorkbook(
+            clients=[], consultants=[], vendors=[], engagements=[], problems=[]
+        )
+    plan, problems, given = setup.read_setup(body, workbook)
+    if plan is None:
+        _ask_again(
+            deps,
+            record,
+            reply,
+            entry,
+            "I couldn't set this up yet:\n" + "\n".join(f"- {p}" for p in problems),
+            form_values=given,
+        )
+        report.note(f"Kevin's setup for {entry.sender} needs fixing: {len(problems)} problem(s)")
+        return
+    entry.setup = plan.to_dict()
+    entry.confirm_code = f"{1000 + secrets.randbelow(9000)}"
+    entry.confirmed = False
+    lines = [
+        "Before I change anything in QuickBooks, please check this:",
+        "",
+        *[f"- {line}" for line in plan.summary_lines()],
+        "",
+        f'Reply "confirm {entry.confirm_code}" to set it up. The number is there so'
+        " that only a reply to this email can do it.",
+        "To change anything, reply to the earlier email with the corrected form.",
+        'Reply "cancel" to leave QuickBooks as it is.',
+        "",
+        "Once it is set up I will handle the email that started this.",
+    ]
+    ask = emails.OutgoingEmail(
+        to=(deps.settings.admin_email,),
+        subject=f"Set up in QuickBooks? {plan.consultant} at {plan.client}",
+        in_reply_to=reply.message_id,
+        body="\n".join(lines),
+    )
+    outgoing_steps.enqueue_email(
+        deps,
+        "setup_request",
+        f"setup-request:{entry.message_id}:{entry.confirm_code}",
+        None,
+        ask,
+        extra={"set_aside": entry.message_id, "setup_confirm": True},
+    )
+    report.note(f"asking Kevin to confirm setting up {plan.consultant} at {plan.client}")
+
+
+def _handle_confirmation(
+    deps: RunDeps,
+    reply: StoredMessage,
+    record: OutgoingRecord,
+    body: str,
+    entry: SetAside,
+    report: RunReport,
+) -> None:
+    """Checked by code, like approving an invoice: the first word, and the
+    one-time code from the email being answered."""
+    words = re.findall(r"[A-Za-z]+|\d+", body)
+    first = words[0].casefold() if words else ""
+    if not entry.setup or not entry.confirm_code:
+        return  # already done or cancelled
+    if first == "cancel":
+        entry.setup, entry.confirm_code, entry.confirmed = {}, "", False
+        report.note(f"Kevin cancelled setting up the email from {entry.sender}")
+        return
+    if entry.confirmed:
+        # Already confirmed and being retried on every run: "try again" after
+        # a failure needs nothing more from him.
+        report.note(f"setting up the email from {entry.sender} is already being retried")
+        return
+    if first == "confirm" and entry.confirm_code in words[1:3]:
+        entry.confirmed = True
+        report.note(f"Kevin confirmed setting up the email from {entry.sender}")
+        return
+    ask = emails.OutgoingEmail(
+        to=(deps.settings.admin_email,),
+        subject=f"Re: {record.payload.get('subject', '')}",
+        in_reply_to=reply.message_id,
+        body=(
+            "Nothing has been changed in QuickBooks. To set it up, reply to my"
+            ' email with "confirm" and the number it gives, exactly as written there;'
+            ' or reply "cancel".'
+        ),
+    )
+    outgoing_steps.enqueue_email(
+        deps,
+        "ask_again_email",
+        f"askagain:{reply.message_id}",
+        None,
+        ask,
+        extra={"set_aside": entry.message_id, "setup_confirm": True},
+    )
+
+
+def _set_up(deps: RunDeps, engagements: Engagements, entry: SetAside, report: RunReport) -> bool:
+    """Make what Kevin confirmed. Returns whether it is done, so the email can
+    be handled again against a copy that has it.
+
+    Written in the outgoing table before QuickBooks is touched (CLAUDE.md
+    rule 4). The adapter finds before it creates, so a crash or a failure
+    part-way is finished by the next attempt rather than duplicated."""
+    plan = setup.EngagementSetup.from_dict(entry.setup)
+    who = f"{plan.consultant} at {plan.client}"
+    key = f"setup:{entry.message_id}:{entry.confirm_code}"
+    if deps.settings.mode is Mode.DRY_RUN:
+        # Dry run creates nothing anywhere: it is the stop button.
+        email = emails.OutgoingEmail(
+            to=(deps.settings.admin_email,),
+            subject=f"Dry run — would set up in QuickBooks: {who}",
+            body="\n".join(
+                [
+                    "I'm in dry run, so I have changed nothing. Outside dry run I would"
+                    " have set up:",
+                    "",
+                    *[f"- {line}" for line in plan.summary_lines()],
+                ]
+            ),
+        )
+        outgoing_steps.enqueue_email(deps, "preview_email", f"{key}:dry-run", None, email)
+        entry.setup, entry.confirm_code, entry.confirmed = {}, "", False
+        return False
+    deps.store.record_outgoing("quickbooks_setup", key, None, plan.to_dict())
+    try:
+        done = deps.accounting.set_up_engagement(plan)
+    except AccountingFailed as error:
+        said = str(error)[:300]
+        deps.store.update_outgoing(key, error=said)
+        logs.log("could not set an engagement up in quickbooks", said=said)
+        digest = hashlib.sha256(said.encode()).hexdigest()[:12]
+        email = emails.OutgoingEmail(
+            to=(deps.settings.admin_email,),
+            subject=f"Couldn't finish setting up in QuickBooks: {who}",
+            body="\n".join(
+                [
+                    f"QuickBooks said: {said}",
+                    "",
+                    "Anything already made stays as it is; I try again on every run and"
+                    " finish the rest once QuickBooks accepts it.",
+                    "",
+                    "What you can do:",
+                    '- Fix what QuickBooks named, then wait, or reply "try again".',
+                    '- Reply "cancel" to stop trying.',
+                ]
+            ),
+        )
+        outgoing_steps.enqueue_email(
+            deps,
+            "setup_request",
+            f"{key}:failed:{digest}",
+            None,
+            email,
+            extra={"set_aside": entry.message_id, "setup_confirm": True},
+        )
+        report.note(f"could not set up {who} in QuickBooks: {said}")
+        return False
+    deps.store.update_outgoing(key, status="done")
+    lines = [f"Done. In QuickBooks I set up {who}:", ""]
+    lines += [f"- made {thing}" for thing in done.created]
+    lines += [f"- used the existing {thing}" for thing in done.reused]
+    lines += ["", "I'm handling the email that started this now."]
+    email = emails.OutgoingEmail(
+        to=(deps.settings.admin_email,),
+        subject=f"Set up in QuickBooks: {who}",
+        body="\n".join(lines),
+    )
+    outgoing_steps.enqueue_email(deps, "details_email", f"{key}:done", None, email)
+    report.note(f"set up {who} in QuickBooks")
+    engagements.refresh_now("Kevin's setup was just made")
+    entry.consultant = plan.consultant
+    return True
+
+
 # --- looking again ---
 
 
@@ -270,7 +527,17 @@ def look_again(deps: RunDeps, engagements: Engagements, report: RunReport) -> bo
     keep: list[SetAside] = []
     requeued = False
     for entry in entries:
-        if not entry.retry and not _the_review(deps, entry):
+        if entry.confirmed and entry.setup:
+            if not _set_up(deps, engagements, entry, report):
+                keep.append(entry)
+                continue
+            workbook = engagements.workbook
+        if (
+            not entry.retry
+            and not entry.consultant
+            and not entry.setup
+            and not _the_review(deps, entry)
+        ):
             continue  # its question was closed some other way; nothing to look for
         if entry.consultant:
             consultant = _consultant_named(workbook.consultants, entry.consultant)

@@ -18,7 +18,7 @@ from finance_ops_agent.domain.messages import StoredMessage
 from finance_ops_agent.domain.reading import ReplyAnswer, ReplyAnswerKind
 from finance_ops_agent.domain.statuses import ItemStatus
 
-_ANSWERABLE = ("approval_request", "review_email", "ask_again_email")
+_ANSWERABLE = ("approval_request", "review_email", "ask_again_email", "setup_request")
 
 
 def _stripped_subject(subject: str) -> str:

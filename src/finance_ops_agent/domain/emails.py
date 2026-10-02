@@ -165,6 +165,7 @@ def needs_review(
     timesheet: EmailAttachment | None = None,
     asking_again: bool = False,
     what_you_can_do: list[str] | None = None,
+    then: list[str] | None = None,
 ) -> OutgoingEmail:
     """`what_you_can_do` replaces the usual closing lines where the answers
     that work are not the timesheet ones: an email from an address the agent
@@ -181,6 +182,8 @@ def needs_review(
     body_lines += [f"- {problem}" for problem in problems]
     if what_you_can_do is not None:
         body_lines += ["", "What you can do:", *[f"- {line}" for line in what_you_can_do]]
+    if then:
+        body_lines += ["", *then]
     else:
         body_lines += [
             "",

@@ -577,3 +577,25 @@ Decision 54 stopped quiet runs asking QuickBooks anything, but a run with mail s
 
 `Store` gained `requeue_message` (an email goes back in the queue as a timesheet) and `replace_snapshot` (an item's figures taken again).
 
+## 56. A new consultant, client or engagement can be set up in QuickBooks from Kevin's email
+
+Decision 55 made every email or timesheet the agent cannot place a question for Kevin. Often the answer is "that's someone new" -- or someone Kevin meant to add and did not -- and the fix was for him to go and set them up in QuickBooks by hand, exactly as `quickbooks-setup.md` describes, before replying "try again". The agent knows exactly what that setup is, and QuickBooks Online's API can make all of it.
+
+**What Kevin sees.** In QuickBooks mode (`FOPS_ENGAGEMENTS=quickbooks`), the question about an unknown address, or a timesheet whose consultant or engagement cannot be placed, offers one more answer: *if this is a new consultant, client or engagement, I can set it up*. Below it is a short form, filled in with what is already known (the sender's address, the names the timesheet gives). He copies it into his reply and fills in the rest: who Icon pays and within how many days, the client, and -- for a new client only -- its billing email, payment days and invoice code; the bill rate, the pay rate, and the start date.
+
+**How it is made safe, in order:**
+
+1. **Code reads the form, never the model.** Labelled lines only, in Kevin's own part of the reply (quoted text is ignored); a value that does not read cleanly is a problem named back to him with his own answers shown, never a guess (`domain/setup.py`). It is checked against the engagements as last seen: an existing engagement is refused, an invoice code another client has is refused, a new client must have its billing details.
+2. **Nothing is created until he confirms.** The agent replies with exactly what it will make or reuse, both rates in words, and a one-time four-digit number. Only a reply starting `confirm` with that number goes ahead; `cancel` stops it. The number is the defence against a forged email: someone who can send as Kevin cannot see the number, so cannot confirm. A wrong or missing number changes nothing and says so.
+3. **Written down before it happens, and found before it is made** (CLAUDE.md rule 4). The setup is a `quickbooks_setup` row in the outgoing table before QuickBooks is touched. The adapter finds each record before creating it -- payment term, customer, category, vendor, product -- so a crash or a refusal part-way is finished by the next attempt, never duplicated.
+4. **It will not change what is already there.** An existing vendor with a different email, or an existing product at a different rate, is refused with what QuickBooks holds; Kevin fixes it by hand. An existing vendor with no email gets this one; an existing customer with no invoice code gets this one in its Notes. Nothing else is ever updated.
+5. **Dry run creates nothing**, here as everywhere: Kevin gets a "Dry run — would set up" email instead.
+
+**What is made**, matching `quickbooks-setup.md`: the customer (display name the client's short name, company name its legal name, billing email, a payment term of the right number of days, `Invoice code: XX` in Notes); a category named as the customer; the vendor (the consultant's name, the firm as company name, the timesheet address as email, a term for when Icon pays); and the product under the category with the sales price, the purchase cost, the vendor, and `Start:` in the purchase description. A payment term of the right length is made if the company has none. The income and expense accounts are **copied from an existing engagement product**, since nothing in Kevin's answers says which; with none to copy, it stops and says so.
+
+**Then** the agent takes a fresh copy of the engagements, handles the email that started it as the new consultant's, and tells Kevin what it made and what it reused. A refusal from QuickBooks is reported once per distinct reason and retried every run until it succeeds or Kevin replies `cancel`.
+
+**This changes rule 1 in CLAUDE.md**, deliberately and only this far: a rate can now reach QuickBooks from an email, but only Kevin's own setup form, read by code, shown back to him in full, and confirmed with the one-time number. Once there it is read back from the product like any other rate.
+
+**Not done:** a timesheet from a consultant who already has one engagement covering the dates is matched to that engagement whatever client the timesheet names (`checks.match_engagement`), so a consultant starting at a second client while still at the first is not asked about. Changing that rule needs its own decision, because timesheets often name an end client or a time system rather than Icon's client.
+

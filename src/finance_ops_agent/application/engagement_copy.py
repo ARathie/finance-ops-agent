@@ -161,6 +161,17 @@ class Engagements:
         self.workbook = fresh
         return True
 
+    def refresh_now(self, why: str) -> bool:
+        """Take a fresh copy even if one was taken this run: something the
+        agent just set up in QuickBooks itself must be in it (decision 56)."""
+        if not self.from_quickbooks:
+            return False
+        fresh = self._ask_quickbooks(why)
+        if fresh is None:
+            return False
+        self.workbook = fresh
+        return True
+
     def _ask_quickbooks(self, why: str) -> EngagementWorkbook | None:
         deps = self._deps
         self._asked_this_run = True
@@ -188,6 +199,12 @@ class Engagements:
         self.refreshed = True
         self.complete = True
         return fresh
+
+
+def stored_copy(deps: RunDeps) -> EngagementWorkbook | None:
+    """The last copy taken, for checking an answer of Kevin's against it
+    between runs' looks."""
+    return _stored_copy(deps)
 
 
 def _stored_copy(deps: RunDeps) -> EngagementWorkbook | None:

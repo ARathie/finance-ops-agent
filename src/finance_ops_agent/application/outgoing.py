@@ -49,6 +49,9 @@ EMAIL_KINDS = (
     "preview_email",
     "summary_email",
     "ask_again_email",
+    # "Shall I set this up in QuickBooks?", answered "confirm" and a code
+    # (decision 56).
+    "setup_request",
 )
 
 
