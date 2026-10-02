@@ -534,3 +534,16 @@ Decision 52 set the direction: what QuickBooks has no field for goes in as label
 - **A vendor with no email is a to-do, not a failure, while timesheets are forwarded** (decision 25), and a failure once nobody forwards: no timesheet could be recognised for that consultant.
 
 Rates history ("Rates from") does not come across: the product holds today's rate, taken when the timesheet is read (decision 43), and the start date stands in for "rates from".
+
+## 54. A run asks QuickBooks only about what is in front of it
+
+The agent runs every 15 minutes and most runs find an empty mailbox. Before this, every one of them still asked QuickBooks about every engagement Icon has: in QuickBooks mode (decision 53) it rebuilt the whole engagement list -- every product, every customer, every vendor -- and in either mode it asked for each engagement's product, period by period, only to confirm that the item for that period was already in hand (decision 39's lookup by id). None of it had anything to do with the mail.
+
+Now:
+
+- **The mailbox is read first**, and the rest follows from what is in it.
+- **Ended billing periods are looked for once a day**, on the day's first run. Periods end on dates, so a second look the same day cannot find anything the first missed. A look during which QuickBooks could not be asked, or a QuickBooks-mode run that fell back to the spreadsheet, is not counted as done, and the next run looks again: an outage must not hide a period until tomorrow.
+- **In QuickBooks mode the engagement list is built only when it is needed**: mail has arrived, a message is still waiting to be handled, or the day's look is still to do. The spreadsheet costs nothing to read, so in list mode it is still read every run and a broken edit is still reported within 15 minutes.
+- **An item is found by name first, and by QuickBooks' id only when the name finds nothing.** The name is a question for the agent's own store. A rename (decision 39) is exactly the case where the name finds nothing, so it is still caught; an item already in hand no longer costs a QuickBooks lookup to confirm.
+
+What still asks QuickBooks, and why: a timesheet that arrives (its rates are taken when it is read, decision 43), an invoice that is due, the daily look and the daily paid check. Each is about something in front of the agent.

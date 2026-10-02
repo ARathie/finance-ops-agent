@@ -221,6 +221,8 @@ Done when:
 - [ ] **Needs a person:** each vendor's email is the address that consultant's timesheets come from, and the setup line has no "still to do".
 - [ ] **Needs a person:** `FOPS_ENGAGEMENTS=quickbooks` is set, `fops doctor` passes, and a forwarded timesheet goes through `fops dry-run` with the right client, hours and amount.
 - [ ] Step 2: after one full cycle with QuickBooks deciding, the cross-check columns and then the workbook itself stop being read.
+- [x] Decision 54: a run asks QuickBooks only about what is in front of it -- the mailbox is read first, ended periods are looked for once a day (again next run if QuickBooks could not be asked), the QuickBooks-built engagement list is built only when there is mail or the daily look is due, and an item is found by name before QuickBooks is asked for its id; a quiet run asks QuickBooks nothing (tested, no network).
+- [ ] **Needs a person:** on the real machine, after the day's first run, a run over an empty mailbox logs `nothing new in the mailbox` (with `FOPS_ENGAGEMENTS=quickbooks`) and no `quickbooks product found` lines.
 
 ## Later, if wanted
 

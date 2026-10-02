@@ -60,6 +60,7 @@ from finance_ops_agent.ports.inbox import IGNORED_FOLDER, NEEDS_REVIEW_FOLDER, P
 from finance_ops_agent.ports.reader import CantReadAttachmentError
 
 MAILBOX_POSITION_KEY = "mailbox_position"
+LAST_EXPECTED_CHECK_KEY = "last_expected_check"
 
 __all__ = ["Mode", "RunDeps", "RunReport", "Settings", "run_once"]
 
@@ -67,11 +68,7 @@ __all__ = ["Mode", "RunDeps", "RunReport", "Settings", "run_once"]
 def run_once(deps: RunDeps, report: RunReport | None = None) -> RunReport:
     report = report or RunReport()
     logs.log("run started", mode=deps.settings.mode.value)
-    workbook = _engagements(deps, report)
-    _report_list_problems(deps, workbook, report)
-    _create_expected_items(deps, workbook, report)
-    _ingest_mailbox(deps, workbook, report)
-    _process_messages(deps, workbook, report)
+    _engagement_work(deps, report)
     outgoing_steps.plan_outgoing(deps, report)
     paid_check.check_paid_invoices(deps, report)
     tracking_sha = _write_tracking(deps)
@@ -93,6 +90,42 @@ def run_once(deps: RunDeps, report: RunReport | None = None) -> RunReport:
     return report
 
 
+def _engagement_work(deps: RunDeps, report: RunReport) -> None:
+    """Everything that needs the engagement list, done only when there is
+    something for it to do (decision 54).
+
+    The engagement list is what recognises a sender and matches a timesheet,
+    and in QuickBooks mode building it is a round of QuickBooks lookups for
+    every engagement Icon has. A run every 15 minutes over a quiet mailbox has
+    no use for it, so there it is built only when mail has arrived, when a
+    message is still waiting to be handled, or when today's look for billing
+    periods that have ended is still to do. Periods end on dates, so once a day
+    finds everything there is to find.
+
+    The spreadsheet costs nothing to read, so it is still read every run and a
+    broken edit is still caught within 15 minutes.
+    """
+    today = deps.clock.today().isoformat()
+    position = deps.store.get_state(MAILBOX_POSITION_KEY)
+    fetched, new_position = deps.inbox.new_messages(position)
+    expected_check_due = deps.store.get_state(LAST_EXPECTED_CHECK_KEY) != today
+    quiet = not (fetched or expected_check_due or deps.store.unprocessed_messages())
+    if quiet and deps.settings.engagements_from == "quickbooks":
+        deps.store.set_state(MAILBOX_POSITION_KEY, new_position)
+        logs.log("nothing new in the mailbox; the engagement list was not needed")
+        return
+    workbook, complete = _engagements(deps, report)
+    _report_list_problems(deps, workbook, report)
+    if expected_check_due:
+        asked = _create_expected_items(deps, workbook, report)
+        # Not marked done when QuickBooks could not be asked: the next run
+        # tries again rather than letting an outage hide a period for a day.
+        if complete and asked:
+            deps.store.set_state(LAST_EXPECTED_CHECK_KEY, today)
+    _ingest_mailbox(deps, workbook, fetched, new_position, report)
+    _process_messages(deps, workbook, report)
+
+
 def _write_tracking(deps: RunDeps) -> str | None:
     if deps.render_tracking is None:
         return None
@@ -110,8 +143,9 @@ def _open_review(deps: RunDeps, report: RunReport, item_id: int | None, finding:
         logs.log("review opened", item_id=item_id, code=finding.code.value)
 
 
-def _engagements(deps: RunDeps, report: RunReport) -> EngagementWorkbook:
-    """The engagement list this run works from.
+def _engagements(deps: RunDeps, report: RunReport) -> tuple[EngagementWorkbook, bool]:
+    """The engagement list this run works from, and whether it came from where
+    the setting says.
 
     Built from QuickBooks where the setting says so (decision 53). If
     QuickBooks cannot be asked, the spreadsheet or its imported copy stands in
@@ -120,14 +154,15 @@ def _engagements(deps: RunDeps, report: RunReport) -> EngagementWorkbook:
     """
     if deps.settings.engagements_from == "quickbooks":
         try:
-            return workbook_from_accounting(deps.accounting)
+            return workbook_from_accounting(deps.accounting), True
         except AccountingFailed as error:
             logs.log("could not build the engagements from quickbooks", said=str(error)[:200])
             report.note(
                 "QuickBooks could not be asked for the engagements, so this run used the"
                 " engagement list instead"
             )
-    return parse_workbook(deps.engagement_list.load())
+            return parse_workbook(deps.engagement_list.load()), False
+    return parse_workbook(deps.engagement_list.load()), True
 
 
 def describe_problem(problem: ListRowProblem) -> str:
@@ -395,31 +430,41 @@ def _find_item(
     client: str,
     period: BillingPeriod,
 ) -> Item | None:
-    """This engagement's item for this period, by the accounting system's id
-    first and by name second.
+    """This engagement's item for this period, by name first and by the
+    accounting system's id when the name finds nothing.
 
     A client or consultant renamed in the accounting system is the same
     engagement, and its id says so; looking only by name would have made a
     second item and expected a second invoice (docs/decisions.md #39). Where
     the item is found by id under different names, the names catch up.
+
+    The name is tried first because it is a question for the agent's own
+    store: an item found that way needs nothing from QuickBooks, and asking
+    QuickBooks for every engagement's id on every run only to confirm an item
+    already in hand was most of what a quiet run did (decision 54). Only a
+    name the store does not know can be a rename.
     """
-    if rate_row is not None:
-        client_row = _client_by_name(workbook, rate_row.client)
-        if client_row is not None:
-            rates = _rates_from_accounting(deps.accounting, rate_row, client_row)
-            if rates is not None and rates.ref:
-                found = deps.store.find_item_by_engagement(rates.ref, period)
-                if found is not None:
-                    if (found.consultant, found.client) != (consultant, client):
-                        logs.log(
-                            "an engagement was renamed; catching the item up",
-                            item_id=found.id,
-                            was=f"{found.consultant} at {found.client}",
-                            now=f"{consultant} at {client}",
-                        )
-                        return deps.store.relabel_item(found.id, consultant, client)
-                    return found
-    return deps.store.find_item(consultant, client, period)
+    found = deps.store.find_item(consultant, client, period)
+    if found is not None or rate_row is None:
+        return found
+    client_row = _client_by_name(workbook, rate_row.client)
+    if client_row is None:
+        return None
+    rates = _rates_from_accounting(deps.accounting, rate_row, client_row)
+    if rates is None or not rates.ref:
+        return None
+    found = deps.store.find_item_by_engagement(rates.ref, period)
+    if found is None:
+        return None
+    if (found.consultant, found.client) != (consultant, client):
+        logs.log(
+            "an engagement was renamed; catching the item up",
+            item_id=found.id,
+            was=f"{found.consultant} at {found.client}",
+            now=f"{consultant} at {client}",
+        )
+        return deps.store.relabel_item(found.id, consultant, client)
+    return found
 
 
 def _ask_about_the_rates(deps: RunDeps, item: Item, report: RunReport) -> None:
@@ -455,7 +500,7 @@ def _ask_about_the_rates(deps: RunDeps, item: Item, report: RunReport) -> None:
 
 def _which_engagements_are_live(
     deps: RunDeps, workbook: EngagementWorkbook, report: RunReport
-) -> LiveEngagements:
+) -> tuple[LiveEngagements, bool]:
     """Ask the accounting system which engagements are live, and join.
 
     QuickBooks holds the engagements now, so it is what says one has finished:
@@ -474,16 +519,19 @@ def _which_engagements_are_live(
         # Built from QuickBooks' live products in the first place, so every
         # engagement here is live and every live product that could not be
         # built has already been reported with the reason.
-        return LiveEngagements(
+        live = LiveEngagements(
             live=list(dict.fromkeys((row.consultant, row.client) for row in workbook.engagements))
         )
+        return live, True
     listed: list[tuple[str, str]] = []
+    asked = True
     try:
         listed = [
             (engagement.consultant, engagement.client)
             for engagement in deps.accounting.engagements().live
         ]
     except AccountingFailed as error:
+        asked = False
         logs.log(
             "could not ask the accounting system which engagements are live", said=str(error)[:200]
         )
@@ -507,15 +555,19 @@ def _which_engagements_are_live(
         # Kevin to skim both.
         logs.log("no longer live in the accounting system", consultant=consultant, client=client)
         report.note(f"no new periods expected: {consultant} at {client} is not live in QuickBooks")
-    return answer
+    return answer, asked
 
 
-def _create_expected_items(deps: RunDeps, workbook: EngagementWorkbook, report: RunReport) -> None:
+def _create_expected_items(deps: RunDeps, workbook: EngagementWorkbook, report: RunReport) -> bool:
     """A billing period that has ended for a live engagement, with no timesheet
-    yet, becomes a waiting_for_timesheet item."""
+    yet, becomes a waiting_for_timesheet item.
+
+    Says whether the accounting system could be asked which engagements are
+    live, so the caller knows whether today's look is really done."""
     today = deps.clock.today()
     pairs = _engagement_pairs(workbook)
-    for consultant, client in _which_engagements_are_live(deps, workbook, report).live:
+    live, asked = _which_engagements_are_live(deps, workbook, report)
+    for consultant, client in live.live:
         rows = pairs[(consultant, client)]
         start, end, latest = _pair_window(rows)
         for period in billing_periods(
@@ -547,6 +599,7 @@ def _create_expected_items(deps: RunDeps, workbook: EngagementWorkbook, report: 
             report.note(
                 f"waiting for a timesheet: {consultant} at {client}, {period.start} to {period.end}"
             )
+    return asked
 
 
 def _decide_kind(deps: RunDeps, workbook: EngagementWorkbook, email: InboundEmail) -> MessageKind:
@@ -574,9 +627,13 @@ def _decide_kind(deps: RunDeps, workbook: EngagementWorkbook, email: InboundEmai
     return MessageKind.UNKNOWN_SENDER
 
 
-def _ingest_mailbox(deps: RunDeps, workbook: EngagementWorkbook, report: RunReport) -> None:
-    position = deps.store.get_state(MAILBOX_POSITION_KEY)
-    emails, new_position = deps.inbox.new_messages(position)
+def _ingest_mailbox(
+    deps: RunDeps,
+    workbook: EngagementWorkbook,
+    emails: list[InboundEmail],
+    new_position: str,
+    report: RunReport,
+) -> None:
     for email in emails:
         files: dict[str, bytes] = {}
         stored_attachments: list[StoredAttachment] = []
