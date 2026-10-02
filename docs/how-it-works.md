@@ -86,29 +86,204 @@ Every Monday the agent emails Kevin: timesheets received last week, invoices sen
 ## What the agent never does
 
 - Never pays anyone or moves money.
-- Never takes a rate from an email or a timesheet. Rates come only from the engagement list.
+- Never takes a rate from a timesheet or from Claude. Rates come from the engagement's product in QuickBooks (or the engagement list where QuickBooks has none). The one way a rate gets into QuickBooks through the agent is Kevin's own setup form, which he confirms with a one-time number.
 - Never invoices hours it cannot see were approved.
 - Never sends anything to a client without Kevin on CC.
 - Never sends the same invoice twice, and never sends an invoice for a consultant and period it has already invoiced unless Kevin tells it to replace one.
 - Never guesses. When unsure, it asks Kevin.
 - Never touches recruiting or candidates.
 
-## Picture
+## Pictures
+
+Every path the agent can take, as pictures. The letters match the checklist in
+`pathways.md`, which says for each path what decides it, what happens, and
+which test covers it. Diamonds are decisions; the words on each arrow say what
+sends the agent that way. Unless a picture says otherwise, Icon runs in **ask
+first** (decision 57).
+
+### 1. One run, every 15 minutes
 
 ```mermaid
 flowchart TD
-    A[Consultant emails approved timesheet] --> B[Agent reads the timesheet]
-    B --> C[Emails Kevin the details for his records]
-    B --> D{Everything clear and matches the engagement list?}
-    D -- No --> E[Emails Kevin: needs your review]
-    E --> F[Kevin fixes the list or replies]
-    F --> D
-    D -- Yes --> G[Prepares invoice = hours x bill rate, and the billing email]
-    G --> H{Mode}
-    H -- Dry run --> I[Emails Kevin what it would send]
-    H -- Ask first --> J[Emails Kevin: approve?]
-    J -- approve --> K
-    H -- Automatic --> K[Creates invoice and sends billing email to client, CC Kevin]
-    K --> L[Emails Kevin the payment instruction = hours x pay rate]
-    L --> M[Updates tracking sheet; checks QuickBooks for payment daily]
+    start(["Run starts: one at a time"]) --> mail["Read new mail from the agent mailbox"]
+    mail --> list{"Where do the engagements come from?"}
+    list -- "spreadsheet" --> sheet["Read the engagement list, every run"]
+    list -- "QuickBooks" --> today{"Copy of QuickBooks taken today?"}
+    today -- "yes" --> copy["Use the copy: no QuickBooks calls"]
+    today -- "no, or Kevin said try again" --> fresh["Take a fresh copy from QuickBooks"]
+    fresh -- "QuickBooks can't be asked" --> stale["Use the last copy, email Kevin once (B3)"]
+    sheet --> problems["Bad rows or records become reviews (B1, B2)"]
+    copy --> problems
+    fresh --> problems
+    stale --> problems
+    problems --> daily{"First run of the day?"}
+    daily -- "yes" --> expect["Every ended period with no timesheet becomes waiting for timesheet (A2)"]
+    daily -- "no" --> emails
+    expect --> emails["Handle each new email: picture 2"]
+    emails --> retry["Ask QuickBooks again about anything waiting on it (F9)"]
+    retry --> setaside["Look again at set-aside emails: picture 6"]
+    setaside --> ready["Records that are ready: picture 5"]
+    ready --> paid{"Paid check done today?"}
+    paid -- "no" --> askpaid["Ask QuickBooks which invoices are paid (J6)"]
+    paid -- "yes" --> monday
+    askpaid --> monday{"Monday?"}
+    monday -- "yes" --> summary["Write the Monday summary (J8)"]
+    monday -- "no" --> send
+    summary --> send["Send everything written down, never twice (J1-J3)"]
+    send --> tracking["Rewrite the tracking sheet"]
+    tracking --> done(["Run ends"])
+```
+
+### 2. What an email is
+
+Decided by code from the sender's address. The email's words are never trusted.
+
+```mermaid
+flowchart TD
+    e(["A new email"]) --> seen{"Same Message-ID seen before?"}
+    seen -- "yes" --> skip["Skip it (C8)"]
+    seen -- "no" --> who{"Who sent it?"}
+    who -- "Kevin" --> kevin["His reply: picture 5 or 6"]
+    who -- "a consultant or their vendor" --> ts["A timesheet: picture 3"]
+    who -- "a forwarder on the list" --> ts
+    who -- "a client address or domain" --> client["Filed as processed (C4)"]
+    who -- "nobody in the engagements" --> mode{"QuickBooks mode, and no fresh copy yet this run?"}
+    mode -- "yes" --> refresh["Take one fresh copy from QuickBooks"]
+    refresh --> again{"Known now?"}
+    again -- "yes" --> ts
+    again -- "no" --> unknown
+    mode -- "no" --> unknown{"Has an attachment?"}
+    unknown -- "yes" --> asidemail["Set aside; email Kevin with replies and the setup form (C6)"]
+    unknown -- "no" --> asidequiet["Set aside; listed in the Monday summary (C7)"]
+```
+
+### 3. A timesheet
+
+A check that finds a problem does not stop the others: everything wrong goes on
+one list, and Kevin gets one email at the end listing all of it. The early
+stops are only the ones that leave nothing to check (no file, a file already
+seen, nobody or no engagement to put it on).
+
+```mermaid
+flowchart TD
+    t(["A timesheet email"]) --> att{"Attachment?"}
+    att -- "no" --> r1["Review: NO_ATTACHMENT (D1)"]
+    att -- "yes" --> dup{"This exact file seen before?"}
+    dup -- "yes" --> quiet["Filed quietly as a duplicate (D3)"]
+    dup -- "no" --> read["Claude reads every attachment into the form"]
+    read -- "can't read any" --> r2["Review: CANT_READ_ATTACHMENT (D2)"]
+    read --> who{"Whose? sender first, then the name on the page"}
+    who -- "can't tell" --> miss1{"QuickBooks mode and no fresh copy yet?"}
+    miss1 -- "yes" --> fresh1["Take one fresh copy, try again"]
+    fresh1 --> who
+    miss1 -- "no" --> aside1["Set aside with the setup form (E2)"]
+    who -- "known" --> which{"Which engagement? the dates, then the client named"}
+    which -- "none, or can't tell" --> aside2["Set aside with the setup form (E3)"]
+    which -- "one" --> period{"Fits the billing schedule?"}
+    period -- "no" --> r3["Review: PERIOD_MISMATCH or PERIOD_UNCLEAR (E6, E7)"]
+    period -- "yes" --> rate{"Rate for these dates?"}
+    rate -- "no, or it changes mid-period" --> r4["Review: RATE_MISSING or LIST_ROW_PROBLEM (E10, E11)"]
+    rate -- "yes" --> checks["Check hours, approval, Claude's confidence; problems go on the list (F1-F5)"]
+    checks --> money["Ask QuickBooks for this engagement's rates and billing details (F7)"]
+    money -- "QuickBooks can't answer" --> hold["Kept; invoice waits; retried every run (F9)"]
+    money -- "disagrees with the spreadsheet" --> differ["QuickBooks' figure used; Kevin told (F8)"]
+    money --> same{"Another timesheet for this record and dates?"}
+    same -- "same hours and approval" --> quiet2["Filed quietly as a duplicate (G1)"]
+    same -- "different" --> corr["Review: CORRECTION (G2, G3)"]
+    same -- "no" --> told["Kevin gets Timesheet received for his records, every time"]
+    told --> found{"Anything on the list to ask Kevin?"}
+    found -- "yes" --> review["One Needs your review email listing everything (F6)"]
+    found -- "no" --> covered{"Whole period covered?"}
+    covered -- "no" --> wait["Kept; waits for the rest (E8)"]
+    covered -- "yes" --> isready["Hours summed, amounts worked out: ready, picture 5"]
+```
+
+### 4. What a record goes through
+
+The statuses in `status-tracking.md` and the only ways one turns into another.
+
+```mermaid
+stateDiagram-v2
+    [*] --> waiting_for_timesheet: period ended, nothing yet
+    [*] --> received: timesheet arrived first
+    waiting_for_timesheet --> received: timesheet arrives
+    received --> needs_review: something to ask Kevin
+    received --> ready: all checks pass, period covered
+    needs_review --> received: Kevin answers
+    needs_review --> ready: answers applied
+    needs_review --> ignored: Kevin says ignore
+    ready --> waiting_for_approval: ask first, invoice made
+    ready --> needs_review: invoice failed, or a correction
+    waiting_for_approval --> invoice_sent: Kevin says approve
+    waiting_for_approval --> cancelled: Kevin says cancel, invoice voided
+    waiting_for_approval --> waiting_for_timesheet: Kevin says wrong client, invoice voided
+    waiting_for_approval --> needs_review: sending failed, or a correction
+    invoice_sent --> client_paid: QuickBooks shows it paid
+    invoice_sent --> needs_review: correction after sending
+    client_paid --> [*]
+    ignored --> [*]
+    cancelled --> [*]
+```
+
+### 5. Ready to invoice, and Kevin's answer
+
+```mermaid
+flowchart TD
+    r(["A record is ready"]) --> m{"Mode"}
+    m -- "dry run" --> preview["Kevin gets Dry run - would invoice; nothing made (A5)"]
+    m -- "ask first" --> make["Make the invoice in QuickBooks"]
+    make -- "QuickBooks refuses" --> qbfail["Review: QUICKBOOKS_FAILED; nothing to the client (J4)"]
+    make -- "total disagrees" --> voidnow["Voided at once; both totals reported (J5)"]
+    make --> approve["Kevin gets Approve? with the real invoice (H1)"]
+    approve --> answer{"Kevin's reply, first words, read by code"}
+    answer -- "approve" --> bill["Billing email to the client, Kevin on CC (H2)"]
+    bill --> pay["Payment instruction to Kevin"]
+    pay --> paidcheck["Daily paid check: client paid (J6)"]
+    answer -- "cancel" --> cancel["Invoice voided; record cancelled (H3)"]
+    answer -- "wrong client" --> wrong["Invoice voided; first client waits for its own timesheet; timesheet set aside with the setup form (H4)"]
+    wrong --> six["Picture 6, then back to picture 3 for the right client"]
+    answer -- "anything else" --> askwords["Short reply: approve, cancel or wrong client (H6)"]
+```
+
+### 6. A set-aside email, and setting something up in QuickBooks
+
+```mermaid
+flowchart TD
+    s(["Set aside: unknown address, someone or some engagement it can't place, or wrong client"]) --> reply{"Kevin's reply"}
+    reply -- "nothing yet" --> auto{"Address shows up in the next day's copy?"}
+    auto -- "yes" --> handle["Handled again: picture 3"]
+    auto -- "no" --> stays["Stays in Needs Review and the Monday summary"]
+    reply -- "try again" --> look["Fresh copy, look again"]
+    look -- "placed now" --> handle
+    look -- "still not" --> stuck["Still needs your review (H9)"]
+    reply -- "this is from Priya Shah" --> named{"One consultant by that name?"}
+    named -- "yes" --> handle
+    named -- "no" --> stuck
+    reply -- "ignore" --> closed["Closed; stays in Needs Review"]
+    reply -- "the setup form, filled in" --> form{"Read by code: anything blank or wrong?"}
+    form -- "yes" --> fix["Problems named, his answers shown back (I2)"]
+    form -- "no" --> confirm["Set up in QuickBooks? everything listed, with a one-time number (I1)"]
+    confirm --> c{"Kevin's reply"}
+    c -- "cancel" --> nochange["Nothing made (I5)"]
+    c -- "confirm without the right number" --> nochange2["Nothing made; told so (I4)"]
+    c -- "confirm and the number" --> drymode{"Dry run?"}
+    drymode -- "yes" --> wouldset["Dry run - would set up; nothing made (I9)"]
+    drymode -- "no" --> create["Find or make: term, customer, category, vendor, product with both rates (I3)"]
+    create -- "QuickBooks refuses" --> refused["Couldn't finish setting up; retried every run (I8)"]
+    create -- "done" --> madeit["Set up in QuickBooks: what was made and reused"]
+    madeit --> handle
+```
+
+### 7. When something outside the agent fails
+
+```mermaid
+flowchart TD
+    f(["Something outside fails"]) --> which{"What?"}
+    which -- "QuickBooks, for the day's copy" --> f1["Last copy used; Kevin told once; closes itself (B3, B4)"]
+    which -- "QuickBooks, for one engagement's rates" --> f2["Invoice waits; retried every run (F9)"]
+    which -- "QuickBooks, making the invoice" --> f3["Review; timesheet back in Needs Review (J4)"]
+    which -- "QuickBooks, the paid check" --> f4["Review; asked again next run (J7)"]
+    which -- "QuickBooks, setting something up" --> f5["Kevin told once per reason; retried (I8)"]
+    which -- "sending an email" --> f6["Retried; then SEND_FAILED or SEND_UNCERTAIN (J1-J3)"]
+    which -- "the mailbox, or Claude" --> f7["Run stops; everything picked up next run. Nobody is told yet (gaps G1, G2)"]
 ```
