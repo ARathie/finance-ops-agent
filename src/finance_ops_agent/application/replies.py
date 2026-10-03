@@ -182,12 +182,66 @@ def handle_kevin_reply(deps: RunDeps, message: StoredMessage, report: RunReport)
     body = message.body_text or message.subject
     record = _matched_record(deps, message)
     if record is None:
-        report.note(f'a reply from Kevin I couldn\'t match: "{message.subject}"')
+        _tell_kevin_it_matched_nothing(deps, message, report)
         return
     if _what_it_answers(record) == "approval_request":
         _handle_approval_reply(deps, message, record, body, report)
     else:
         _handle_review_reply(deps, message, record, body, report)
+
+
+# How much of Kevin's email is quoted back to him when it matched nothing.
+_QUOTED_BACK = 300
+
+
+def _tell_kevin_it_matched_nothing(
+    deps: RunDeps, message: StoredMessage, report: RunReport
+) -> None:
+    """Kevin wrote and nothing the agent sent is what it answers (decision 63).
+
+    Nothing is done with it: guessing what an email answers is how an
+    instruction lands on the wrong invoice. But Kevin hears so, in the same
+    thread, with the start of what he wrote, rather than finding out days later
+    that nothing happened. Once only: an answer to that note -- or an
+    out-of-office reply to it -- matches nothing either, and is not answered
+    again."""
+    report.note(f'a reply from Kevin I couldn\'t match: "{message.subject}"')
+    ours = {
+        record.message_id
+        for record in deps.store.outgoing_records()
+        if record.kind == "unmatched_reply_email" and record.message_id
+    }
+    if ours & ({message.in_reply_to, *message.references} - {""}):
+        return  # an answer to the note itself: it has said all it can
+    text = " ".join((message.body_text or "").split())
+    quoted = text[:_QUOTED_BACK] + ("..." if len(text) > _QUOTED_BACK else "")
+    lines = [
+        "I couldn't tell which of my emails this answers, so I haven't done anything with it.",
+        "",
+        f'Your email: "{message.subject or "(no subject)"}", {message.received_at:%Y-%m-%d %H:%M}',
+    ]
+    if quoted:
+        lines.append(f'It starts: "{quoted}"')
+    lines += [
+        "",
+        "What you can do:",
+        "- Reply to the email of mine it is about, keeping its subject, and put your answer there.",
+    ]
+    if message.attachments:
+        lines.append(
+            "- To have me read a timesheet, it has to come from the consultant's own"
+            " address, or from an address on the forwarders list."
+        )
+    lines.append("- If it wasn't meant for me, there is nothing to do.")
+    note = emails.OutgoingEmail(
+        to=(deps.settings.admin_email,),
+        subject=f"Re: {message.subject}" if message.subject else "Your email to me",
+        in_reply_to=message.message_id,
+        body="\n".join(lines),
+    )
+    outgoing.enqueue_email(
+        deps, "unmatched_reply_email", f"unmatched:{message.message_id}", None, note
+    )
 
 
 # --- approvals ---

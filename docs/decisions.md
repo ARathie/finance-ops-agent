@@ -749,3 +749,15 @@ Reading them also turned up one bug outside the investigator. An answered or ign
 - **"Wrong client" (decision 57) comes first on the approval email.** Code reads it before "approve" and "cancel", and before the model reads anything, and the "Sorry, I couldn't tell" reply names it alongside the other two.
 
 The reply prompt versions were renumbered so each name means one text: `reply_v2` is decision 55's, and this work's are `reply_v3` and `reply_v4` (the one in use, carrying decision 55's "try again" examples).
+
+## 63. An email from Kevin that answers nothing is not acted on, and he is told so
+
+Gap G4 in `pathways.md`. A reply from Kevin is matched to what it answers by its reply header and, failing that, by its subject (decision 17). When neither matches -- a new email rather than a reply, a reply to an email the agent did not send, a subject he rewrote -- the only trace was a line in the run report, which Kevin never sees. An instruction he believed he had given simply did not happen.
+
+Decision: **still nothing is done with it, but Kevin is told, once, in the same thread.**
+
+- **Nothing is guessed.** Matching an instruction to "the most likely" invoice is how it lands on the wrong one. Decision 59's reading of his words applies only once it is known what they are about.
+- **The note says what happened and what to do:** that nothing was done; the subject, time and first few lines of what he wrote, so he can tell which email it was; to reply to the email of the agent's it is about. When his email had an attachment, a line says a timesheet is only read when it comes from the consultant's own address or a forwarder's -- the likeliest reason for Kevin forwarding one himself.
+- **Never a loop.** The note is its own kind (`unmatched_reply_email`) and is not something a reply can answer. An email whose reply header names one of these notes -- his answer to it, or his mailbox's out-of-office reply -- is noted in the run report and gets nothing further.
+- Written down once per email, like every email, so a second run sends nothing more.
+

@@ -146,7 +146,9 @@ flowchart TD
     e(["A new email"]) --> seen{"Same Message-ID seen before?"}
     seen -- "yes" --> skip["Skip it (C8)"]
     seen -- "no" --> who{"Who sent it?"}
-    who -- "Kevin" --> kevin["His reply: picture 5 or 6"]
+    who -- "Kevin" --> answers{"Answers one of the agent's emails? its reply header, then its subject"}
+    answers -- "yes" --> kevin["His reply: picture 5 or 6"]
+    answers -- "no" --> nomatch["Nothing done; Kevin told so once, in the same thread (H10)"]
     who -- "a consultant or their vendor" --> ts["A timesheet: picture 3"]
     who -- "a forwarder on the list" --> ts
     who -- "a client address or domain" --> client["Kevin gets it as it came; nothing in it is acted on (C4)"]

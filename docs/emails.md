@@ -95,6 +95,10 @@ The billing email never mentions the pay rate. The payment instruction never men
 
 The agent checks, and records that it checked, that: the billing email address is the one on the client's row; the consultant, client, and period on the invoice match the timesheet item; the total is hours × the bill rate from the engagement list; the invoice PDF and the original timesheet file are attached; Kevin is on CC; and no invoice has already been sent for this consultant and period. It writes down that it is about to send, then sends, then writes down that it did. If the agent restarts in between, it checks its Sent folder for the email before trying again. In the rare case where it cannot tell (the program stopped in the instant between the mail server accepting the email and the agent noting it down), it does not guess: it asks Kevin, who is on CC, whether his copy arrived (`SEND_UNCERTAIN`).
 
+## An email from Kevin that answers nothing
+
+When Kevin writes and neither its reply header nor its subject matches an email the agent sent, the agent does nothing with it -- guessing what it answers is how an instruction lands on the wrong invoice -- and replies once in the same thread: *I couldn't tell which of my emails this answers, so I haven't done anything with it*, the start of what he wrote, and what to do (reply to the email it is about; how timesheets get read, when his had an attachment). An answer to that note, or an out-of-office reply to it, gets nothing further (decision 63).
+
 ## Client replies
 
 Replies from clients land in the agent's mailbox. The agent does not answer them, and does nothing with what they say. Each one goes straight to Kevin as **From a client: <subject>**, with who sent it, when, the text (cut short past a few pages, saying so) and every attachment (decision 58). Emails in the mailbox that are not timesheets, replies from Kevin, or client replies are left in a *Needs Review* folder for Kevin to look at.

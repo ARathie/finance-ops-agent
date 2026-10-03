@@ -59,6 +59,9 @@ EMAIL_KINDS = (
     "setup_request",
     # A client wrote to the agent's mailbox; Kevin gets it as it came (decision 58).
     "client_reply_email",
+    # Kevin wrote and the agent could not tell what it answers (decision 63).
+    # Not answerable: a reply to it is matched to nothing, like the first.
+    "unmatched_reply_email",
 )
 
 
