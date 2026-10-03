@@ -139,7 +139,7 @@ def next_invoice_number(deps: RunDeps, item: Item) -> str | None:
     """
     chosen = chosen_invoice_number(deps, item.id)
     if chosen is not None and not deps.store.invoice_number_in_use(chosen):
-        # Kevin named the number in a reply (decision 54). It was checked when
+        # Kevin named the number in a reply (decision 59). It was checked when
         # he gave it; whether QuickBooks takes it is QuickBooks' to say.
         return chosen
     client_code = item.snapshot.client_invoice_code
@@ -256,7 +256,7 @@ def _create_invoice(
         return None
     except AccountingFailed as error:
         if isinstance(error, AccountingNumberTaken):
-            # Kevin can settle this one from his inbox (decision 54), so the
+            # Kevin can settle this one from his inbox (decision 59), so the
             # email says how, rather than only what QuickBooks said.
             message = (
                 f"QuickBooks already has an invoice numbered {error.number}, so I could"
@@ -266,7 +266,7 @@ def _create_invoice(
                 ' reply "try again". Or reply with the number to use instead, for'
                 f' example "use {error.number}-revised".'
             )
-            # Who holds it decides which of those is right, so look (decision 56).
+            # Who holds it decides which of those is right, so look (decision 61).
             held = [
                 finding.what
                 for finding in explain_invoice_number(looking_at(deps), error.number, item.id)

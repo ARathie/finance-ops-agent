@@ -64,7 +64,7 @@ class RunDeps:
     accounting: AccountingSystem
     renderer: PdfRenderer
     tracking_path: Path | None = None
-    # Looks into a stuck item before Kevin is emailed about it (decision 56).
+    # Looks into a stuck item before Kevin is emailed about it (decision 61).
     # None: the review goes out as it is.
     investigator: Investigator | None = None
     render_tracking: Callable[[list[TrackingRow]], bytes] | None = None

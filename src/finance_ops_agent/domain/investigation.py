@@ -1,9 +1,9 @@
-"""What the investigator is given and what it gives back (docs/decisions.md #56).
+"""What the investigator is given and what it gives back (docs/decisions.md #61).
 
 The investigator looks into one stuck item with read-only tools and comes back
 with what it found and what Kevin could do. It decides nothing: its proposals
 go into the review email, Kevin picks one by replying, and his reply goes
-through the same checks as any other (decision 54).
+through the same checks as any other (decision 59).
 """
 
 import re

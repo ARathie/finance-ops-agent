@@ -234,7 +234,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     investigator_eval = commands.add_parser(
         "eval-investigator",
-        help="score the investigator against made-up stuck situations (decision 57)",
+        help="score the investigator against made-up stuck situations (decision 62)",
     )
     investigator_eval.add_argument("--cases", type=Path, default=Path("tests/evals/investigations"))
     investigator_eval.add_argument(
@@ -447,7 +447,7 @@ def _real_deps(mode_override: "Mode | None" = None, since: "date | None" = None)
         renderer=renderer,
         tracking_path=config.data_dir / "tracking.xlsx",
         render_tracking=tracking_sheet_bytes,
-        # Looks into a stuck item before Kevin is emailed (decision 56). Read-only
+        # Looks into a stuck item before Kevin is emailed (decision 61). Read-only
         # tools only; it adds to the email and changes nothing.
         investigator=ClaudeInvestigator(model=config.model),
     )

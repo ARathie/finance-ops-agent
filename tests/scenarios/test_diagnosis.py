@@ -1,4 +1,4 @@
-"""Diagnosis says what is stuck and why, and touches nothing (decision 55).
+"""Diagnosis says what is stuck and why, and touches nothing (decision 60).
 
 Each case is one the first live cycle hit by hand: an invoice in the agent's
 records that QuickBooks does not have, a number QuickBooks already holds, an

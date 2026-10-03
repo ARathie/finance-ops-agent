@@ -2,7 +2,7 @@
 
 The tools come from the application (`application/agent_tools.py`), not from
 the adapter, so the adapter cannot reach anything it was not handed. Today the
-toolbox it is handed holds read-only tools only (docs/decisions.md #56).
+toolbox it is handed holds read-only tools only (docs/decisions.md #61).
 """
 
 from typing import Any, Protocol

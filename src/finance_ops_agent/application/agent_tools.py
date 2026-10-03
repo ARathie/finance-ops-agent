@@ -2,9 +2,9 @@
 
 Every tool here calls a function in `application/diagnosis.py` or reads the
 store through the read-only view, so the whole list is read-only by
-construction (decision 55): it holds nothing that could change a record, an
+construction (decision 60): it holds nothing that could change a record, an
 invoice or the mailbox. Tools that act, when they come, will be a separate list
-with its own decision, never added to this one (decision 56).
+with its own decision, never added to this one (decision 61).
 
 Answers are JSON text. A tool that fails returns its error as text instead of
 raising, so one bad call cannot end an investigation.

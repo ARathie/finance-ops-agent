@@ -1,7 +1,7 @@
 """The Claude investigator: a short tool-use loop over the tools it is lent.
 
 A hand-written loop rather than the SDK's beta tool runner, because the loop
-is where the guarantees live (docs/decisions.md #56):
+is where the guarantees live (docs/decisions.md #61):
 
 - a fixed number of steps, after which it gives up rather than spends more;
 - every tool call recorded, with whether it worked;

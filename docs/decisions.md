@@ -36,7 +36,7 @@ QuickBooks Online has no draft invoices, and a sent email cannot be unsent. So t
 
 ## 9. Approval and review answers by email reply, from Kevin only
 
-A reply is the simplest possible action for Kevin. Only replies from `kevin@icon-technologies.com` in the original thread are accepted; approvals must start with `approve` or `cancel` (decision 54 adds plain words alongside). Consequence: no web page; the spoofing risk is limited to someone who can already send mail as Kevin.
+A reply is the simplest possible action for Kevin. Only replies from `kevin@icon-technologies.com` in the original thread are accepted; approvals must start with `approve` or `cancel` (decision 59 adds plain words alongside). Consequence: no web page; the spoofing risk is limited to someone who can already send mail as Kevin.
 
 ## 10. Three modes: dry run, ask first, automatic
 
@@ -535,7 +535,7 @@ Decision 52 set the direction: what QuickBooks has no field for goes in as label
 
 Rates history ("Rates from") does not come across: the product holds today's rate, taken when the timesheet is read (decision 43), and the start date stands in for "rates from".
 
-## 54. Kevin answers in his own words; code checks each request and says what it did
+## 59. Kevin answers in his own words; code checks each request and says what it did
 
 Testing the first live cycle showed how brittle the replies were. QuickBooks refused Manoj's invoice because a leftover already held its number. Kevin replied, reasonably, "append -revised to the number so it can go through, and send it back to me as a draft for approval". The agent had no way to take a new number, so it answered with a fixed list of example phrases, none of which fitted. Approvals were stricter still: anything that did not start with `approve` or `cancel` got the same short refusal (decision 9).
 
@@ -552,7 +552,7 @@ Decision: **a reply is read for what Kevin asks, in whatever words he uses, and 
 
 What this departs from: decision 9's "approvals must start with `approve` or `cancel`". The plain word still works exactly as before. The new path adds to it and gives way to it.
 
-## 55. Diagnosis is read-only, typed so, and written to become an agent's tools
+## 60. Diagnosis is read-only, typed so, and written to become an agent's tools
 
 Every dead end in the first live cycle was a diagnosis problem, not a reading problem, and each one was worked out by hand:
 
@@ -574,9 +574,9 @@ Decision: **a diagnosis layer that only reads**, in `application/diagnosis.py`, 
 
 Not decided here: the agent itself, what it may change, and when it runs. Those need their own decision, and they change rule 7 ("Claude reads; code decides"). What this one guarantees is that whatever an agent does with these tools, the tools cannot change anything.
 
-## 56. When something is stuck, the agent looks into it and offers Kevin ways out
+## 61. When something is stuck, the agent looks into it and offers Kevin ways out
 
-Decision 55 built the read-only diagnosis for a person to run. This one puts it to work inside the agent, so a problem reaches Kevin explained and with ways out, instead of as an error. It comes in three layers.
+Decision 60 built the read-only diagnosis for a person to run. This one puts it to work inside the agent, so a problem reaches Kevin explained and with ways out, instead of as an error. It comes in three layers.
 
 **1. The run calls the diagnosis itself, wherever it gets stuck.** This is plain code, with no model involved.
 
@@ -586,7 +586,7 @@ Decision 55 built the read-only diagnosis for a person to run. This one puts it 
 
 **2. The diagnosis becomes a tool list** (`application/agent_tools.py`): `describe_item`, `explain_invoice_number`, `check_recorded_invoices`, `list_items` and `list_open_reviews`, plus `check_inbox` and `check_items` when there is an inbox or a workbook to look at.
 
-- Every tool is read-only by construction (decision 55). Tools that act would be a separate list with their own decision, never added to this one.
+- Every tool is read-only by construction (decision 60). Tools that act would be a separate list with their own decision, never added to this one.
 - A failing tool answers with its error rather than raising.
 - **No money reaches the model.** Every dollar amount in a tool's answer or in the problem it is given is masked, and rate reviews (`RATE_MISSING`) are not investigated at all. This keeps the rule that rates are never sent to the model.
 
@@ -594,7 +594,7 @@ Decision 55 built the read-only diagnosis for a person to run. This one puts it 
 
 - **What it does:** for each review email still waiting to go out (at most three per run), it looks into the item with the tools. It finishes by calling an `answer` tool with what it found, the evidence, one to three proposals, and whether it is sure.
 - **What Kevin sees:** the email gains "What I found" and "What you could do: A. … B. …". Each option has the exact words that choose it, and he can reply with just the letter.
-- **It proposes; Kevin decides; code acts.** Proposals offering to approve, cancel or send are dropped. Kevin's choice goes through the reply handling of decision 54 like any other reply. A reply that is only a letter ("A", "option 2", "go with B") is matched to that option's words by code, not by the model. Anything longer is read by the model, which is told what each letter stood for.
+- **It proposes; Kevin decides; code acts.** Proposals offering to approve, cancel or send are dropped. Kevin's choice goes through the reply handling of decision 59 like any other reply. A reply that is only a letter ("A", "option 2", "go with B") is matched to that option's words by code, not by the model. Anything longer is read by the model, which is told what each letter stood for.
 - **It only ever adds.** The email is changed only while still `pending`, and the store refuses to change one once a send has begun (`amend_pending_outgoing`). If the investigator fails, refuses, runs out of its eight steps, or answers in a shape that does not fit, the email goes out exactly as it was.
 - **On the record:** what it called, and whether each call worked, is kept in the email's outgoing row and in the log.
 
@@ -602,9 +602,9 @@ This is where rule 7 ("Claude reads; code decides") moves. Claude now chooses wh
 
 Not done here: an eval set for the investigator. Its answers are only scored by the scenarios, which script it. Before relying on it, record live answers for the first live cycle's incidents, the way timesheet readings are recorded (PR 12).
 
-## 57. The investigator is scored on stuck situations, graded by code
+## 62. The investigator is scored on stuck situations, graded by code
 
-Decision 56 put the investigator into Kevin's emails with nothing measuring its answers: the scenarios script it. This gives it an eval set like the timesheet reader's, so a change to the prompt or the model can be judged before Kevin sees the result.
+Decision 61 put the investigator into Kevin's emails with nothing measuring its answers: the scenarios script it. This gives it an eval set like the timesheet reader's, so a change to the prompt or the model can be judged before Kevin sees the result.
 
 - **A case is a situation, not a file.** `tests/evals/investigations/<case>/situation.json` describes what is stuck: the items, the invoices in the agent's records and in QuickBooks, and the review about to go to Kevin. `fops eval-investigator` builds it into the same in-memory store and accounting fakes the scenarios use, so the read-only tools have real records to find. Where a review is written by code (a taken number, a missing invoice), the builder writes it the same way the run does.
 - **Seven cases, from the first live cycle:**

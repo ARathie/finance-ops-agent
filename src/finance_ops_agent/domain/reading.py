@@ -160,7 +160,7 @@ class ReplyAnswerKind(StrEnum):
     083126MT-MK-revised, and send it to me before it goes out"). The model
     names each of them as one of these; code checks each one and either does
     it or tells Kevin why not. Anything outside this list is `unclear`, never
-    a guess (docs/decisions.md #54).
+    a guess (docs/decisions.md #59).
     """
 
     CONSULTANT_NAME = "consultant_name"
@@ -217,7 +217,7 @@ class ReplyContext(BaseModel):
     period: str = ""
     invoice_number: str = ""
     # The replies the agent offered Kevin as ways out, in letter order (A, B,
-    # C), when it looked into the problem first (decision 56).
+    # C), when it looked into the problem first (decision 61).
     offered: list[str] = Field(default_factory=list)
 
 

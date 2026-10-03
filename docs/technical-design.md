@@ -39,7 +39,7 @@ Rule: `domain/`, `application/`, and `ports/` never import from `adapters/` or `
 | `EmailSender` | `send(email, attachments, message_id)` (returns when the server has taken it; raises `NotSent` / `RecipientRefused` when it has not), `save_sent_copy(email, attachments, message_id)`, `find_sent(message_id) -> found / not found` | writes `.eml` files to an outbox folder | SMTP, plus the IMAP Sent folder, at Rackspace Email |
 | `TimesheetReader` | `classify(email) -> kind`, `read_timesheet(attachment, hints) -> TimesheetReading`, `read_reply(email, context) -> Answer` | scripted by attachment hash / canned answers | Claude |
 | `AccountingSystem` | `create_invoice(invoice, item_id) -> (number, external_id, pdf)`, `find_invoice(item_id)`, `cancel_invoice(external_id)`, `paid_status(external_ids)` | in-memory | `ManualQuickBooks` (numbers invoices locally and renders the PDF; Kevin enters them) and `QuickBooksOnline` |
-| `Investigator` | `investigate(problem, toolbox) -> found, evidence, proposals` or nothing; it may only call the tools it is handed (decision 56) | makes scripted calls through the real toolbox | Claude, in a short tool-use loop |
+| `Investigator` | `investigate(problem, toolbox) -> found, evidence, proposals` or nothing; it may only call the tools it is handed (decision 61) | makes scripted calls through the real toolbox | Claude, in a short tool-use loop |
 | `PdfRenderer` | `invoice_pdf(invoice) -> bytes` | same as real | HTML template + WeasyPrint (or ReportLab) |
 | `Clock` | `today()`, `now()` in Icon's timezone | frozen | system clock |
 
@@ -87,7 +87,7 @@ Tables (key columns only; the domain objects mirror them):
 
 ## Kevin's replies
 
-Replies from Kevin's address that are in the thread of a review or approval email are matched to the item by the `In-Reply-To` and `References` headers, which name the agent's own Message-ID, and by an item reference in the original subject as a fallback. A reply that starts with `approve` or `cancel` is taken as it stands. Every other reply, to an approval or a review, is read by Claude into a list of typed requests, each quoting Kevin's words. Code checks each one and does it or says why not, and the agent always replies in the thread with what it did and what it still needs (decision 54). Replies from anyone else are ignored and reported in the summary.
+Replies from Kevin's address that are in the thread of a review or approval email are matched to the item by the `In-Reply-To` and `References` headers, which name the agent's own Message-ID, and by an item reference in the original subject as a fallback. A reply that starts with `approve` or `cancel` is taken as it stands. Every other reply, to an approval or a review, is read by Claude into a list of typed requests, each quoting Kevin's words. Code checks each one and does it or says why not, and the agent always replies in the thread with what it did and what it still needs (decision 59). Replies from anyone else are ignored and reported in the summary.
 
 ## Modes and guardrails
 
@@ -114,7 +114,7 @@ Environment variables (from `.env` locally; `.env.example` lists them all): `FOP
 - Only Kevin's address can answer reviews or approve invoices, and only in-thread.
 - The pay rate never appears in anything sent to a client; the bill rate never appears in anything sent to a consultant or vendor.
 - Timesheets contain names and hours; they are sent to Anthropic's API for reading. Nothing else (no rates, no bank details) is ever sent to the model.
-- The investigator (decision 56) sees what the read-only tools return: names, periods, statuses, invoice numbers, review texts and email subjects, with every dollar amount masked. Its tools cannot change anything, and its answer only adds to an email Kevin reads.
+- The investigator (decision 61) sees what the read-only tools return: names, periods, statuses, invoice numbers, review texts and email subjects, with every dollar amount masked. Its tools cannot change anything, and its answer only adds to an email Kevin reads.
 
 ## Deliberately not built (yet)
 

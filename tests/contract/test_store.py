@@ -410,7 +410,7 @@ class TestFindingAnItemAfterARename:
 
 class TestAmendingAnEmailBeforeItIsSent:
     """The investigator adds to a review email between writing it down and
-    sending it, and never after a send began (decision 56)."""
+    sending it, and never after a send began (decision 61)."""
 
     def test_a_pending_email_can_gain_more(self, store: Store) -> None:
         store.record_outgoing("review_email", "review:1", None, {"body": "first"})

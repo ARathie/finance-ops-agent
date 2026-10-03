@@ -1,4 +1,4 @@
-"""`fops diagnose`: what is stuck and why, read-only (docs/decisions.md #55).
+"""`fops diagnose`: what is stuck and why, read-only (docs/decisions.md #60).
 
 Wires the real store, accounting system and inbox into the read-only views and
 prints what `application/diagnosis.py` finds. It changes nothing: not the

@@ -106,7 +106,7 @@ class StoredMessage:
 class InboxEntry:
     """One message sitting in the inbox, and whether the next run will read it.
 
-    For diagnosis only (docs/decisions.md #55): a run decides what is new by
+    For diagnosis only (docs/decisions.md #60): a run decides what is new by
     how far it has read and by the mail start date, and a message that fails
     either is skipped without a word. This says which, so nobody has to guess.
     """

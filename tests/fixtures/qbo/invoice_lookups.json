@@ -1,5 +1,5 @@
 {
-  "_note": "Invoice lookups for fops diagnose (decision 55): one found, one QuickBooks does not have (error 610, as production answered for a sandbox invoice id), and a search by number finding the agent's own invoice and a voided one made by hand.",
+  "_note": "Invoice lookups for fops diagnose (decision 60): one found, one QuickBooks does not have (error 610, as production answered for a sandbox invoice id), and a search by number finding the agent's own invoice and a voided one made by hand.",
   "exchanges": [
     {
       "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/invoice/146",

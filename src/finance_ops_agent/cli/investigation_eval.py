@@ -5,7 +5,7 @@ store and accounting system -- so the read-only tools have real records to
 look at, and the problem text is made by the same code a run uses. Replaying
 (the default, and CI) scores each case's `recorded.json`. `--live` runs the
 Claude investigator over the built situation, overwrites `recorded.json`, and
-says what it cost (docs/decisions.md #57).
+says what it cost (docs/decisions.md #62).
 """
 
 import argparse
@@ -128,7 +128,7 @@ def build_situation(situation: Situation) -> Built:
     item = store.get_item(item_id)
     message = review.message
     if review.as_the_agent_writes == "number_taken":
-        # As application/outgoing.py writes it, findings included (decision 56).
+        # As application/outgoing.py writes it, findings included (decision 61).
         message = (
             f"QuickBooks already has an invoice numbered {review.number}, so I could"
             f" not make the invoice for {item.consultant} at {item.client}"

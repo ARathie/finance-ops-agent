@@ -1,4 +1,4 @@
-"""Before Kevin is emailed about a stuck item, look into it (decision 56).
+"""Before Kevin is emailed about a stuck item, look into it (decision 61).
 
 Every review email is written down before it is sent. Between the two, the
 investigator looks into the item with the read-only tools and the email gains
@@ -8,10 +8,10 @@ only ever adds to the email:
 
 - it runs only on emails still `pending` (nothing attempted), and the store
   refuses to change one after that, so what was sent is what was written down;
-- its tools cannot change anything, by type (decision 55);
+- its tools cannot change anything, by type (decision 60);
 - when it fails or has no answer, the email goes out exactly as it was;
 - code checks the proposals before Kevin sees them, and checks his reply again
-  before acting on it (decision 54). It proposes; Kevin decides; code acts.
+  before acting on it (decision 59). It proposes; Kevin decides; code acts.
 
 What was offered is kept (by review) so a reply of "A" or "the second one" can
 be matched back to the words that option stood for.
@@ -41,7 +41,7 @@ MAX_PROPOSALS = 3
 LETTERS = "ABC"
 # Not looked into: a message from an unknown sender is untrusted from end to end,
 # and whether an email arrived is a question only Kevin's inbox can answer.
-# A rate question is about money, which the model never sees (decision 56).
+# A rate question is about money, which the model never sees (decision 61).
 NOT_INVESTIGATED = frozenset({"UNKNOWN_SENDER", "SEND_UNCERTAIN", "RATE_MISSING"})
 # What a reply on a review email can never do, so is never offered there.
 _NEVER_OFFERED = re.compile(r"^\s*(approve|cancel|send)\b", re.IGNORECASE)

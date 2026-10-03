@@ -68,7 +68,7 @@ class ManualQuickBooks:
         return dict.fromkeys(external_ids, False)
 
     # Nothing to look up: the agent's own records are the only copy, so there
-    # is nothing for them to disagree with (docs/decisions.md #55).
+    # is nothing for them to disagree with (docs/decisions.md #60).
     can_look_up_invoices = False
 
     def invoice_lookup(self, external_id: str) -> InvoiceLookup | None:

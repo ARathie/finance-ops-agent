@@ -26,7 +26,7 @@ class AccountingNumberTaken(AccountingFailed):
     """The accounting system already has an invoice under this number.
 
     Its own kind because Kevin can settle it from his inbox: delete the old
-    invoice and say "try again", or name a different number (decision 54).
+    invoice and say "try again", or name a different number (decision 59).
     """
 
     def __init__(self, message: str, number: str) -> None:
@@ -142,7 +142,7 @@ class CreatedInvoice:
 class InvoiceLookup:
     """An invoice as the accounting system holds it right now.
 
-    For diagnosis only (docs/decisions.md #55). `item_id` is the agent's own
+    For diagnosis only (docs/decisions.md #60). `item_id` is the agent's own
     item, read from the marker it writes on every invoice it makes; None means
     the invoice carries no such marker, so someone made it by hand.
     """

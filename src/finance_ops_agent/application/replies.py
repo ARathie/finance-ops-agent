@@ -5,7 +5,7 @@ matched to what it answers by its In-Reply-To (or References) header naming
 the Message-ID the agent sent, and by the subject as a fallback (decision 17).
 
 Kevin writes the way people write email, so a reply is not held to a fixed
-form (decision 54). The model turns it into a list of typed requests, each with
+form (decision 59). The model turns it into a list of typed requests, each with
 the words it relied on; code checks every one -- is that number usable, is the
 quote really in the reply, can this be done at this stage -- and does it or says
 why not. Kevin always hears back what was done and what was not, in the same
@@ -349,7 +349,7 @@ def _handle_review_reply(
     picked = picked_option(body, offered)
     if picked is not None:
         # "A" stands for the words that option offered; read and check those,
-        # exactly as if he had written them (decision 56).
+        # exactly as if he had written them (decision 61).
         report.note(f'Kevin picked an option: "{picked}"')
         body = picked
     reading = deps.reader.read_reply(body, questions, _context(deps, item, "review", offered))

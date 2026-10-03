@@ -1,4 +1,4 @@
-"""Score the investigator against made-up stuck situations (docs/decisions.md #57).
+"""Score the investigator against made-up stuck situations (docs/decisions.md #62).
 
 Each case folder holds `situation.json` (what is stuck: items, invoices in the
 agent's records and in QuickBooks, the review about to go to Kevin),
@@ -94,7 +94,7 @@ class SituationReview(BaseModel):
     code: str
     message: str = ""
     # Build the message the way the agent does, instead of writing it out:
-    # "number_taken" for QuickBooks refusing a number (stage 1 of decision 56
+    # "number_taken" for QuickBooks refusing a number (stage 1 of decision 61
     # adds who holds it), "invoice_missing" for the paid check's finding.
     as_the_agent_writes: Literal["number_taken", "invoice_missing"] | None = None
     number: str = ""  # for "number_taken"

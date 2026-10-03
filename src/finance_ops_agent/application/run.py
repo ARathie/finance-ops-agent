@@ -75,7 +75,7 @@ def run_once(deps: RunDeps, report: RunReport | None = None) -> RunReport:
     outgoing_steps.plan_outgoing(deps, report)
     paid_check.check_paid_invoices(deps, report)
     # Last before anything is sent: every review email written this run is
-    # still pending, so it can gain what the investigator found (decision 56).
+    # still pending, so it can gain what the investigator found (decision 61).
     investigation.investigate_pending_reviews(deps, report, workbook)
     tracking_sha = _write_tracking(deps)
     summary_steps.enqueue_monday_summary(deps, report, tracking_sha)

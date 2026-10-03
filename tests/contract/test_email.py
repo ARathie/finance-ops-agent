@@ -369,7 +369,7 @@ class TestReading:
 
 class TestLookingAtTheInbox:
     """`fops diagnose` asks which inbox mail the next run will read, on a real
-    IMAP server, and looking changes nothing (decision 55)."""
+    IMAP server, and looking changes nothing (decision 60)."""
 
     def test_mail_already_read_past_is_told_apart_from_new_mail(self, env: Env) -> None:
         deliver(env.server, timesheet_email(message_id="<one@example>"))

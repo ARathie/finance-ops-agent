@@ -247,7 +247,7 @@ Take a backup first. `fops backup` writes `data/backups/fops-backup-YYYY-MM-DD.z
    `fops diagnose --item 6` shows everything about one item: its invoices, reviews, emails and history. `fops diagnose --number 083126MT-MK` says which QuickBooks invoice holds a number and whose work it is. `--no-mail` skips the inbox.
 3. `fops status`: every item, its status, and the open reviews.
 
-   The agent runs the same checks itself (decision 56). When something gets stuck, Kevin's review email says what it found and offers lettered options, and each `fops.log` line `investigated` or `investigation looked` records what it looked at. The investigator uses the same Anthropic key as the reader, at most three times a run, and only when a review is about to go out.
+   The agent runs the same checks itself (decision 61). When something gets stuck, Kevin's review email says what it found and offers lettered options, and each `fops.log` line `investigated` or `investigation looked` records what it looked at. The investigator uses the same Anthropic key as the reader, at most three times a run, and only when a review is about to go out.
 4. `tail -50 data/fops.log`, or `docker compose logs --tail 50`: what the last runs did.
 5. Nothing in the log for an hour, or a heartbeat alert? In stage 2: `docker compose ps` (is the container up?), disk space (`df -h`), and whether Rackspace is reachable from the server. In stage 1: the Mac went to sleep, logged out, or the launchd job is not loaded (`launchctl print`).
 6. If you need the agent to stop acting immediately, set `FOPS_MODE=dry_run` in `.env` and restart (`docker compose up -d`, or just wait for the next launchd run). The next run reads and reports but sends nothing.

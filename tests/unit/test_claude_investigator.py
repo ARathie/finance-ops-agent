@@ -1,4 +1,4 @@
-"""The Claude investigator's loop, against a stubbed client (decision 56)."""
+"""The Claude investigator's loop, against a stubbed client (decision 61)."""
 
 import json
 from types import SimpleNamespace
@@ -150,7 +150,7 @@ def test_an_answer_that_does_not_fit_the_form_is_sent_back() -> None:
 
 
 # What the first live run really returned for the duplicate case: every option
-# written into `found` as tags, and no proposals (decision 57).
+# written into `found` as tags, and no proposals (decision 62).
 TAGGED = {
     "found": "The same month is in the list twice.</found>\n<evidence>[...]</evidence>"
     "\n<proposals><item><reply_to_choose>ignore</reply_to_choose></item></proposals>",

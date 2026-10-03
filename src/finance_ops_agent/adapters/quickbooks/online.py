@@ -448,7 +448,7 @@ class QuickBooksOnline:
         except QuickBooksFailed as error:
             # 6140 is QuickBooks saying another invoice already holds this
             # number: usually a leftover Kevin can delete, or a number he wants
-            # to change. Its own kind, so he is told exactly that (decision 54).
+            # to change. Its own kind, so he is told exactly that (decision 59).
             if any(marker in str(error) for marker in _DUPLICATE_NUMBER):
                 raise QuickBooksNumberTaken(str(error), invoice.number) from error
             raise
@@ -762,7 +762,7 @@ class QuickBooksOnline:
             paid[external_id] = _cents(invoice.get("Balance", 0)) == 0
         return paid
 
-    # --- looking, for diagnosis (docs/decisions.md #55); never writes ---
+    # --- looking, for diagnosis (docs/decisions.md #60); never writes ---
 
     can_look_up_invoices = True
 

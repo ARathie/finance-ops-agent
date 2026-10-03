@@ -5,7 +5,7 @@ zero makes the item client_paid; a partial payment leaves the status alone. The
 agent never records a payment in QuickBooks — Kevin or the bookkeeper does that,
 as today.
 
-Each invoice is asked about on its own (decision 56). Before, one invoice
+Each invoice is asked about on its own (decision 61). Before, one invoice
 QuickBooks did not have -- made in the sandbox, or deleted by hand -- failed
 the question for every invoice, on every run, with nothing to say which one.
 Now that invoice gets a review of its own naming it and the fix, and the rest

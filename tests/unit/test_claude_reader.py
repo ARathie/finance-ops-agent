@@ -175,7 +175,7 @@ def test_read_reply() -> None:
 def test_read_reply_is_told_what_the_reply_is_about() -> None:
     """ "Add -revised to it" means nothing without the number it is added to,
     so the reader is given the item's names, period and invoice number --
-    never a rate, never an address (decision 54)."""
+    never a rate, never an address (decision 59)."""
     expected = ReplyReading(answers=[], understood="", still_unclear="")
     reader, stub, _ = make_reader(StubResponse(parsed_output=expected))
     reader.read_reply(
@@ -196,7 +196,7 @@ def test_read_reply_is_told_what_the_reply_is_about() -> None:
 
 
 def test_the_ways_out_it_offered_are_shown_by_letter() -> None:
-    """So "the second one" can be read as what option B stood for (decision 56)."""
+    """So "the second one" can be read as what option B stood for (decision 61)."""
     expected = ReplyReading(answers=[])
     reader, stub, _ = make_reader(StubResponse(parsed_output=expected))
     reader.read_reply(

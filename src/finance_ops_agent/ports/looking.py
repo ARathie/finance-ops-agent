@@ -2,7 +2,7 @@
 
 Diagnosis is typed against these narrow views rather than the full ports, so
 `mypy --strict` refuses a write from it before any test runs (docs/decisions.md
-#55). Every real adapter already satisfies them; nothing has to implement them
+#60). Every real adapter already satisfies them; nothing has to implement them
 separately.
 """
 

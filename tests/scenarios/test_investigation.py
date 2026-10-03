@@ -1,5 +1,5 @@
 """The agent looks into what is stuck, tells Kevin what it found and what he could
-do, and acts on the option he picks (decision 56).
+do, and acts on the option he picks (decision 61).
 
 Stage 1 is plain code: the run calls the diagnosis where it gets stuck. Stage 3
 is the investigator, scripted here: it makes real calls through the real

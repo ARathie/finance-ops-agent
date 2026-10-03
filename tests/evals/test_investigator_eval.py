@@ -1,4 +1,4 @@
-"""The investigator's eval set (decision 57): replayed from recorded answers only
+"""The investigator's eval set (decision 62): replayed from recorded answers only
 (no network in CI), and the grader shown to catch every kind of bad answer.
 """
 
@@ -117,7 +117,7 @@ def test_the_problems_read_as_the_agent_would_write_them() -> None:
     )
     assert (
         "What I found: " in problems["01-number-held-by-forgotten-item"]
-    )  # stage 1 of decision 56
+    )  # stage 1 of decision 61
     assert (
         "QuickBooks has no invoice with that id" in problems["04-invoice-missing-from-quickbooks"]
     )

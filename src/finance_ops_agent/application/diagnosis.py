@@ -1,4 +1,4 @@
-"""Looking, never touching: what is stuck, and why (docs/decisions.md #55).
+"""Looking, never touching: what is stuck, and why (docs/decisions.md #60).
 
 Every function here reads the agent's records, the accounting system and the
 inbox, and returns findings in plain words: what is the case, and what a person

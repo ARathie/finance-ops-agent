@@ -280,7 +280,7 @@ class SummaryData:
     no_timesheet_yet: list[str] = field(default_factory=list)
     set_aside: list[str] = field(default_factory=list)
     duplicates_filed: list[str] = field(default_factory=list)
-    # From the read-only diagnosis (decision 56); the section only appears
+    # From the read-only diagnosis (decision 61); the section only appears
     # when there is something in it.
     looks_stuck: list[str] = field(default_factory=list)
 

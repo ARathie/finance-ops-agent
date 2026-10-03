@@ -3,7 +3,7 @@
 One reply can carry several requests ("use 083126MT-MK-revised and send it to
 me first"), so an answered review keeps the whole list under `actions`. Older
 answers carry one `kind` and `value` and nothing else; both shapes are read
-here, so nothing else has to know there are two (docs/decisions.md #54).
+here, so nothing else has to know there are two (docs/decisions.md #59).
 """
 
 from finance_ops_agent.application.context import RunDeps

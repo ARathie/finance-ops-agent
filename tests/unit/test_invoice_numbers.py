@@ -113,7 +113,7 @@ class TestACancelledNumber:
 
 
 class TestANumberKevinChose:
-    """Kevin may name any number in a reply (decision 54), as long as
+    """Kevin may name any number in a reply (decision 59), as long as
     QuickBooks will take it and it cannot pass for a voided invoice."""
 
     def test_his_own_suffix_is_fine(self) -> None:

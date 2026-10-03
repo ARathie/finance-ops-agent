@@ -1,4 +1,4 @@
-"""Kevin answers in his own words, and the agent does what he asked (decision 54).
+"""Kevin answers in his own words, and the agent does what he asked (decision 59).
 
 The reader is scripted here, as everywhere in the scenarios: what is under test
 is that code checks each request the reading names, does the ones it can, says

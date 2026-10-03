@@ -243,7 +243,7 @@ class TestCreateInvoice:
 
     def test_a_number_another_invoice_holds_is_its_own_failure(self, tmp_path: Path) -> None:
         """Error 6140 is something Kevin can settle by reply -- delete the
-        leftover or name another number -- so it is told apart (decision 54)."""
+        leftover or name another number -- so it is told apart (decision 59)."""
         replay = replay_from("test_invoice_duplicate_number")
         accounting, _, _ = build(replay, tmp_path)
 
@@ -1708,7 +1708,7 @@ class TestTheEngagementsFromQuickBooksAlone:
 
 
 class TestLookingUpInvoices:
-    """Read-only lookups for `fops diagnose` (decision 55)."""
+    """Read-only lookups for `fops diagnose` (decision 60)."""
 
     def test_an_invoice_it_has_names_the_item_it_was_made_for(self, tmp_path: Path) -> None:
         replay = replay_from("invoice_lookups")
