@@ -69,8 +69,8 @@ The code is what the software uses; the message is what Kevin sees. Every review
 | `NO_APPROVAL` | I can't see that the client approved these hours. | Forward the client's approval, or reply "approved by <name> on <date>". |
 | `NOT_SURE` | I read this timesheet but I'm not confident about <field>. | Confirm or correct the field. |
 | `RATE_MISSING` | The engagement list has no rate for these dates. | Add a row with the rate and its start date. |
-| `NO_BILLING_CONTACT` | The engagement list has no billing email for this client. | Add it to the Clients sheet. |
-| `LIST_ROW_PROBLEM` | A row in the engagement list is incomplete or contradicts another row. | Fix the row named in the email. |
+| `NO_BILLING_CONTACT` | There is no billing email for this client, so I won't invoice this yet. | Add it to the Clients sheet (or the customer in QuickBooks, in QuickBooks mode). The invoice carries on by itself on the next run; nothing to reply (decision 65). |
+| `LIST_ROW_PROBLEM` | A row in the engagement list is incomplete or contradicts another row. | Fix the row named in the email. The question closes by itself on the next run; a reply cannot fix a row (decision 66). |
 | `CORRECTION` | This looks like a corrected version of a timesheet I already handled. | Reply "use the new one" or "ignore". See `status-tracking.md`. |
 | `SEND_FAILED` | I couldn't send the billing email. I'll keep trying; please check the mailbox. | Usually fixes itself; otherwise check the mailbox connection. |
 | `SEND_UNCERTAIN` | I sent the billing email for <item> but couldn't confirm it left the server. You're on CC: reply "received" if you got it, or "resend". | Reply "received" or "resend". |

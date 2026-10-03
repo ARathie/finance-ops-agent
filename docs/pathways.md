@@ -63,8 +63,8 @@ When a change adds a path, add it here in the same pull request.
 
 - [ ] **B1. The spreadsheet has a bad row.**
   Decided by: code checking each row.
-  Outcome: one *Needs your review* email naming the sheet and row; that engagement is left out until fixed. Read every run, so a fix is noticed within 15 minutes.
-  Test: `test_run.py` (list problems), `test_quiet_runs.py::TestAQuietRun::test_still_catches_a_broken_spreadsheet_edit`.
+  Outcome: one *Needs your review* email naming the sheet and row, saying there is nothing to reply; that engagement is left out until fixed (a client whose only fault is a missing billing email is not: E12). Read every run, so a fix is noticed within 15 minutes, and its question closes by itself on that run (decision 66).
+  Test: `test_run.py` (list problems), `test_quiet_runs.py::TestAQuietRun::test_still_catches_a_broken_spreadsheet_edit`, `test_questions_with_nothing_behind_them.py::TestListProblemsCloseThemselves`.
 - [ ] **B2. A QuickBooks record is incomplete** *(QuickBooks mode)* -- e.g. no `Invoice code:` on a customer, no `Start:` on a product.
   Outcome: a review naming the record and what to fill in; that engagement is left out.
   Test: `test_engagements_from_quickbooks.py::test_something_missing_in_quickbooks_is_a_review_naming_the_record`.
@@ -137,7 +137,7 @@ Decided by code from the sender's address, never by reading the email.
 - [ ] **E9. A week straddling two months.** Decided by: code -- the days or a note on the page saying how many hours belong to the month. Outcome: only the month's own hours billed, or `PART_WEEK_UNCLEAR` / `PART_WEEK_DISAGREES` review. Test: `test_straddling_months.py`.
 - [ ] **E10. The rate changes in the middle of the period.** Outcome: review naming both rows; never a split invoice. Test: `test_run.py::TestRateChangeMidPeriod`.
 - [ ] **E11. No rate for these dates.** Outcome: `RATE_MISSING` review. Test: `tests/unit/test_checks.py` only.
-- [ ] **E12. The client has no billing email.** Outcome: `NO_BILLING_CONTACT` review. Test: **none yet** (gap G6).
+- [ ] **E12. The client has no billing email** (and QuickBooks' customer has none either). Decided by: code, on the item's own details. Outcome: still a known client -- the timesheet is placed and kept, the invoice waits with a `NO_BILLING_CONTACT` review saying where to add the address; it carries on by itself on the first run that finds one, or "ignore" drops it (decision 65). A client paid through a portal needs none. Test: `test_no_billing_email.py`, `test_engagements_from_quickbooks.py::test_a_customer_with_no_email_is_still_a_client_and_its_invoice_waits`.
 
 ## F. A timesheet: hours, approval, confidence, money
 
@@ -176,6 +176,8 @@ Decided by code from the sender's address, never by reading the email.
 - [ ] **H12. A different invoice number** ("use 083126MT-MK-revised", "add -revised to it"). Decided by: Claude spells out the number; code checks QuickBooks would take it and no invoice of the agent's holds it. Outcome: the invoice is made under it and comes to Kevin to approve; a number that will not do is refused, saying why (decision 59). Test: `test_kevin_replies.py::TestANumberQuickBooksAlreadyHas`.
 - [ ] **H13. "Try again".** Decided by: code -- what the question is about. Outcome: where an invoice or a send failed, it is attempted again now; anywhere else, including a question waiting on QuickBooks for an item's rates, the question stays open, is looked at again on every run, and Kevin is told so (decisions 55 and 61). Test: `test_kevin_replies.py::TestANumberQuickBooksAlreadyHas::test_try_again_after_he_deleted_the_leftover`, `test_kevin_replies.py::test_try_again_on_a_question_about_a_timesheet_leaves_it_open`, `test_kevin_replies.py::test_try_again_never_closes_a_question_waiting_on_rates`.
 - [ ] **H14. "Show it to me first".** Outcome: that item goes to Kevin to approve, even where it would have gone automatically. Test: `test_kevin_replies.py::TestANumberQuickBooksAlreadyHas::test_show_me_first_holds_back_an_automatic_invoice`.
+- [ ] **H16. A reply to an email about engagement-list problems.** Decided by: code; the reply is not read, by Claude or anyone. Outcome: nothing changes -- a reply cannot fix a row; Kevin gets one note saying which problems are already fixed and which are still there, and that each closes by itself. A reply to that note is not answered again (decision 66). Test: `test_questions_with_nothing_behind_them.py::TestAReplyAboutTheList`.
+- [ ] **H17. An answer to a question about an email with no usable timesheet** (no attachment, or none that could be read). Outcome: not written down, the question stays open, and Kevin is told there is nothing to apply it to; "ignore" closes that email's question and no other (decision 66). Test: `test_questions_with_nothing_behind_them.py::TestAnEmailWithNoTimesheet`.
 - [ ] **H15. A letter or option number** ("A", "option 2", "go with B") on a review that offered ways out. Decided by: code, not Claude -- the letter stands for that option's words, which are then read and checked as if he had written them (decision 61). Test: `test_investigation.py::TestTheInvestigator::test_picking_a_lets_him_answer_with_one_letter`, `test_investigation.py::TestTheInvestigator::test_picking_b_uses_the_new_number`.
 
 ## I. Setting something up in QuickBooks *(QuickBooks mode)*
@@ -220,5 +222,5 @@ Paths where the agent does less than the other documents say, or nothing at all.
 - ~~**G3. Client replies.**~~ Closed by decision 58 (C4): Kevin gets each one as it came.
 - ~~**G4. A reply from Kevin the agent can't match.**~~ Closed by decision 63 (H10): he is told nothing was done, and how to answer.
 - ~~**G5. The Monday summary.**~~ Closed by decision 64 (J8): it lists duplicates filed last week and unpaid invoices past their due date.
-- **G6. `NO_BILLING_CONTACT`** has no whole-run test.
-- **G7. A replied-to review with no record behind it** (e.g. a spreadsheet problem): Kevin's answer is recorded but changes nothing; fixing the spreadsheet or QuickBooks is what fixes it.
+- ~~**G6. `NO_BILLING_CONTACT`.**~~ Closed by decision 65 (E12). The whole-run test found the review could never be raised: the client was dropped from the list, so the timesheet looked like one for a client nobody knew.
+- ~~**G7. A replied-to review with no record behind it.**~~ Closed by decision 66 (B1, H16, H17). List problems close by themselves once fixed; an answer with nothing to apply it to is no longer written down as done; an "ignore" closes only its own email's questions.

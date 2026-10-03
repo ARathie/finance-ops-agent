@@ -161,3 +161,36 @@ class TestOneAddressForTwoConsultants:
         (review,) = [r for r in firm.store.open_reviews() if r.code == "CONSULTANT_UNKNOWN"]
         assert "Priya Shah, Dana Cruz" in review.message
         assert not any(item.status is ItemStatus.READY for item in firm.store.list_items())
+
+
+def test_a_customer_with_no_email_is_still_a_client_and_its_invoice_waits(
+    qbo: ScenarioEnv,
+) -> None:
+    """Decision 65: before, the customer was left out of the copy, so its
+    timesheets looked like ones for a client nobody knew."""
+    held = qbo.accounting.customers["Acme Corp"]
+    qbo.accounting.customers["Acme Corp"] = AccountingParty(
+        ref=held.ref,
+        name=held.name,
+        company=held.company,
+        email="",
+        payment_terms_days=held.payment_terms_days,
+        notes=held.notes,
+    )
+    qbo.add_email(PRIYA, scripted_reading=reading(AUG_START, AUG_END))
+    qbo.run()
+
+    item = qbo.the_item()
+    assert item.status is ItemStatus.NEEDS_REVIEW
+    [review] = [r for r in qbo.store.open_reviews() if r.code == "NO_BILLING_CONTACT"]
+    assert "the Acme Corp customer in QuickBooks" in review.message
+
+    # Kevin adds the address in QuickBooks; the next day's copy has it.
+    qbo.accounting.customers["Acme Corp"] = held
+    qbo.today = date(2026, 9, 9)
+    qbo.run()
+
+    item = qbo.store.get_item(item.id)
+    assert item.snapshot.billing_emails == ["ap@acme.example"]
+    assert item.status is not ItemStatus.NEEDS_REVIEW
+    assert not [r for r in qbo.store.open_reviews() if r.code == "NO_BILLING_CONTACT"]

@@ -62,6 +62,7 @@ EMAIL_KINDS = (
     # Kevin wrote and the agent could not tell what it answers (decision 63).
     # Not answerable: a reply to it is matched to nothing, like the first.
     "unmatched_reply_email",
+    "list_reply_email",
 )
 
 

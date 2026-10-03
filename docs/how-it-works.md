@@ -192,6 +192,7 @@ flowchart TD
     checks --> money["Ask QuickBooks for this engagement's rates and billing details (F7)"]
     money -- "QuickBooks can't answer" --> hold["Kept; invoice waits; retried every run (F9)"]
     money -- "disagrees with the spreadsheet" --> differ["QuickBooks' figure used; Kevin told (F8)"]
+    money -- "no billing email anywhere" --> nobill["Kept; invoice waits for an address, then carries on by itself (E12)"]
     money --> same{"Another timesheet for this record and dates?"}
     same -- "same hours and approval" --> quiet2["Filed quietly as a duplicate (K1)"]
     same -- "different" --> corr["Review: CORRECTION (K2, K3)"]

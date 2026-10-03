@@ -45,6 +45,10 @@ _ANSWERABLE = (
     "setup_request",
 )
 
+# Notes that say all there is to say: a reply to one is not answered again,
+# so an out-of-office reply can never start a loop (decisions 63 and 66).
+_NOT_ANSWERED = ("unmatched_reply_email", "list_reply_email")
+
 APPROVAL_CODE = "APPROVAL"
 
 # The requests that change what happens to an invoice. Each must rest on words
@@ -69,8 +73,17 @@ def _stripped_subject(subject: str) -> str:
 
 
 def _matched_record(deps: RunDeps, message: StoredMessage) -> OutgoingRecord | None:
-    records = [record for record in deps.store.outgoing_records() if record.kind in _ANSWERABLE]
+    outgoing_records = deps.store.outgoing_records()
     answered = {message.in_reply_to, *message.references} - {""}
+    if any(
+        record.kind in _NOT_ANSWERED and record.message_id in answered
+        for record in outgoing_records
+    ):
+        # A reply to a note that says all there is to say. Its subject still
+        # names the email the note answered, so matching on it would answer
+        # an out-of-office reply with the same note again, and again.
+        return None
+    records = [record for record in outgoing_records if record.kind in _ANSWERABLE]
     if answered:
         by_id = [record for record in records if record.message_id in answered]
         if by_id:
@@ -209,7 +222,7 @@ def _tell_kevin_it_matched_nothing(
     ours = {
         record.message_id
         for record in deps.store.outgoing_records()
-        if record.kind == "unmatched_reply_email" and record.message_id
+        if record.kind in _NOT_ANSWERED and record.message_id
     }
     if ours & ({message.in_reply_to, *message.references} - {""}):
         return  # an answer to the note itself: it has said all it can
@@ -242,6 +255,51 @@ def _tell_kevin_it_matched_nothing(
     outgoing.enqueue_email(
         deps, "unmatched_reply_email", f"unmatched:{message.message_id}", None, note
     )
+
+
+def _answer_about_the_list(
+    deps: RunDeps, message: StoredMessage, record: OutgoingRecord, report: RunReport
+) -> None:
+    """Kevin answered an email about problems in the engagement list.
+
+    A reply cannot fix a row: the list is the record, and each question closes
+    by itself on the first run that finds its row fixed (decision 66). So his
+    words are not read -- by Claude or anyone -- and he is told, once, which of
+    the problems are already fixed and which are still there. Before, an
+    answer was written down as if it had done something, and the question
+    closed while the row stayed wrong."""
+    asked = record.payload.get("list_problems")
+    problems = [str(problem) for problem in asked] if isinstance(asked, list) else []
+    still_open = {
+        review.message
+        for review in deps.store.open_reviews()
+        if review.code == ReviewCode.LIST_ROW_PROBLEM.value
+    }
+    fixed = [problem for problem in problems if problem not in still_open]
+    left = [problem for problem in problems if problem in still_open]
+    where = (
+        "QuickBooks" if deps.settings.engagements_from == "quickbooks" else "the engagement list"
+    )
+    lines = [
+        "Thanks. A reply can't change the engagement list, so I haven't changed anything from it.",
+    ]
+    if left:
+        lines += ["", f"Still to fix in {where}:", *[f"- {problem}" for problem in left]]
+    if fixed:
+        lines += ["", "Already fixed:", *[f"- {problem}" for problem in fixed]]
+    lines += [
+        "",
+        f"I read {where} on every run, and each of these closes by itself once"
+        " it is right. There is nothing to reply.",
+    ]
+    note = emails.OutgoingEmail(
+        to=(deps.settings.admin_email,),
+        subject=f"Re: {_stripped_subject(str(record.payload.get('subject', '')))}",
+        in_reply_to=message.message_id,
+        body="\n".join(lines),
+    )
+    outgoing.enqueue_email(deps, "list_reply_email", f"reply:{message.message_id}", None, note)
+    report.note(f"Kevin answered about the engagement list; {len(left)} problem(s) still there")
 
 
 # --- approvals ---
@@ -470,6 +528,9 @@ def _handle_review_reply(
     if record.payload.get("engagement_refresh"):
         engagement_copy.handle_reply(deps, message, record, body, report)
         return
+    if record.payload.get("list_problems"):
+        _answer_about_the_list(deps, message, record, report)
+        return
     if record.payload.get("outage"):
         # Read by code, not Claude: Claude may be the thing that is down.
         if _first_word(body) == "ignore":
@@ -483,6 +544,12 @@ def _handle_review_reply(
     open_reviews = [
         review for review in deps.store.open_reviews() if review.item_id == record.item_id
     ]
+    if record.item_id is None:
+        # Only the questions this email asked: every other question without an
+        # item -- another email's, a list problem -- is not his answer's to
+        # close, and an "ignore" here once closed them all (decision 66).
+        asked = str(record.payload.get("body", ""))
+        open_reviews = [review for review in open_reviews if f"- {review.message}" in asked]
     if not open_reviews:
         return  # nothing left to answer; the item moved on
     questions = [(review.code, review.message) for review in open_reviews]
@@ -536,6 +603,17 @@ def _handle_review_reply(
                 " settled. Nothing else has changed."
             )
             acknowledged = True
+            continue
+        if item is None:
+            # Nothing stands behind the question for an answer to change: the
+            # email had no timesheet in it, or none that could be read. Writing
+            # the answer down and closing the question would only hide it
+            # (decision 66).
+            outcome.not_done.append(
+                "There's no timesheet behind this question, so there is nothing to"
+                " apply that to. Ask the sender to send the timesheet again as an"
+                ' attachment, or reply "ignore" to drop it.'
+            )
             continue
         ok, line = _check_answer(deps, item, answer, body)
         if not ok:
