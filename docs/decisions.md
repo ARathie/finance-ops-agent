@@ -693,7 +693,7 @@ Decision 60 built the read-only diagnosis for a person to run. This one puts it 
 - **It only ever adds.** The email is changed only while still `pending`, and the store refuses to change one once a send has begun (`amend_pending_outgoing`). If the investigator fails, refuses, runs out of its eight steps, or answers in a shape that does not fit, the email goes out exactly as it was.
 - **On the record:** what it called, and whether each call worked, is kept in the email's outgoing row and in the log.
 
-This is where rule 7 ("Claude reads; code decides") moves. Claude now chooses what to *look at* and what to *suggest*. Code still decides everything that changes anything, and Kevin chooses between the suggestions. The investigator is not given, and cannot reach, anything that acts.
+This is where rule 7 ("Claude reads; code decides") moves. Claude now chooses what to *look at* and what to *suggest*. Code still decides everything that changes anything, and Kevin chooses between the suggestions. The investigator is not given, and cannot reach, anything that acts. (`CLAUDE.md` rule 7 was reworded to say so after this merged: "Claude reads and suggests; code decides".)
 
 Not done here: an eval set for the investigator. Its answers are only scored by the scenarios, which script it. Before relying on it, record live answers for the first live cycle's incidents, the way timesheet readings are recorded (PR 12).
 

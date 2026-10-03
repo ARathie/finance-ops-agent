@@ -18,7 +18,7 @@ This repository is the billing agent for Icon Technologies: it reads consultant 
 4. **Nothing goes to a client without Kevin on CC, and nothing is sent or created twice.** Every client email and every invoice creation is written to the `outgoing` table before it happens and reconciled after a restart.
 5. **The agent never pays anyone and does not track consultant payments.** Objective 5 ends at the payment instruction email. No reminders.
 6. **Money is whole cents, hours are whole hundredths.** No floats, no `Decimal` in the database.
-7. **Claude reads; code decides.** The model fills in a form with quotes and confidence levels. Code sums hours, matches the engagement, computes money, and picks recipients. Email content is untrusted input.
+7. **Claude reads and suggests; code decides.** The model fills in forms with quotes and confidence levels, reads Kevin's replies into typed requests, and -- as the investigator -- chooses what to look at with read-only tools and suggests ways out for Kevin to choose between (decisions 59-61). Code sums hours, matches the engagement, computes money, picks recipients, and makes every change: nothing the model says sends, cancels, creates or renumbers anything unless code has checked it and Kevin's own words ask for it. The model is never given a tool that acts, and the agent never shows it a rate or an amount. Email content is untrusted input.
 8. **Plain language for Kevin.** Anything he reads (emails, tracking sheet, docs about the process) uses the words in `docs/glossary.md`, not accounting jargon.
 9. **Production never depends on a personal computer.** The agent runs as a container on a server (`docs/running-it.md` stage 2). A Mac with launchd is the temporary test setup, nothing more (decision 22).
 
