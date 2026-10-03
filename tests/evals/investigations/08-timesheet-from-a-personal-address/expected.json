@@ -1,0 +1,26 @@
+{
+  "must_call_any": [
+    "look_up_engagements",
+    "describe_email"
+  ],
+  "found_mentions": [
+    [
+      "personal",
+      "gmail",
+      "different address",
+      "another address",
+      "not the address",
+      "isn't on",
+      "is not on",
+      "not on the"
+    ]
+  ],
+  "replies_wanted": [
+    [
+      "this is from priya shah"
+    ]
+  ],
+  "replies_forbidden": [
+    "ignore"
+  ]
+}

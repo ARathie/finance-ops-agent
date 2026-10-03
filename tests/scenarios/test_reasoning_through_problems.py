@@ -251,3 +251,44 @@ def test_a_portal_client_is_unaffected(env: ScenarioEnv) -> None:
     env.add_email(PRIYA, scripted_reading=reading(AUG_START, AUG_END))
     env.run()
     assert env.the_item().status is ItemStatus.READY
+
+
+class TestAnAnswerToASettledQuestion:
+    """Before decision 67 this was dropped without a word."""
+
+    def answered_then_answered_again(self, env: ScenarioEnv) -> str:
+        env.add_email(PRIYA, scripted_reading=reading(AUG_START, AUG_END, approved=False))
+        env.run()
+        subject = next(s for s in env.sent_subjects() if s.startswith("Needs your review"))
+        env.replies["ignore"] = ReplyReading(
+            answers=[ReplyAnswer(review_code="NO_APPROVAL", kind=ReplyAnswerKind.IGNORE)]
+        )
+        env.reply_from_kevin(subject, "ignore")
+        env.run()
+        env.reply_from_kevin(subject, "actually approved by Jane Doe")
+        env.run()
+        return subject
+
+    def test_kevin_is_told_nothing_changed(self, env: ScenarioEnv) -> None:
+        subject = self.answered_then_answered_again(env)
+
+        [note] = [e for e in env.sender.sent_emails() if e.subject == f"Re: {subject}"]
+        assert "already settled" in note.body
+        assert "Priya Shah at Acme Corp is now ignored" in note.body
+        assert env.the_item().status is ItemStatus.IGNORED
+
+    def test_a_reply_to_that_note_gets_nothing_more(self, env: ScenarioEnv) -> None:
+        self.answered_then_answered_again(env)
+        [note] = [r for r in env.store.outgoing_records() if r.kind == "settled_reply_email"]
+        sent = len(env.sender.sent_emails())
+
+        env.add_email(
+            "kevin@icon-technologies.com",
+            subject=f"Re: {note.payload['subject']}",
+            attachment=None,
+            body="I am out of the office.",
+            in_reply_to=note.message_id,
+        )
+        env.run()
+
+        assert len(env.sender.sent_emails()) == sent

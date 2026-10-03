@@ -1,0 +1,21 @@
+{
+  "must_call_any": [
+    "describe_email"
+  ],
+  "found_mentions": [
+    [
+      "out of the office",
+      "out-of-office",
+      "out of office",
+      "automatic reply",
+      "auto-reply",
+      "autoreply"
+    ]
+  ],
+  "replies_wanted": [
+    [
+      "ignore"
+    ]
+  ],
+  "sure": true
+}

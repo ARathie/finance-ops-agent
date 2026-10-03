@@ -1,0 +1,33 @@
+{
+  "must_call_any": [
+    "look_up_engagements"
+  ],
+  "found_mentions": [
+    [
+      "acme"
+    ],
+    [
+      "name",
+      "written",
+      "spelled",
+      "variant",
+      "legal"
+    ]
+  ],
+  "proposals_mention": [
+    [
+      "names on timesheets",
+      "name used on timesheets",
+      "names used on timesheets",
+      "timesheet name"
+    ]
+  ],
+  "replies_wanted": [
+    [
+      "try again"
+    ]
+  ],
+  "replies_forbidden": [
+    "ignore"
+  ]
+}

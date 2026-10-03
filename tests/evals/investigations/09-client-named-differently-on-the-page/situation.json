@@ -1,0 +1,53 @@
+{
+  "description": "Priya works at Acme and Globex in August. Her timesheet says 'Acme Corporation Inc.', which is neither client's name, legal name or timesheet name in the list, so the agent cannot tell which engagement it is.",
+  "items": [],
+  "emails": [
+    {
+      "key": "acme-variant",
+      "sender": "priya@shah.example",
+      "subject": "Timesheet August",
+      "attachments": [
+        "timesheet-aug.pdf"
+      ]
+    }
+  ],
+  "engagement_list": {
+    "clients": [
+      {},
+      {
+        "Client": "Globex",
+        "Legal name": "Globex LLC",
+        "Names on timesheets": "Globex",
+        "Email domains": "globex.example",
+        "Billing email": "ap@globex.example",
+        "Invoice code": "GX"
+      }
+    ],
+    "consultants": [
+      {
+        "Other names": "P. Shah"
+      }
+    ],
+    "engagements": [
+      {},
+      {
+        "Client": "Globex",
+        "Start date": "2026-06-01",
+        "Rates from": "2026-06-01"
+      }
+    ]
+  },
+  "what_i_read": [
+    "- Consultant: Priya Shah",
+    "- Client: Acme Corporation Inc.",
+    "- Period: Aug 1–31, 2026",
+    "- Hours: 156.00",
+    "- Approval: approved by Jane Doe on Aug 31"
+  ],
+  "review": {
+    "email": "acme-variant",
+    "set_aside": true,
+    "code": "ENGAGEMENT_UNCLEAR",
+    "message": "I can't tell which client this is for, or there is no active engagement for these dates."
+  }
+}

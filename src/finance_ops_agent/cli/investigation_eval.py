@@ -18,6 +18,7 @@ from pathlib import Path
 
 from finance_ops_agent.adapters.fakes.accounting import FakeAccounting
 from finance_ops_agent.adapters.fakes.store import FakeStore
+from finance_ops_agent.application import set_aside
 from finance_ops_agent.application.agent_tools import ReadOnlyToolbox
 from finance_ops_agent.application.diagnosis import (
     FindingKind,
@@ -317,6 +318,8 @@ def _build_without_an_item(situation: Situation, looking: Looking) -> Built:
     for text in asked:
         store.open_review(None, review.code, text)
     extra: dict[str, object] = {}
+    what_you_can_do: list[str] | None = None
+    then: list[str] | None = None
     if review.email is not None:
         message_id = _message_id(review.email)
         mail = store.get_message(message_id)
@@ -339,12 +342,14 @@ def _build_without_an_item(situation: Situation, looking: Looking) -> Built:
                 ),
             )
             extra["set_aside"] = message_id
+            what_you_can_do = set_aside.what_you_can_do(review.code)
         else:
             extra["about_email"] = message_id
     else:
         about = "the engagement list"
         extra["list_problems"] = asked
-    email = emails.needs_review(ADMIN, about, asked)
+        then = emails.list_problems_then("the engagement list")
+    email = emails.needs_review(ADMIN, about, asked, what_you_can_do=what_you_can_do, then=then)
     body = email.body
     if situation.what_i_read:
         first, _, rest = body.partition("\n")

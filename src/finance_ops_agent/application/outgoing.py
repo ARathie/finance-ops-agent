@@ -63,6 +63,7 @@ EMAIL_KINDS = (
     # Not answerable: a reply to it is matched to nothing, like the first.
     "unmatched_reply_email",
     "list_reply_email",
+    "settled_reply_email",
 )
 
 
@@ -577,12 +578,18 @@ def _now_text(deps: RunDeps) -> str:
 
 
 def _open_send_failed_review(deps: RunDeps, record: OutgoingRecord, report: RunReport) -> None:
+    # What the mail server answered -- an address that does not exist, a full
+    # mailbox, a refused login -- is most of the diagnosis (decision 67).
+    said = " ".join((record.last_error or "").split())[:200]
     deps.store.open_review(
         record.item_id,
         ReviewCode.SEND_FAILED.value,
-        "I couldn't send the billing email. I'll keep trying; please check the mailbox."
-        if record.kind == "billing_email"
-        else f"I couldn't send an email ({record.kind}). Please check the mailbox.",
+        (
+            "I couldn't send the billing email. I'll keep trying; please check the mailbox."
+            if record.kind == "billing_email"
+            else f"I couldn't send an email ({record.kind}). Please check the mailbox."
+        )
+        + (f" The mail server said: {said}" if said else ""),
     )
     report.note(f"giving up after {record.attempts} attempts: {record.idempotency_key}")
 

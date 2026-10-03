@@ -1,0 +1,26 @@
+{
+  "must_call_any": [
+    "look_up_engagements"
+  ],
+  "found_mentions": [
+    [
+      "full stop",
+      "period",
+      "dot",
+      "trailing",
+      "punctuation",
+      "typo",
+      "spelled",
+      "spelling"
+    ]
+  ],
+  "proposals_mention": [
+    [
+      "acme corp"
+    ]
+  ],
+  "replies_forbidden": [
+    ".+"
+  ],
+  "sure": true
+}

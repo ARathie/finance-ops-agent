@@ -1,0 +1,22 @@
+{
+  "must_call_any": [
+    "describe_email"
+  ],
+  "found_mentions": [
+    [
+      "jane doe"
+    ],
+    [
+      "email",
+      "forwarded"
+    ]
+  ],
+  "replies_wanted": [
+    [
+      "approved by jane doe on .+"
+    ]
+  ],
+  "replies_forbidden": [
+    "ignore"
+  ]
+}

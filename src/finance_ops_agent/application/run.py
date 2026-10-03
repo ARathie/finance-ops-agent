@@ -206,10 +206,7 @@ def _report_list_problems(deps: RunDeps, engagements: Engagements, report: RunRe
             deps.settings.admin_email,
             "the engagement list",
             problems,
-            then=[
-                f"Fix these in {where}. I read it on every run, and each one closes by",
-                "itself once it is right: there is nothing to reply.",
-            ],
+            then=emails.list_problems_then(where),
         )
         outgoing_steps.enqueue_email(
             deps,

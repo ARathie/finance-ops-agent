@@ -1,0 +1,28 @@
+{
+  "must_call_any": [
+    "describe_email"
+  ],
+  "found_mentions": [
+    [
+      "password",
+      "protected",
+      "locked",
+      "encrypted"
+    ]
+  ],
+  "proposals_mention": [
+    [
+      "without a password",
+      "unlocked",
+      "without the password",
+      "no password",
+      "remove the password",
+      "not protected",
+      "unprotected"
+    ]
+  ],
+  "replies_forbidden": [
+    "try again",
+    "ignore"
+  ]
+}

@@ -1,0 +1,203 @@
+{
+  "description": "Priya's August invoice went to Acme for 156 hours. A corrected timesheet for 148 hours has arrived.",
+  "items": [
+    {
+      "key": "priya",
+      "consultant": "Priya Shah",
+      "client": "Acme Corp",
+      "period_start": "2026-08-01",
+      "period_end": "2026-08-31",
+      "status": "invoice_sent",
+      "client_code": "AC",
+      "consultant_code": "PS",
+      "invoices": [
+        {
+          "number": "083126AC-PS",
+          "external_id": "301",
+          "status": "sent"
+        }
+      ],
+      "timesheets": [
+        {
+          "email": "first",
+          "reading": {
+            "consultant_name": {
+              "value": "Priya Shah",
+              "quote": "Priya Shah",
+              "confidence": "high"
+            },
+            "client_name": {
+              "value": "Acme Corp",
+              "quote": "Acme Corp",
+              "confidence": "high"
+            },
+            "end_client_name": {
+              "value": null,
+              "quote": null,
+              "confidence": "low"
+            },
+            "period_start": {
+              "value": "2026-08-01",
+              "quote": null,
+              "confidence": "high"
+            },
+            "period_end": {
+              "value": "2026-08-31",
+              "quote": null,
+              "confidence": "high"
+            },
+            "stated_month_start": {
+              "value": null,
+              "quote": null,
+              "confidence": "low"
+            },
+            "noted_in_month_hundredths": {
+              "value": null,
+              "quote": null,
+              "confidence": "low"
+            },
+            "daily_entries": {
+              "value": [],
+              "quote": null,
+              "confidence": "high"
+            },
+            "row_entries": {
+              "value": [],
+              "quote": null,
+              "confidence": "low"
+            },
+            "stated_total_hours_hundredths": {
+              "value": 15600,
+              "quote": "156.00",
+              "confidence": "high"
+            },
+            "approval": {
+              "value": {
+                "kind": "approved_status",
+                "approver": "Jane Doe",
+                "approval_date": "2026-08-31"
+              },
+              "quote": null,
+              "confidence": "high"
+            },
+            "unusual_items": []
+          }
+        },
+        {
+          "email": "corrected",
+          "is_correction": true,
+          "reading": {
+            "consultant_name": {
+              "value": "Priya Shah",
+              "quote": "Priya Shah",
+              "confidence": "high"
+            },
+            "client_name": {
+              "value": "Acme Corp",
+              "quote": "Acme Corp",
+              "confidence": "high"
+            },
+            "end_client_name": {
+              "value": null,
+              "quote": null,
+              "confidence": "low"
+            },
+            "period_start": {
+              "value": "2026-08-01",
+              "quote": null,
+              "confidence": "high"
+            },
+            "period_end": {
+              "value": "2026-08-31",
+              "quote": null,
+              "confidence": "high"
+            },
+            "stated_month_start": {
+              "value": null,
+              "quote": null,
+              "confidence": "low"
+            },
+            "noted_in_month_hundredths": {
+              "value": null,
+              "quote": null,
+              "confidence": "low"
+            },
+            "daily_entries": {
+              "value": [],
+              "quote": null,
+              "confidence": "high"
+            },
+            "row_entries": {
+              "value": [],
+              "quote": null,
+              "confidence": "low"
+            },
+            "stated_total_hours_hundredths": {
+              "value": 14800,
+              "quote": "148.00",
+              "confidence": "high"
+            },
+            "approval": {
+              "value": {
+                "kind": "approved_status",
+                "approver": "Jane Doe",
+                "approval_date": "2026-09-04"
+              },
+              "quote": null,
+              "confidence": "high"
+            },
+            "unusual_items": [
+              "Marked 'REVISED - replaces version sent 8/31'."
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "emails": [
+    {
+      "key": "first",
+      "sender": "priya@shah.example",
+      "subject": "August timesheet",
+      "attachments": [
+        "aug.pdf"
+      ],
+      "received": "2026-09-01T09:00:00+00:00"
+    },
+    {
+      "key": "corrected",
+      "sender": "priya@shah.example",
+      "subject": "REVISED August timesheet",
+      "body": "Sorry, I logged two days of leave as work. Revised sheet attached.",
+      "attachments": [
+        "aug-revised.pdf"
+      ],
+      "received": "2026-09-04T09:00:00+00:00"
+    }
+  ],
+  "engagement_list": {
+    "clients": [
+      {}
+    ],
+    "consultants": [
+      {
+        "Other names": "P. Shah"
+      }
+    ],
+    "engagements": [
+      {}
+    ]
+  },
+  "what_i_read": [
+    "- Consultant: Priya Shah",
+    "- Client: Acme Corp",
+    "- Period: Aug 1–31, 2026",
+    "- Hours: 148.00",
+    "- Approval: approved by Jane Doe on Sep 4"
+  ],
+  "review": {
+    "item": "priya",
+    "code": "CORRECTION",
+    "message": "This looks like a corrected version of a timesheet I already handled."
+  }
+}

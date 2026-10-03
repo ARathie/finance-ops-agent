@@ -142,7 +142,7 @@ def _could_be_new(code: str) -> bool:
     return code in PLACEABLE or code == ReviewCode.UNKNOWN_SENDER.value
 
 
-def _what_you_can_do(code: str, offer_setup: bool = False) -> list[str]:
+def what_you_can_do(code: str, offer_setup: bool = False) -> list[str]:
     if code == ReviewCode.UNKNOWN_SENDER.value:
         where = (
             "Add the address to the consultant's vendor in QuickBooks (or their row in"
@@ -227,7 +227,7 @@ def set_aside(
         [review_message, *(other for _code, other in also or [])],
         summary,
         timesheet,
-        what_you_can_do=_what_you_can_do(code.value, _can_set_up(deps)),
+        what_you_can_do=what_you_can_do(code.value, _can_set_up(deps)),
         then=_setup_lines(prefill) if _can_set_up(deps) and _could_be_new(code.value) else None,
     )
     outgoing_steps.enqueue_email(
@@ -262,7 +262,7 @@ def _ask_again(
     form_values: dict[str, str] | None = None,
 ) -> None:
     lines = [why, "", "What you can do:"]
-    lines += [f"- {line}" for line in _what_you_can_do(entry.code, _can_set_up(deps))]
+    lines += [f"- {line}" for line in what_you_can_do(entry.code, _can_set_up(deps))]
     if _can_set_up(deps):
         lines += ["", *_setup_lines(form_values if form_values is not None else entry.prefill)]
     ask = emails.OutgoingEmail(
@@ -637,7 +637,7 @@ def _where(engagements: Engagements) -> str:
 def _tell_kevin_still_stuck(deps: RunDeps, entry: SetAside, why: str) -> None:
     attempt = deps.store.get_state(ATTEMPT_PREFIX + entry.message_id) or "0"
     lines = [why, "", "What you can do:"]
-    lines += [f"- {line}" for line in _what_you_can_do(entry.code)]
+    lines += [f"- {line}" for line in what_you_can_do(entry.code)]
     email = emails.OutgoingEmail(
         to=(deps.settings.admin_email,),
         subject=f"Still needs your review: the email from {entry.sender}",

@@ -1,0 +1,23 @@
+{
+  "description": "An engagement row names the client 'Acme Corp.' with a full stop; the Clients sheet has 'Acme Corp'.",
+  "items": [],
+  "engagement_list": {
+    "clients": [
+      {}
+    ],
+    "consultants": [
+      {}
+    ],
+    "engagements": [
+      {
+        "Client": "Acme Corp."
+      }
+    ]
+  },
+  "review": {
+    "code": "LIST_ROW_PROBLEM",
+    "messages": [
+      "Engagements sheet, row 2: \"Client\" 'Acme Corp.' is not on the Clients sheet"
+    ]
+  }
+}

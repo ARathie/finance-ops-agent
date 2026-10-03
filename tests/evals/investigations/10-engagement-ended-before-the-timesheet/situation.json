@@ -1,0 +1,40 @@
+{
+  "description": "Priya's only engagement at Acme has an end date of 31 July 2026 in the list, and an approved August timesheet has arrived.",
+  "items": [],
+  "emails": [
+    {
+      "key": "after-end",
+      "sender": "priya@shah.example",
+      "subject": "August hours",
+      "attachments": [
+        "aug.pdf"
+      ]
+    }
+  ],
+  "engagement_list": {
+    "clients": [
+      {}
+    ],
+    "consultants": [
+      {}
+    ],
+    "engagements": [
+      {
+        "End date": "2026-07-31"
+      }
+    ]
+  },
+  "what_i_read": [
+    "- Consultant: Priya Shah",
+    "- Client: Acme Corp",
+    "- Period: Aug 1–31, 2026",
+    "- Hours: 156.00",
+    "- Approval: approved by Jane Doe on Aug 31"
+  ],
+  "review": {
+    "email": "after-end",
+    "set_aside": true,
+    "code": "ENGAGEMENT_UNCLEAR",
+    "message": "I can't tell which client this is for, or there is no active engagement for these dates."
+  }
+}

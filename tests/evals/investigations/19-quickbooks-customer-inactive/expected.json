@@ -1,0 +1,35 @@
+{
+  "must_call_any": [
+    "describe_item",
+    "look_up_engagements",
+    "list_items"
+  ],
+  "found_mentions": [
+    [
+      "inactive",
+      "deleted"
+    ],
+    [
+      "customer"
+    ]
+  ],
+  "proposals_mention": [
+    [
+      "active",
+      "reactivate",
+      "make it active",
+      "mark it active",
+      "restore"
+    ]
+  ],
+  "replies_wanted": [
+    [
+      "try again"
+    ]
+  ],
+  "replies_forbidden": [
+    "ignore",
+    "use \\S+"
+  ],
+  "sure": true
+}

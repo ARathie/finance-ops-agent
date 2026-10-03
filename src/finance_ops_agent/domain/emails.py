@@ -196,6 +196,15 @@ def timesheet_details(
 # 2. Needs your review
 
 
+def list_problems_then(where: str) -> list[str]:
+    """How an email about the engagement list's own problems ends: fixed in
+    the list, never by a reply (decision 66)."""
+    return [
+        f"Fix these in {where}. I read it on every run, and each one closes by",
+        "itself once it is right: there is nothing to reply.",
+    ]
+
+
 def needs_review(
     admin: str,
     about: str,  # "Priya Shah — Acme Corp — Aug 2026", or a plain description

@@ -1,0 +1,33 @@
+{
+  "description": "QuickBooks could not be asked for the rates of Priya's engagement when her timesheet was read. The agent asks again every run and carries on by itself.",
+  "items": [
+    {
+      "key": "priya",
+      "consultant": "Priya Shah",
+      "client": "Acme Corp",
+      "period_start": "2026-08-01",
+      "period_end": "2026-08-31",
+      "status": "needs_review",
+      "client_code": "AC",
+      "consultant_code": "PS"
+    }
+  ],
+  "engagement_list": {
+    "clients": [
+      {}
+    ],
+    "consultants": [
+      {
+        "Other names": "P. Shah"
+      }
+    ],
+    "engagements": [
+      {}
+    ]
+  },
+  "review": {
+    "item": "priya",
+    "code": "QUICKBOOKS_FAILED",
+    "message": "I couldn't check the rates and billing details in QuickBooks for Priya Shah at Acme Corp, so I won't invoice this yet. I try again on every run and carry on by myself once QuickBooks answers. Reply \"ignore\" to drop this timesheet instead."
+  }
+}

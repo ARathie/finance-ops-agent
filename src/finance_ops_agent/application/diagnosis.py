@@ -446,7 +446,8 @@ def describe_item(looking: Looking, item_id: int) -> ItemReport:
     for sent in store.outgoing_records():
         if sent.item_id == item.id:
             subject = sent.payload.get("subject", "")
-            facts.append(f"Email {sent.kind}: {subject} ({sent.status})")
+            said = f"; it failed with: {sent.last_error}" if sent.last_error else ""
+            facts.append(f"Email {sent.kind}: {subject} ({sent.status}{said})")
     for entry in store.audit_entries(item.id):
         facts.append(f"{entry.at:%Y-%m-%d %H:%M} {entry.what}")
 

@@ -1,0 +1,27 @@
+{
+  "must_call_any": [
+    "item_timesheets",
+    "describe_item"
+  ],
+  "found_mentions": [
+    [
+      "148"
+    ],
+    [
+      "156"
+    ],
+    [
+      "already",
+      "sent",
+      "went"
+    ]
+  ],
+  "replies_wanted": [
+    [
+      "use the new one"
+    ]
+  ],
+  "replies_forbidden": [
+    "use \\d+(\\.\\d+)? hours"
+  ]
+}

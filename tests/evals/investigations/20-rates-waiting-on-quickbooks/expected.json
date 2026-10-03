@@ -1,0 +1,20 @@
+{
+  "must_call_any": [
+    "describe_item"
+  ],
+  "found_mentions": [
+    [
+      "quickbooks"
+    ],
+    [
+      "every run",
+      "by itself",
+      "automatically",
+      "on its own",
+      "again"
+    ]
+  ],
+  "replies_forbidden": [
+    "try again"
+  ]
+}

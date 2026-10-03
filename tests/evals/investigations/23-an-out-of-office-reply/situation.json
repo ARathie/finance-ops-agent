@@ -1,0 +1,31 @@
+{
+  "description": "Priya's mailbox answered the agent's 'Timesheet received' email with an automatic out-of-office reply. It came from her own address with no attachment, so it looks like a timesheet email with nothing attached.",
+  "items": [],
+  "emails": [
+    {
+      "key": "ooo",
+      "sender": "priya@shah.example",
+      "subject": "Automatic reply: Timesheet received: Priya Shah — Acme Corp",
+      "body": "I am out of the office until 14 September with limited access to email. For anything urgent please contact Jane Doe.",
+      "attachments": []
+    }
+  ],
+  "engagement_list": {
+    "clients": [
+      {}
+    ],
+    "consultants": [
+      {
+        "Other names": "P. Shah"
+      }
+    ],
+    "engagements": [
+      {}
+    ]
+  },
+  "review": {
+    "email": "ooo",
+    "code": "NO_ATTACHMENT",
+    "message": "This looks like a timesheet email but has no attachment I can use (\"Automatic reply: Timesheet received: Priya Shah — Acme Corp\")."
+  }
+}

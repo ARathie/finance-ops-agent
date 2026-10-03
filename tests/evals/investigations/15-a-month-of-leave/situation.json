@@ -1,0 +1,120 @@
+{
+  "description": "Priya was on leave all of August; her timesheet is approved with zero hours and says PTO on every working day.",
+  "items": [
+    {
+      "key": "priya",
+      "consultant": "Priya Shah",
+      "client": "Acme Corp",
+      "period_start": "2026-08-01",
+      "period_end": "2026-08-31",
+      "status": "needs_review",
+      "client_code": "AC",
+      "consultant_code": "PS",
+      "timesheets": [
+        {
+          "email": "leave",
+          "reading": {
+            "consultant_name": {
+              "value": "Priya Shah",
+              "quote": "Priya Shah",
+              "confidence": "high"
+            },
+            "client_name": {
+              "value": "Acme Corp",
+              "quote": "Acme Corp",
+              "confidence": "high"
+            },
+            "end_client_name": {
+              "value": null,
+              "quote": null,
+              "confidence": "low"
+            },
+            "period_start": {
+              "value": "2026-08-01",
+              "quote": null,
+              "confidence": "high"
+            },
+            "period_end": {
+              "value": "2026-08-31",
+              "quote": null,
+              "confidence": "high"
+            },
+            "stated_month_start": {
+              "value": null,
+              "quote": null,
+              "confidence": "low"
+            },
+            "noted_in_month_hundredths": {
+              "value": null,
+              "quote": null,
+              "confidence": "low"
+            },
+            "daily_entries": {
+              "value": [],
+              "quote": null,
+              "confidence": "high"
+            },
+            "row_entries": {
+              "value": [],
+              "quote": null,
+              "confidence": "low"
+            },
+            "stated_total_hours_hundredths": {
+              "value": 0,
+              "quote": "0.00",
+              "confidence": "high"
+            },
+            "approval": {
+              "value": {
+                "kind": "approved_status",
+                "approver": "Jane Doe",
+                "approval_date": "2026-08-31"
+              },
+              "quote": null,
+              "confidence": "high"
+            },
+            "unusual_items": [
+              "Every working day is marked PTO; no hours were worked."
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "emails": [
+    {
+      "key": "leave",
+      "sender": "priya@shah.example",
+      "subject": "August timesheet - on leave",
+      "body": "I was on leave for all of August.",
+      "attachments": [
+        "aug-pto.pdf"
+      ]
+    }
+  ],
+  "engagement_list": {
+    "clients": [
+      {}
+    ],
+    "consultants": [
+      {
+        "Other names": "P. Shah"
+      }
+    ],
+    "engagements": [
+      {}
+    ]
+  },
+  "what_i_read": [
+    "- Consultant: Priya Shah",
+    "- Client: Acme Corp",
+    "- Period: Aug 1–31, 2026",
+    "- Hours: 0.00",
+    "- Approval: approved by Jane Doe on Aug 31"
+  ],
+  "review": {
+    "item": "priya",
+    "code": "HOURS_UNUSUAL",
+    "message": "The hours look unusually high, or are zero."
+  }
+}
