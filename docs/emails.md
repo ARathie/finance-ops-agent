@@ -55,7 +55,7 @@ The agent does not follow up on this email and does not track whether the paymen
 Every Monday morning.
 
 - **Subject:** `Weekly summary — week of Sep 7, 2026`
-- **Body:** timesheets received last week (one line each); invoices sent (one line each, with amounts); items waiting for Kevin's review, with the reason; items waiting for approval; engagements with no timesheet yet for the last period; unpaid invoices past their due date, when the agent knows about them; emails set aside from unknown senders; duplicates filed.
+- **Body:** timesheets received last week (one line each); invoices sent (one line each, with amounts); items waiting for Kevin's review, with the reason; items waiting for approval; engagements with no timesheet yet for the last period; unpaid invoices past their due date, oldest first, with how many days ago each was due -- left out in manual mode, where the agent cannot see payments; emails set aside from unknown senders; duplicates filed last week, one line each; and, when there is any, things that look stuck (decisions 61 and 64). It lists late invoices for Kevin only: the agent never writes to a client about payment.
 - **Attachments:** the tracking sheet (`tracking.xlsx`).
 
 ### 6. Something needs attention

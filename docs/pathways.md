@@ -201,7 +201,7 @@ Decided by code from the sender's address, never by reading the email.
 - [ ] **J6. The client pays.** Decided by: the once-a-day paid check (balance zero). Outcome: the record becomes *client paid*; a partial payment changes nothing. Test: `test_paid_check.py`.
 - [ ] **J7. The paid check can't reach QuickBooks.** Outcome: a review; the day is not counted as checked, so the next run asks again. Test: `test_paid_check.py::TestWhenQuickBooksCannotAnswer`.
 - [ ] **J7a. An invoice in the agent's records that QuickBooks does not have** (deleted, or made in the sandbox). Decided by: code -- each invoice is asked about on its own. Outcome: that invoice gets one review naming it and the fix (`fops forget`), raised once, not every morning; every other invoice is still checked (decision 61). Test: `test_investigation.py::TestTheRunLooksForItself::test_an_invoice_quickbooks_lacks_gets_its_own_review_and_the_rest_are_checked`, `test_investigation.py::test_a_missing_invoice_is_raised_once_not_every_morning`.
-- [ ] **J8. Monday.** Outcome: one summary with the tracking sheet: timesheets received, invoices sent, waiting for review, waiting for approval, no timesheet yet, set aside, and -- when there is any -- things that look stuck, each with what to do. Test: `test_emails_and_invoices.py::TestMondaySummary`, `test_investigation.py::TestTheRunLooksForItself::test_the_monday_summary_lists_what_looks_stuck`.
+- [ ] **J8. Monday.** Outcome: one summary with the tracking sheet: timesheets received, invoices sent, waiting for review, waiting for approval, no timesheet yet, unpaid invoices past their due date (left out in manual mode), set aside, duplicates filed last week, and -- when there is any -- things that look stuck, each with what to do (decision 64). Test: `test_emails_and_invoices.py::TestMondaySummary`, `test_monday_summary.py`, `test_investigation.py::TestTheRunLooksForItself::test_the_monday_summary_lists_what_looks_stuck`.
 - [ ] **J9. The QuickBooks connection getting old** (80+ days). Outcome: a warning at the end of every run. Test: `tests/contract/test_quickbooks.py::TestTokenStore`.
 
 ## L. When something is stuck
@@ -219,6 +219,6 @@ Paths where the agent does less than the other documents say, or nothing at all.
 - ~~**G2. Claude unreachable.**~~ Closed by decision 58 (D5).
 - ~~**G3. Client replies.**~~ Closed by decision 58 (C4): Kevin gets each one as it came.
 - ~~**G4. A reply from Kevin the agent can't match.**~~ Closed by decision 63 (H10): he is told nothing was done, and how to answer.
-- **G5. The Monday summary** does not yet list duplicates filed or unpaid invoices past due, which `emails.md` says it does.
+- ~~**G5. The Monday summary.**~~ Closed by decision 64 (J8): it lists duplicates filed last week and unpaid invoices past their due date.
 - **G6. `NO_BILLING_CONTACT`** has no whole-run test.
 - **G7. A replied-to review with no record behind it** (e.g. a spreadsheet problem): Kevin's answer is recorded but changes nothing; fixing the spreadsheet or QuickBooks is what fixes it.

@@ -1,6 +1,7 @@
 """The Monday summary and the tracking sheet, assembled from the store."""
 
-from datetime import timedelta
+import json
+from datetime import date, timedelta
 
 from finance_ops_agent.application.context import RunDeps, RunReport
 from finance_ops_agent.application.diagnosis import diagnose_everything, looking_at
@@ -14,6 +15,31 @@ from finance_ops_agent.ports.accounting import AccountingFailed
 
 LAST_SUMMARY_KEY = "last_summary"
 MISSING_TIMESHEET_GRACE_DAYS = 7
+# Duplicates filed quietly, with the day each was filed, so the Monday summary
+# can list last week's (decision 64). An exact copy of a file leaves nothing
+# else behind: it is never attached to an item.
+DUPLICATES_FILED_KEY = "duplicates_filed"
+_DUPLICATES_KEPT_DAYS = 14
+
+
+def note_duplicate_filed(deps: RunDeps, what: str) -> None:
+    """Write down one duplicate filed quietly, for the next Monday summary.
+    Entries older than two weeks are dropped as each new one is added."""
+    today = deps.clock.today()
+    kept = [
+        entry
+        for entry in _duplicates_filed(deps)
+        if date.fromisoformat(entry[0]) >= today - timedelta(days=_DUPLICATES_KEPT_DAYS)
+    ]
+    kept.append((today.isoformat(), what))
+    deps.store.set_state(DUPLICATES_FILED_KEY, json.dumps(kept))
+
+
+def _duplicates_filed(deps: RunDeps) -> list[tuple[str, str]]:
+    text = deps.store.get_state(DUPLICATES_FILED_KEY)
+    if not text:
+        return []
+    return [(str(on), str(what)) for on, what in json.loads(text)]
 
 
 def tracking_rows(deps: RunDeps) -> list[TrackingRow]:
@@ -112,6 +138,10 @@ def enqueue_monday_summary(deps: RunDeps, report: RunReport, tracking_sha: str |
             and item.period.end + timedelta(days=MISSING_TIMESHEET_GRACE_DAYS) <= today
         ],
         set_aside=[review.message for review in reviews if review.code == "UNKNOWN_SENDER"],
+        duplicates_filed=[
+            what for on, what in _duplicates_filed(deps) if date.fromisoformat(on) >= week_ago
+        ],
+        unpaid_past_due=_unpaid_past_due(deps),
         looks_stuck=_looks_stuck(deps),
     )
     attachment = EmailAttachment("tracking.xlsx", tracking_sha) if tracking_sha else None
@@ -119,6 +149,32 @@ def enqueue_monday_summary(deps: RunDeps, report: RunReport, tracking_sha: str |
     if enqueue_email(deps, "summary_email", f"summary:{today.isoformat()}", None, email):
         deps.store.set_state(LAST_SUMMARY_KEY, today.isoformat())
         report.note("Monday summary written down")
+
+
+def _unpaid_past_due(deps: RunDeps) -> list[str] | None:
+    """Invoices sent and not yet paid whose due date has gone by, oldest due
+    first. Only QuickBooks can say an invoice was paid, so in manual mode the
+    agent does not know and the section is left out (None) rather than
+    listing every invoice it ever sent. Kevin chases payment, as today: the
+    agent never writes to a client about it (objective 5)."""
+    if not deps.accounting.can_look_up_invoices:
+        return None
+    today = deps.clock.today()
+    late: list[tuple[date, str]] = []
+    for item in deps.store.list_items():
+        if item.status is not ItemStatus.INVOICE_SENT:
+            continue
+        for record in deps.store.invoices_for_item(item.id):
+            if record.status == "sent" and record.due_date < today:
+                days = (today - record.due_date).days
+                late.append(
+                    (
+                        record.due_date,
+                        f"{record.number} — {item.client} — ${Money(record.amount_cents)}, "
+                        f"due {record.due_date} ({days} day{'s' if days != 1 else ''} ago)",
+                    )
+                )
+    return [line for _, line in sorted(late)]
 
 
 def _looks_stuck(deps: RunDeps) -> list[str]:

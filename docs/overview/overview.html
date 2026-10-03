@@ -386,11 +386,11 @@
 </header>
 
 <dl class="facts">
-  <div><dt>Tests passing</dt><dd>1,199</dd></div>
+  <div><dt>Tests passing</dt><dd>1,208</dd></div>
   <div><dt>Lines of logic</dt><dd>~16,200</dd></div>
   <div><dt>Paths mapped</dt><dd>91</dd></div>
   <div><dt>Ways to ask a human</dt><dd>24</dd></div>
-  <div><dt>Decisions recorded</dt><dd>63</dd></div>
+  <div><dt>Decisions recorded</dt><dd>64</dd></div>
 </dl>
 
 <section id="p1">
@@ -441,8 +441,8 @@
   <table>
     <thead><tr><th>Folder</th><th>Lines</th><th>What lives there</th><th>Knows about the outside world?</th></tr></thead>
     <tbody>
-      <tr><td class="k">domain/</td><td class="n">2,950</td><td>Pure rules: money arithmetic, billing periods, the checks, the statuses, the setup form</td><td>No. No network, no database, no clock.</td></tr>
-      <tr><td class="k">application/</td><td class="n">5,431</td><td>The steps of a run, Kevin's replies, the stored copy of QuickBooks, outages</td><td>No — only through interfaces.</td></tr>
+      <tr><td class="k">domain/</td><td class="n">2,956</td><td>Pure rules: money arithmetic, billing periods, the checks, the statuses, the setup form</td><td>No. No network, no database, no clock.</td></tr>
+      <tr><td class="k">application/</td><td class="n">5,488</td><td>The steps of a run, Kevin's replies, the stored copy of QuickBooks, outages</td><td>No — only through interfaces.</td></tr>
       <tr><td class="k">ports/</td><td class="n">597</td><td>Ten interfaces: the vocabulary the application is allowed to use. Eight are drawn below; the other two are the investigator and the read-only view diagnosis works through</td><td>Defines the boundary.</td></tr>
       <tr><td class="k">adapters/</td><td class="n">4,926</td><td>IMAP/SMTP, QuickBooks Online, Claude, Excel, SQLite, PDF — and a fake of each</td><td>Yes. This is the only place that does.</td></tr>
       <tr><td class="k">cli/</td><td class="n">2,259</td><td>The <code>fops</code> commands and <code>fops doctor</code>; the one place everything gets wired together</td><td>Yes, by design.</td></tr>
@@ -512,7 +512,7 @@
   <p>This buys three things that matter commercially:</p>
 
   <ul>
-    <li><strong>The whole product runs offline.</strong> <code>fops dry-run --fake</code> executes every step of a real run against a folder of email files and scripted model answers. All 1,199 tests need no credentials and no internet.</li>
+    <li><strong>The whole product runs offline.</strong> <code>fops dry-run --fake</code> executes every step of a real run against a folder of email files and scripted model answers. All 1,208 tests need no credentials and no internet.</li>
     <li><strong>Reality can change without a rewrite.</strong> The first mailbox adapter assumed Microsoft 365; Icon's email turned out to be at Rackspace. One new adapter (IMAP and SMTP) replaced it and nothing above the boundary changed. Accounting has two adapters too: <em>manual</em> while Icon is on QuickBooks Desktop, and QuickBooks Online for after the move.</li>
     <li><strong>Failure is testable.</strong> A fake can be told to fail: the mailbox down, Claude overloaded, QuickBooks refusing an invoice, the machine dying mid-send. Every one of those has a test. You cannot get that assurance by poking at production.</li>
   </ul>
@@ -1041,7 +1041,7 @@ flowchart TD
 
 <section id="p11">
   <h2><span class="partno">Part 11</span>How we know it works: tests and evals are different things</h2>
-  <p class="deck">1,199 tests prove the code does what it says. They cannot prove the model reads a timesheet correctly. Those need separate machinery, and conflating them is a common and expensive mistake.</p>
+  <p class="deck">1,208 tests prove the code does what it says. They cannot prove the model reads a timesheet correctly. Those need separate machinery, and conflating them is a common and expensive mistake.</p>
 
   <div class="tablewrap">
   <table>
@@ -1049,7 +1049,7 @@ flowchart TD
     <tbody>
       <tr><td class="k">tests/unit</td><td class="n">49</td><td>Is this rule right? Does 156 hours at $140 produce $21,840.00? Is an illegal status change refused? Is the setup form read strictly?</td></tr>
       <tr><td class="k">tests/contract</td><td class="n">13</td><td>Do the real adapter and the fake behave identically? Does what the agent sets up in QuickBooks read back exactly like a hand-made setup?</td></tr>
-      <tr><td class="k">tests/scenarios</td><td class="n">16</td><td>Does a whole run do the right thing, down every path in Part 4? A fixture mailbox goes in; every outcome is asserted.</td></tr>
+      <tr><td class="k">tests/scenarios</td><td class="n">18</td><td>Does a whole run do the right thing, down every path in Part 4? A fixture mailbox goes in; every outcome is asserted.</td></tr>
       <tr><td class="k">tests/evals</td><td class="n">49 + 7 cases</td><td>How well does the <em>model</em> read a timesheet, and how well does the investigator explain a stuck item? Different in kind from the rest.</td></tr>
     </tbody>
   </table>
@@ -1122,13 +1122,13 @@ flowchart TD
 
 
   <h3>Where this project actually stands</h3>
-  <p>The agent is built and runs end to end on fakes: 1,199 tests, 63 recorded decisions. What remains is mostly work only a person can do, and the roadmap keeps those boxes unticked on purpose: proving the reader on real timesheets, a full billing cycle in dry run with Kevin checking every reading, moving to a server, the first live invoices in ask-first, and trying each new QuickBooks setup path in the sandbox. Ticking those on the strength of a fake would have been easy and dishonest.</p>
+  <p>The agent is built and runs end to end on fakes: 1,208 tests, 64 recorded decisions. What remains is mostly work only a person can do, and the roadmap keeps those boxes unticked on purpose: proving the reader on real timesheets, a full billing cycle in dry run with Kevin checking every reading, moving to a server, the first live invoices in ask-first, and trying each new QuickBooks setup path in the sandbox. Ticking those on the strength of a fake would have been easy and dishonest.</p>
 </section>
 
 
 <footer>
   finance-ops-agent · Icon Technologies<br>
-  1,199 tests · 10 ports · 24 review codes · 91 paths mapped · 63 recorded decisions<br>
+  1,208 tests · 10 ports · 24 review codes · 91 paths mapped · 64 recorded decisions<br>
   Read the code alongside this: <code>docs/README.md</code> is the map, <code>docs/how-it-works.md</code> has the pictures, <code>docs/pathways.md</code> is every path, <code>docs/decisions.md</code> is why.<br>
   This page is <code>docs/overview/overview.html</code>; its diagrams are copied from <code>docs/how-it-works.md</code> by <code>sync_diagrams.py</code>, and a test fails if they drift.
 </footer>

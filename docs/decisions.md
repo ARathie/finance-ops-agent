@@ -761,3 +761,13 @@ Decision: **still nothing is done with it, but Kevin is told, once, in the same 
 - **Never a loop.** The note is its own kind (`unmatched_reply_email`) and is not something a reply can answer. An email whose reply header names one of these notes -- his answer to it, or his mailbox's out-of-office reply -- is noted in the run report and gets nothing further.
 - Written down once per email, like every email, so a second run sends nothing more.
 
+
+## 64. The Monday summary lists duplicates filed and unpaid invoices past their due date
+
+Gap G5 in `pathways.md`. `emails.md` promised both; the summary had neither. A duplicate filed quietly left only a line in the run report -- an exact copy of a file is never attached to anything -- and nothing looked at invoices whose due date had gone by.
+
+Decision:
+
+- **Duplicates filed last week**, one line each: the file and who sent it for an exact copy; the consultant, client and period for the same hours in a new file. Each is written down with the day it was filed (the agent's own state, not a new table) and kept two weeks, enough for any Monday to see the week before.
+- **Unpaid invoices past their due date**, oldest first: number, client, amount, due date and how many days ago. "Unpaid" is what the daily paid check last heard from QuickBooks, which runs before the summary is written. In manual mode the agent cannot see payments, so the section is left out rather than listing every invoice it ever sent as late.
+- **For Kevin only.** The agent still never writes to a client about payment and sends no reminders (objective 5); chasing payment stays with Kevin, as today. This only saves him looking.

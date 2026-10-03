@@ -83,7 +83,7 @@ Every timesheet item has a status (see `status-tracking.md`). The agent keeps an
 
 ### 9. The Monday summary
 
-Every Monday the agent emails Kevin: timesheets received last week, invoices sent, items waiting for his review, engagements with no timesheet yet for the last period, emails it set aside, and unpaid invoices when it knows about them.
+Every Monday the agent emails Kevin: timesheets received last week, invoices sent, items waiting for his review, engagements with no timesheet yet for the last period, unpaid invoices past their due date (when QuickBooks can say what is paid), emails it set aside, duplicates it filed, and anything that looks stuck.
 
 ## What the agent never does
 
