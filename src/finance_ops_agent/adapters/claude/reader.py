@@ -22,12 +22,12 @@ from finance_ops_agent.domain.reading import (
     ReplyReading,
     TimesheetReading,
 )
-from finance_ops_agent.ports.reader import CantReadAttachmentError, TokenUsage
+from finance_ops_agent.ports.reader import CantReadAttachmentError, ReaderUnavailable, TokenUsage
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 TIMESHEET_PROMPT_VERSION = "timesheet_v3"
 CLASSIFY_PROMPT_VERSION = "classify_v1"
-REPLY_PROMPT_VERSION = "reply_v3"
+REPLY_PROMPT_VERSION = "reply_v4"
 MAX_TOKENS = 16000
 
 _M = TypeVar("_M", bound=BaseModel)
@@ -91,6 +91,17 @@ class ClaudeReader:
         except anthropic.BadRequestError as error:
             # Permanent: the request itself is unreadable (too large, bad media).
             raise CantReadAttachmentError(str(error)) from error
+        except (
+            anthropic.AuthenticationError,
+            anthropic.PermissionDeniedError,
+            anthropic.NotFoundError,
+        ) as error:
+            # The key or the model name is wrong: no amount of waiting fixes it.
+            raise ReaderUnavailable(f"Claude refused the request: {error}", lasting=True) from error
+        except anthropic.APIError as error:
+            # Down, overloaded, rate-limited, or unreachable: says nothing about
+            # the document, which is read again on a later run (decision 58).
+            raise ReaderUnavailable(f"Claude could not be reached: {error}") from error
         # Before the stop_reason checks below: a refusal costs tokens too.
         self.usage = self.usage + _usage_of(response)
         if self._save_raw is not None:

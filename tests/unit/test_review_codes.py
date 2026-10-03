@@ -26,6 +26,7 @@ def test_codes_match_the_docs() -> None:
         "QUICKBOOKS_FAILED",
         "MAILBOX_PROBLEM",
         "QUICKBOOKS_RECONNECT",
+        "CLAUDE_UNAVAILABLE",
     }
 
 

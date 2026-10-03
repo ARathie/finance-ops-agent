@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from finance_ops_agent.domain.invoices import Invoice
+from finance_ops_agent.domain.setup import EngagementSetup
 
 
 class AccountingFailed(Exception):
@@ -156,6 +157,15 @@ class InvoiceLookup:
     issued: str = ""  # the invoice date as the accounting system writes it
 
 
+@dataclass(frozen=True)
+class SetupDone:
+    """What setting an engagement up did, in Kevin's words: what was made new
+    and what was already there and used as it was."""
+
+    created: list[str]
+    reused: list[str]
+
+
 class AccountingSystem(Protocol):
     def create_invoice(self, invoice: Invoice, item_id: int) -> CreatedInvoice:
         """Create the invoice under the number it already carries, and return
@@ -219,4 +229,15 @@ class AccountingSystem(Protocol):
 
     def invoices_numbered(self, number: str) -> list[InvoiceLookup]:
         """Every invoice holding this number, voided ones included."""
+        ...
+
+    def set_up_engagement(self, setup: EngagementSetup) -> SetupDone:
+        """Make what Kevin confirmed: the customer and its category for a new
+        client, the vendor Icon pays, and the engagement's product with both
+        rates on it (decision 56).
+
+        Find first, create only what is missing, so running it again after a
+        crash or a failure part-way through finishes the job rather than
+        making anything twice (CLAUDE.md rule 4). Raises AccountingFailed
+        when something found does not fit the plan."""
         ...

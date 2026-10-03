@@ -4,9 +4,13 @@ This is everything that has to be set up in QuickBooks Online for the agent to
 bill correctly, and what goes wrong when it is not. All of it is done in the
 QuickBooks web app; nothing here needs a developer.
 
-Two things the agent never does, which is why this page exists: **it never
-creates a customer and it never creates a product.** If one is missing it stops
-and says so rather than inventing something to invoice against.
+Two things the agent never does on its own, which is why this page exists:
+**it never creates a customer and it never creates a product.** If one is
+missing it stops and says so rather than inventing something to invoice
+against. The one exception is Kevin asking it to: when an email or a timesheet
+cannot be placed, its question includes a short form, and once he fills it in
+and confirms with the number it sends back, it sets the consultant, client and
+engagement up exactly as described on this page (decision 56).
 
 After any change here, run `fops doctor`. It checks every item below except the
 first and the invoice template, and names the client, consultant or setting
@@ -65,8 +69,8 @@ spelled wrong:
 FAIL quickbooks customers: I looked in the production company 9130357849073846
 and could not use 1 of 3 client name(s). MasTec Inc: QuickBooks has no customer
 whose name or company is 'MasTec Inc'. Add it in QuickBooks, or fix the
-"QuickBooks customer" column in the engagement list. I never create customers
-myself.
+"QuickBooks customer" column in the engagement list. I never create a customer
+on my own, only when you fill in my setup form and confirm it.
 ```
 
 and, for the other case:
@@ -138,7 +142,8 @@ and cannot price 1 of 4 engagement(s). Sridhar Doraiswamy: QuickBooks has no
 product for 'Sridhar Doraiswamy'. I looked for MasTec:Sridhar Doraiswamy or
 MasTec Inc:Sridhar Doraiswamy, and for a product called 'Sridhar Doraiswamy' on
 its own. Every engagement needs a product, under a category named for the
-client, with the rate on it. I never create products myself.
+client, with the rate on it. I never create a product on my own, only when you
+fill in my setup form and confirm it.
 ```
 
 ```

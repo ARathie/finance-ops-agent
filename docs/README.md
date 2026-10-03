@@ -14,7 +14,9 @@ Read in this order the first time. `context/` is the business's own description 
 ## How the agent behaves (plain language; Kevin can read these)
 
 - `glossary.md` — the words used everywhere else.
-- `how-it-works.md` — the whole process, step by step, and the three modes.
+- `how-it-works.md` — the whole process, step by step, the modes, and pictures of every path the agent can take.
+- `overview/overview.html` — the agent taken apart layer by layer, as one page: the structure, the same pictures as `how-it-works.md` (a test keeps them in step; `overview/sync_diagrams.py` copies them in), and the reasoning behind each design choice.
+- `pathways.md` — the checklist of every path: what decides it, what happens, which test covers it, and a box to tick once it has been seen working for real. Ends with the gaps found writing it.
 - `engagement-list.md` — the spreadsheet Kevin keeps; the only source of rates and contacts.
 - `timesheet-checks.md` — what the agent reads from a timesheet, the checks, and every reason it asks Kevin for a review.
 - `status-tracking.md` — the statuses, duplicates, corrections, and the tracking sheet.

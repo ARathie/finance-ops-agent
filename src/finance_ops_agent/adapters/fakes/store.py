@@ -21,7 +21,7 @@ from finance_ops_agent.domain.items import (
     ReviewRecord,
     TimesheetRecord,
 )
-from finance_ops_agent.domain.messages import StoredMessage
+from finance_ops_agent.domain.messages import MessageKind, StoredMessage
 from finance_ops_agent.domain.money import Hours, Money
 from finance_ops_agent.domain.periods import BillingPeriod
 from finance_ops_agent.domain.statuses import (
@@ -109,6 +109,40 @@ class FakeStore:
                 return item
         return None
 
+    def put_back_to_waiting(self, item_id: int, why: str) -> Item:
+        item = self._items[item_id]
+        change_status(item.status, ItemStatus.WAITING_FOR_TIMESHEET)
+        detached = [r.sha256 for r in self._timesheets if r.item_id == item_id]
+        self._timesheets = [r for r in self._timesheets if r.item_id != item_id]
+        waiting = replace(
+            item,
+            status=ItemStatus.WAITING_FOR_TIMESHEET,
+            approved_hours=None,
+            invoice_amount=None,
+            amount_owed=None,
+        )
+        self._items[item_id] = waiting
+        self._audit.append(
+            AuditEntry(
+                at=self._now(),
+                what="status changed",
+                item_id=item_id,
+                details={
+                    "from": item.status.value,
+                    "to": ItemStatus.WAITING_FOR_TIMESHEET.value,
+                    "why": why,
+                    "timesheets_detached": detached,
+                },
+            )
+        )
+        return waiting
+
+    def replace_snapshot(self, item_id: int, snapshot: EngagementSnapshot) -> Item:
+        item = self._items[item_id]
+        updated = replace(item, snapshot=snapshot, engagement_ref=snapshot.engagement_ref)
+        self._items[item_id] = updated
+        return updated
+
     def relabel_item(self, item_id: int, consultant: str, client: str) -> Item:
         item = self._items[item_id]
         relabelled = replace(item, consultant=consultant, client=client)
@@ -169,6 +203,12 @@ class FakeStore:
 
     def mark_processed(self, message_id: str) -> None:
         self._messages[message_id] = replace(self._messages[message_id], processed=True)
+
+    def get_message(self, message_id: str) -> StoredMessage | None:
+        return self._messages.get(message_id)
+
+    def requeue_message(self, message_id: str, kind: MessageKind) -> None:
+        self._messages[message_id] = replace(self._messages[message_id], kind=kind, processed=False)
 
     def checkpoint(self) -> None:
         return  # nothing on disk to fold in

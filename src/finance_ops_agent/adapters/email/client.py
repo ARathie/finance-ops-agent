@@ -15,10 +15,12 @@ from dataclasses import dataclass
 from imapclient import IMAPClient
 from imapclient.exceptions import LoginError
 
+from finance_ops_agent.ports.inbox import MailboxFailed
+
 SECURITY_CHOICES = ("ssl", "starttls", "none")
 
 
-class MailboxProblem(Exception):
+class MailboxProblem(MailboxFailed):
     """The mailbox could not be reached, or refused the login (MAILBOX_PROBLEM)."""
 
 
@@ -63,7 +65,7 @@ def open_imap(account: MailAccount) -> IMAPClient:
         client.login(account.username, account.password)
     except LoginError as error:
         raise MailboxProblem(
-            f"the mailbox refused the login for {account.username}: {error}"
+            f"the mailbox refused the login for {account.username}: {error}", lasting=True
         ) from error
     except OSError as error:
         raise MailboxProblem(
@@ -118,7 +120,7 @@ def open_smtp(account: MailAccount) -> smtplib.SMTP:
             )
     except smtplib.SMTPAuthenticationError as error:
         raise MailboxProblem(
-            f"the mail server refused the login for {account.username}: {error}"
+            f"the mail server refused the login for {account.username}: {error}", lasting=True
         ) from error
     except (OSError, smtplib.SMTPException) as error:
         raise MailboxProblem(

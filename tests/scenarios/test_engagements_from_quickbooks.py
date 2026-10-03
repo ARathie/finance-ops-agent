@@ -118,8 +118,9 @@ def test_quickbooks_down_falls_back_to_the_engagement_list(qbo: ScenarioEnv) -> 
     qbo.add_email(PRIYA, scripted_reading=reading(AUG_START, AUG_END))
     report = qbo.run()
 
-    assert qbo.the_item().status is ItemStatus.READY
-    assert any("used the engagement list instead" in line for line in report.lines)
+    # Read from the list, and waiting on QuickBooks for its rates (decision 55).
+    assert qbo.the_item().status is ItemStatus.NEEDS_REVIEW
+    assert any("used the engagement list" in line for line in report.lines)
 
 
 class TestOneAddressForTwoConsultants:

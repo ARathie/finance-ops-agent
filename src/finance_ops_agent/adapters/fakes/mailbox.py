@@ -16,22 +16,32 @@ class FakeMailbox:
     def __init__(self, directory: Path) -> None:
         self.directory = directory
         self.folders: dict[str, str] = {}
+        # Tests set these to make the mailbox misbehave as a real one does:
+        # unreachable for reading, or for filing (decision 58).
+        self.fail_with: Exception | None = None
+        self.fail_moves_with: Exception | None = None
 
     def _parsed(self) -> list[ParsedMessage]:
         return [parse_message(path.read_bytes()) for path in sorted(self.directory.glob("*.eml"))]
 
     def new_messages(self, position: str | None) -> tuple[list[InboundEmail], str]:
+        if self.fail_with is not None:
+            raise self.fail_with
         parsed = self._parsed()
         start = int(position) if position else 0
         return [entry.email for entry in parsed[start:]], str(len(parsed))
 
     def download_attachment(self, message_id: str, attachment_id: str) -> bytes:
+        if self.fail_with is not None:
+            raise self.fail_with
         for entry in self._parsed():
             if entry.email.message_id == message_id:
                 return entry.attachment_content[attachment_id]
         raise KeyError(attachment_id)
 
     def move(self, message_id: str, folder: str) -> None:
+        if self.fail_moves_with is not None:
+            raise self.fail_moves_with
         self.folders[message_id] = folder
 
     def inbox_listing(self, position: str | None) -> list[InboxEntry]:

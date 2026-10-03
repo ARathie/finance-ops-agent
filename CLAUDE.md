@@ -12,7 +12,7 @@ This repository is the billing agent for Icon Technologies: it reads consultant 
 
 ## Rules that must never be broken
 
-1. **Two rates, never from the reading.** The bill rate (charged to the client) and the pay rate (paid to the consultant or vendor) are different numbers, and neither ever comes from an email, a timesheet, or the model. **Both come from the engagement's product in QuickBooks Online** when that is the accounting mode -- the sales price and the purchase cost -- and from the engagement list in manual mode, or where QuickBooks has nothing there (decisions 30, 38 and 43). The engagement list is the cross-check: where the two disagree, QuickBooks' figure is used, the item waits, and Kevin is told before anything is invoiced or paid.
+1. **Two rates, never from the reading.** The bill rate (charged to the client) and the pay rate (paid to the consultant or vendor) are different numbers, and neither ever comes from an email, a timesheet, or the model. **Both come from the engagement's product in QuickBooks Online** when that is the accounting mode -- the sales price and the purchase cost -- and from the engagement list in manual mode, or where QuickBooks has nothing there (decisions 30, 38 and 43). The engagement list is the cross-check: where the two disagree, QuickBooks' figure is used, the item waits, and Kevin is told before anything is invoiced or paid. **The one way a rate enters QuickBooks through the agent** is Kevin's own setup form for a new engagement: read by code (never the model), shown back to him in full, and written only after he replies "confirm" with the one-time number from that email (decision 56). It is still read back from the product like any other rate.
 2. **When unsure, ask Kevin.** Uncertainty about who, which client, which dates, how many hours, whether it was approved, the rate, or who to send to becomes a review item emailed to Kevin. The code never guesses.
 3. **One record per consultant per billing period.** A second timesheet for the same consultant and period is a duplicate or a correction, never a second invoice.
 4. **Nothing goes to a client without Kevin on CC, and nothing is sent or created twice.** Every client email and every invoice creation is written to the `outgoing` table before it happens and reconciled after a restart.
@@ -46,12 +46,15 @@ Some boxes in `docs/roadmap.md` need a human: an account created, a command run 
 - Every new rule, status change, and review reason has a test, including its failure path.
 - Fakes updated whenever a port changes; no network needed for tests; no credentials or real client data in the repo.
 - Docs updated in the same PR when behaviour changes; the PR's automated boxes ticked in `docs/roadmap.md`, and every "Needs a person" box left unticked and spelled out to the operator.
+- A new path through the agent, or a changed outcome, is added to `docs/pathways.md` (and its picture in `docs/how-it-works.md`) in the same PR, with the test that covers it.
+- The overview `docs/overview/overview.html` explains the agent as it is. When a picture changes, run `uv run python docs/overview/sync_diagrams.py` (a test fails until you do); when behaviour or the numbers on it change, update its words in the same PR.
+- The operator keeps a longer, private version of the overview as their own claude.ai page, "Anatomy of a Billing Agent". It is deliberately not in this repository. When the overview changes, update that page the same way if you can reach it (read it, change it, republish to the same link), or tell the operator it needs updating. Never copy its extra material into the repository.
 - When a QuickBooks check in `cli/doctor.py` changes, `docs/quickbooks-setup.md` changes in the same PR. Those checks and that document are one specification written twice: the checks say what the agent expects, the document tells Kevin what to click. They drift silently otherwise, and the doctor points him at it when one fails.
 
 ## Do not
 
 - Add anything about recruiting or candidates (out of scope, see `docs/context/03_project_scope_and_objectives.md`).
-- Store or compute money as floats, or take rates from anywhere but the engagement list.
+- Store or compute money as floats, or take rates from anywhere but QuickBooks and the engagement list (and, for a new engagement, Kevin's confirmed setup form, decision 56).
 - Send email or create invoices outside the `outgoing` table, or without Kevin on CC for client emails.
 - Commit `.env`, `data/`, the real engagement list, or real timesheets.
 - Invent new statuses or review codes; the sets in `docs/status-tracking.md` and `docs/timesheet-checks.md` are the source of truth (add there first, with a decision if needed).

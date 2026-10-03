@@ -22,7 +22,7 @@ from finance_ops_agent.domain.reading import (
     ReplyContext,
     ReplyReading,
 )
-from finance_ops_agent.ports.reader import CantReadAttachmentError
+from finance_ops_agent.ports.reader import CantReadAttachmentError, ReaderUnavailable
 from tests.scenarios.conftest import reading
 
 AUG = (date(2026, 8, 1), date(2026, 8, 31))
@@ -130,10 +130,25 @@ def test_bad_request_is_cant_read() -> None:
 
 
 def test_transient_errors_propagate_for_the_run_to_retry() -> None:
+    """Not about the document: the run leaves the email for a later run and
+    Kevin hears only if it lasts (decision 58)."""
     error = anthropic.APIConnectionError(request=httpx2.Request("POST", "https://api.invalid"))
     reader, _, _ = make_reader(error)
-    with pytest.raises(anthropic.APIConnectionError):
+    with pytest.raises(ReaderUnavailable) as raised:
         reader.read_timesheet(CSV, "timesheet.csv", "text/csv")
+    assert not raised.value.lasting
+
+
+def test_a_refused_key_is_lasting() -> None:
+    """A wrong key never clears by itself, so Kevin is told at once."""
+    request = httpx2.Request("POST", "https://api.invalid")
+    error = anthropic.AuthenticationError(
+        "invalid x-api-key", response=httpx2.Response(401, request=request), body=None
+    )
+    reader, _, _ = make_reader(error)
+    with pytest.raises(ReaderUnavailable) as raised:
+        reader.read_timesheet(CSV, "timesheet.csv", "text/csv")
+    assert raised.value.lasting
 
 
 def test_unreadable_attachment_never_reaches_the_model() -> None:

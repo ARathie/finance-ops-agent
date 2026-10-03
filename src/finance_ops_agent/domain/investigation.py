@@ -12,6 +12,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from finance_ops_agent.domain.review import RATES_UNCONFIRMED
+
 
 @dataclass(frozen=True)
 class ToolSpec:
@@ -83,6 +85,16 @@ _MARKUP = re.compile(
 # simply be attempted again once the cause is fixed. Anywhere else it does
 # nothing, so it is never offered or accepted there.
 RETRYABLE_REVIEWS = frozenset({"QUICKBOOKS_FAILED", "SEND_FAILED"})
+
+
+def retries_on_try_again(code: str, message: str) -> bool:
+    """Whether "try again" on this question attempts something again now.
+
+    Only a failed invoice or a failed send. Not a question waiting on
+    QuickBooks for an item's rates, though it carries the same code: that one
+    closes by itself once QuickBooks answers, and closing it early would let
+    the item be invoiced on figures nobody confirmed (decisions 55 and 61)."""
+    return code in RETRYABLE_REVIEWS and not message.startswith(RATES_UNCONFIRMED)
 
 
 def problems_with_answer(investigation: Investigation) -> list[str]:

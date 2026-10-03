@@ -16,13 +16,13 @@ it stands, without the model.
 import re
 from dataclasses import dataclass, field
 
-from finance_ops_agent.application import outgoing
+from finance_ops_agent.application import engagement_copy, outages, outgoing, set_aside
 from finance_ops_agent.application.completion import complete_if_covered
 from finance_ops_agent.application.context import Mode, RunDeps, RunReport
 from finance_ops_agent.application.investigation import offered_replies, picked_option
-from finance_ops_agent.domain import emails
+from finance_ops_agent.domain import emails, setup
 from finance_ops_agent.domain.emails import format_period
-from finance_ops_agent.domain.investigation import RETRYABLE_REVIEWS
+from finance_ops_agent.domain.investigation import retries_on_try_again
 from finance_ops_agent.domain.invoice_numbers import problem_with_chosen_number
 from finance_ops_agent.domain.items import Item, OutgoingRecord
 from finance_ops_agent.domain.messages import StoredMessage
@@ -33,9 +33,17 @@ from finance_ops_agent.domain.reading import (
     ReplyContext,
     ReplyReading,
 )
+from finance_ops_agent.domain.review import ReviewCode
 from finance_ops_agent.domain.statuses import ItemStatus
+from finance_ops_agent.ports.inbox import NEEDS_REVIEW_FOLDER
 
-_ANSWERABLE = ("approval_request", "review_email", "ask_again_email", "reply_email")
+_ANSWERABLE = (
+    "approval_request",
+    "review_email",
+    "ask_again_email",
+    "reply_email",
+    "setup_request",
+)
 
 APPROVAL_CODE = "APPROVAL"
 
@@ -144,11 +152,11 @@ def _write_back(
     elif outcome.not_done:
         lines.append("Thanks. I did part of what you asked, and need one more thing.")
     else:
-        lines.append("Thanks — done.")
+        lines.append("Thanks.")
     if reading is not None and reading.understood:
         lines += ["", f"What I understood: {reading.understood}"]
     if outcome.done:
-        lines += ["", "What I did:", *[f"- {line}" for line in outcome.done]]
+        lines += ["", "What happens now:", *[f"- {line}" for line in outcome.done]]
     if outcome.not_done:
         lines += ["", "What I couldn't do:", *[f"- {line}" for line in outcome.not_done]]
         question = (reading.still_unclear if reading is not None else "") or fallback_question
@@ -199,8 +207,9 @@ def _cancel(deps: RunDeps, item: Item, report: RunReport) -> None:
 
 
 _APPROVAL_FALLBACK = (
-    'Reply "approve" to send it to the client as it is, or "cancel" to stop it'
-    ' (the invoice is voided). Plain words work too, like "looks good, send it".'
+    'Reply "approve" to send it to the client as it is, "cancel" to stop it'
+    ' (the invoice is voided), or "wrong client" if the timesheet is for another'
+    ' client. Plain words work too, like "looks good, send it".'
 )
 
 
@@ -214,6 +223,10 @@ def _handle_approval_reply(
     assert record.item_id is not None
     item = deps.store.get_item(record.item_id)
     word = _first_word(body)
+    if re.findall(r"[a-zA-Z]+", body.casefold())[:2] == ["wrong", "client"]:
+        # Read by code, as "approve" and "cancel" are (decision 57).
+        _handle_wrong_client(deps, message, record, item, report)
+        return
     if word in ("approve", "cancel"):
         # The plain word is taken as it stands, without the model.
         if item.status is ItemStatus.WAITING_FOR_APPROVAL:
@@ -280,7 +293,7 @@ _REVIEW_FALLBACK = (
 
 
 def _check_answer(
-    deps: RunDeps, item: Item | None, answer: ReplyAnswer, body: str, review_code: str = ""
+    deps: RunDeps, item: Item | None, answer: ReplyAnswer, body: str
 ) -> tuple[bool, str]:
     """Whether code accepts one request, and the line Kevin will read about it."""
     kind = answer.kind
@@ -305,13 +318,8 @@ def _check_answer(
             return False, f'I can\'t read "{answer.value}" as a number of hours.'
         return True, f"I'll use {hours} hours."
     if kind is ReplyAnswerKind.TRY_AGAIN:
-        if review_code not in RETRYABLE_REVIEWS:
-            # Only a failed invoice or send can be attempted again; on a
-            # question about a timesheet it would close the question unanswered.
-            return False, (
-                "There's nothing for me to try again on this one: it needs an answer"
-                " to the question I asked."
-            )
+        # Only reached where an invoice or a send failed: anywhere else it is
+        # acknowledged and the question left open, before this is asked.
         return True, "I'm trying again now."
     if kind is ReplyAnswerKind.SHOW_ME_FIRST:
         if deps.settings.mode is Mode.DRY_RUN:
@@ -328,6 +336,70 @@ def _check_answer(
     return True, f"Noted the {label}: {answer.value}."
 
 
+def _handle_wrong_client(
+    deps: RunDeps,
+    message: StoredMessage,
+    record: OutgoingRecord,
+    item: Item,
+    report: RunReport,
+) -> None:
+    """Right consultant, wrong client (decision 57).
+
+    The draft is voided, as "cancel" voids it. The item is not cancelled: its
+    engagement's period still needs its own timesheet, so it goes back to
+    waiting for one, and the timesheet that was wrongly put on it is detached
+    so it can be read again. That email is then set aside with the setup form,
+    never to be put on this client again, and is handled once Kevin has said
+    -- or set up -- the client it is for."""
+    if item.status is not ItemStatus.WAITING_FOR_APPROVAL:
+        ask = emails.OutgoingEmail(
+            to=(deps.settings.admin_email,),
+            subject=f"Re: {record.payload.get('subject', '')}",
+            in_reply_to=message.message_id,
+            body=(
+                f"This invoice is no longer waiting for your approval (it is"
+                f" {item.status.value.replace('_', ' ')}), so I haven't changed anything."
+                " If it has already gone to the client, it needs correcting as a"
+                " corrected timesheet would."
+            ),
+        )
+        outgoing.enqueue_email(
+            deps, "ask_again_email", f"wrongclient:{message.message_id}", item.id, ask
+        )
+        return
+    timesheet = outgoing.active_timesheet_attachment(deps, item)
+    originals = deps.store.message_ids_for_item(item.id)
+    wrong = item.client
+    outgoing.cancel_invoices(deps, item, report)
+    item = deps.store.put_back_to_waiting(item.id, f"Kevin said the timesheet is not for {wrong}")
+    report.note(f"Kevin said wrong client: {item.consultant}'s timesheet is not for {wrong}")
+    for message_id in originals:
+        original = deps.store.get_message(message_id)
+        if original is None:
+            continue
+        review = (
+            f'You said {item.consultant}\'s timesheet ("{original.subject}") is not for'
+            f" {wrong}. I voided that invoice; {wrong} is waiting for its own timesheet for"
+            f" the same dates. Which client is this one for?"
+        )
+        if deps.store.open_review(None, ReviewCode.ENGAGEMENT_UNCLEAR.value, review):
+            report.reviews_opened += 1
+        set_aside.set_aside(
+            deps,
+            original,
+            ReviewCode.ENGAGEMENT_UNCLEAR,
+            review,
+            email_kevin=True,
+            timesheet=timesheet,
+            prefill_extra={
+                setup.CONSULTANT: item.consultant,
+                setup.START: item.period.start.isoformat(),
+            },
+            not_client=wrong,
+        )
+        outages.file_in(deps, message_id, NEEDS_REVIEW_FOLDER)
+
+
 def _handle_review_reply(
     deps: RunDeps,
     message: StoredMessage,
@@ -335,6 +407,21 @@ def _handle_review_reply(
     body: str,
     report: RunReport,
 ) -> None:
+    # Answers about one set-aside email, or about QuickBooks being unreachable,
+    # go to their own handlers: put to the reader alongside every other open
+    # question without an item, an "ignore" would close them all (decision 55).
+    if record.payload.get("set_aside"):
+        set_aside.handle_reply(deps, message, record, body, report)
+        return
+    if record.payload.get("engagement_refresh"):
+        engagement_copy.handle_reply(deps, message, record, body, report)
+        return
+    if record.payload.get("outage"):
+        # Read by code, not Claude: Claude may be the thing that is down.
+        if _first_word(body) == "ignore":
+            outages.close_review(deps, str(record.payload["outage"]))
+            report.note("Kevin closed the question about an outage")
+        return
     item = None if record.item_id is None else deps.store.get_item(record.item_id)
     if record.payload.get("uncertain_key"):
         outgoing.answer_send_uncertain(deps, record, body, report)
@@ -364,6 +451,7 @@ def _handle_review_reply(
         return
 
     accepted: dict[int, list[ReplyAnswer]] = {}
+    acknowledged = False
     for answer in reading.answers:
         if answer.kind is ReplyAnswerKind.UNCLEAR:
             outcome.not_done.append(
@@ -378,7 +466,24 @@ def _handle_review_reply(
             (review for review in open_reviews if review.code == answer.review_code),
             open_reviews[0],
         )
-        ok, line = _check_answer(deps, item, answer, body, target.code)
+        if (
+            answer.kind is ReplyAnswerKind.TRY_AGAIN
+            and not retries_on_try_again(target.code, target.message)
+            and _is_quoted(answer, body)
+        ):
+            # Nothing failed here that could be attempted again, and nothing to
+            # record: whatever waits on QuickBooks or the engagement list is
+            # looked at again on every run anyway, and closing the question
+            # would let an item go ahead on figures nobody confirmed (decision
+            # 55). So it stays open, and Kevin is told so (decision 61).
+            report.note("Kevin asked me to try again; I do on every run")
+            outcome.done.append(
+                "I look again on every run, so this question stays open until it is"
+                " settled. Nothing else has changed."
+            )
+            acknowledged = True
+            continue
+        ok, line = _check_answer(deps, item, answer, body)
         if not ok:
             outcome.not_done.append(line)
             continue
@@ -407,10 +512,14 @@ def _handle_review_reply(
     if accepted:
         report.note(f"applied Kevin's answer: {'; '.join(outcome.done)}")
 
-    if outcome.not_done or any(
-        a.kind not in (ReplyAnswerKind.HOURS, ReplyAnswerKind.USE_NEW_ONE)
-        for answers in accepted.values()
-        for a in answers
+    if (
+        outcome.not_done
+        or acknowledged
+        or any(
+            a.kind not in (ReplyAnswerKind.HOURS, ReplyAnswerKind.USE_NEW_ONE)
+            for answers in accepted.values()
+            for a in answers
+        )
     ):
         # A plain "use 152 hours" shows up as the next email about the item;
         # anything else gets said back to him, so he knows what was done.

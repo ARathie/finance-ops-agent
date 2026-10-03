@@ -174,7 +174,10 @@ class ReplyAnswerKind(StrEnum):
     APPROVE = "approve"  # send the invoice he was shown, unchanged
     CANCEL = "cancel"  # stop it; the invoice is voided
     INVOICE_NUMBER = "invoice_number"  # make the invoice under this number instead
-    TRY_AGAIN = "try_again"  # he fixed something outside the agent; go again
+    # "Try again": Kevin has fixed something in QuickBooks or the engagement
+    # list and wants the agent to look again (decision 55). Where an invoice or
+    # a send failed it is attempted again now (decision 61).
+    TRY_AGAIN = "try_again"
     SHOW_ME_FIRST = "show_me_first"  # he wants to approve this one before it goes out
     UNCLEAR = "unclear"
 

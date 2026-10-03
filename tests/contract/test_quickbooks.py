@@ -311,7 +311,7 @@ class TestCreateInvoice:
         message = str(error.value)
         assert "no product for 'Priya Shah'" in message
         assert "Acme Corp:Priya Shah" in message  # every path it tried is named
-        assert "never create products myself" in message
+        assert "never create a product on my own" in message
 
     def test_the_line_is_priced_from_the_product_and_dated_by_the_period(
         self, tmp_path: Path

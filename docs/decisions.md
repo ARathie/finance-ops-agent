@@ -535,6 +535,101 @@ Decision 52 set the direction: what QuickBooks has no field for goes in as label
 
 Rates history ("Rates from") does not come across: the product holds today's rate, taken when the timesheet is read (decision 43), and the start date stands in for "rates from".
 
+## 54. A run asks QuickBooks only about what is in front of it
+
+The agent runs every 15 minutes and most runs find an empty mailbox. Before this, every one of them still asked QuickBooks about every engagement Icon has: in QuickBooks mode (decision 53) it rebuilt the whole engagement list -- every product, every customer, every vendor -- and in either mode it asked for each engagement's product, period by period, only to confirm that the item for that period was already in hand (decision 39's lookup by id). None of it had anything to do with the mail.
+
+Now:
+
+- **The mailbox is read first**, and the rest follows from what is in it.
+- **Ended billing periods are looked for once a day**, on the day's first run. Periods end on dates, so a second look the same day cannot find anything the first missed. A look during which QuickBooks could not be asked, or a QuickBooks-mode run that fell back to the spreadsheet, is not counted as done, and the next run looks again: an outage must not hide a period until tomorrow.
+- **In QuickBooks mode the engagement list is built only when it is needed**: mail has arrived, a message is still waiting to be handled, or the day's look is still to do. *(Replaced by decision 55: the run now works from its own copy, taken once a day and again on a miss.)* The spreadsheet costs nothing to read, so in list mode it is still read every run and a broken edit is still reported within 15 minutes.
+- **An item is found by name first, and by QuickBooks' id only when the name finds nothing.** The name is a question for the agent's own store. A rename (decision 39) is exactly the case where the name finds nothing, so it is still caught; an item already in hand no longer costs a QuickBooks lookup to confirm.
+
+What still asks QuickBooks, and why: a timesheet that arrives (its rates are taken when it is read, decision 43), an invoice that is due, the daily look and the daily paid check. Each is about something in front of the agent.
+
+## 55. The agent keeps its own copy of the engagements, and every way that goes wrong is a question for Kevin
+
+Decision 54 stopped quiet runs asking QuickBooks anything, but a run with mail still rebuilt the whole engagement list -- every product, customer and vendor -- to recognise one sender. Who works for which client, from which address, on which schedule, changes a few times a year. The money changes more often and matters more.
+
+**What is kept.** The engagement list built from QuickBooks (decision 53) is stored in the agent's own state, as it was built: clients, consultants, vendors, engagements, and the problems found building it. A run reads that copy. It is taken again:
+
+- **on the day's first run**, so a change in QuickBooks is picked up the same day and the daily look for ended periods works from today's picture;
+- **when something does not match it**: an email from an address the copy does not have, or a timesheet naming a consultant or client it cannot place. A new consultant, or one whose address changed, looks exactly like that. At most once a run, however many emails miss;
+- **when Kevin replies "try again"** to one of the emails below.
+
+**What is not taken from the copy alone: the money.** The bill rate, pay rate, payee, billing emails and terms are asked of QuickBooks for the engagement in hand when its timesheet is read (decision 43), a few calls for that one engagement. That now includes an item made earlier, when its period ended or by an earlier timesheet in the same period: its figures are taken again, so a rate Kevin changed in between is the one invoiced. Before this, such an item kept the figures from the day it was made.
+
+**Every way it can go wrong ends in an email to Kevin that says what he can reply.**
+
+| What went wrong | What Kevin is told | Replies that work | What happens by itself |
+|---|---|---|---|
+| QuickBooks could not be asked for a fresh copy | `QUICKBOOKS_FAILED` (or `QUICKBOOKS_RECONNECT`): which copy the agent is working from, and that anyone added since will not be recognised | "try again" (looks on the next run whatever the date), "ignore" (closes it; told again only after QuickBooks has answered once) | Every run tries again; the review closes itself once QuickBooks answers; the daily look is not counted done on an old copy |
+| An address not in a fresh copy (with an attachment) | `UNKNOWN_SENDER`, with what to add in QuickBooks | "try again" (after adding the address; takes a fresh copy and handles the email), "this is from Priya Shah" (handled as hers), "ignore" | An address that appears in the next day's copy is handled without a reply |
+| A timesheet naming someone a fresh copy cannot place | `CONSULTANT_UNKNOWN` or `ENGAGEMENT_UNCLEAR`, with the reading and the file | "try again" (reads it again against a fresh copy), "this is from Priya Shah" (consultant only), "ignore" | Nothing: reading it again costs a call to Claude, so it waits for Kevin |
+| QuickBooks could not confirm the rates or billing details for the timesheet in hand | `QUICKBOOKS_FAILED` (or `_RECONNECT`) on the item: the invoice waits | "ignore" drops the timesheet; "try again" is accepted and changes nothing, since it is retried anyway | Every run asks again for that engagement only; once QuickBooks answers, the review closes and the item carries on |
+
+- **An email from an unknown address with no attachment** is not emailed about: it is a review that waits in the Monday summary, as newsletters always have been. It is still picked up by itself if the address turns up in a later copy.
+- **Answers about one set-aside email are read against that email's question alone**, so an "ignore" can never close another review. Before this, every review without an item was put to the reader together.
+- **This changes decision 38 in one place.** QuickBooks that cannot answer while a timesheet is read used to let the item go ahead on the engagement list's figures. Now the timesheet is still read and kept, and Kevin still hears about it, but the invoice waits for QuickBooks to confirm the figures. In QuickBooks mode the invoice could not be made during the outage anyway. In manual mode nothing changes: the manual adapter has nothing to be unable to answer.
+- **Reply "try again"** is a new kind of answer (`try_again`), read by a new reply prompt (`reply_v2`). A name given with it ("that's Priya, try again") counts as the name.
+- **A set-aside email handled again is a new attempt**: its emails go under a new key, so Kevin hears the outcome rather than nothing.
+
+`Store` gained `requeue_message` (an email goes back in the queue as a timesheet) and `replace_snapshot` (an item's figures taken again).
+
+## 56. A new consultant, client or engagement can be set up in QuickBooks from Kevin's email
+
+Decision 55 made every email or timesheet the agent cannot place a question for Kevin. Often the answer is "that's someone new" -- or someone Kevin meant to add and did not -- and the fix was for him to go and set them up in QuickBooks by hand, exactly as `quickbooks-setup.md` describes, before replying "try again". The agent knows exactly what that setup is, and QuickBooks Online's API can make all of it.
+
+**What Kevin sees.** In QuickBooks mode (`FOPS_ENGAGEMENTS=quickbooks`), the question about an unknown address, or a timesheet whose consultant or engagement cannot be placed, offers one more answer: *if this is a new consultant, client or engagement, I can set it up*. Below it is a short form, filled in with what is already known (the sender's address, the names the timesheet gives). He copies it into his reply and fills in the rest: who Icon pays and within how many days, the client, and -- for a new client only -- its billing email, payment days and invoice code; the bill rate, the pay rate, and the start date.
+
+**How it is made safe, in order:**
+
+1. **Code reads the form, never the model.** Labelled lines only, in Kevin's own part of the reply (quoted text is ignored); a value that does not read cleanly is a problem named back to him with his own answers shown, never a guess (`domain/setup.py`). It is checked against the engagements as last seen: an existing engagement is refused, an invoice code another client has is refused, a new client must have its billing details.
+2. **Nothing is created until he confirms.** The agent replies with exactly what it will make or reuse, both rates in words, and a one-time four-digit number. Only a reply starting `confirm` with that number goes ahead; `cancel` stops it. The number is the defence against a forged email: someone who can send as Kevin cannot see the number, so cannot confirm. A wrong or missing number changes nothing and says so.
+3. **Written down before it happens, and found before it is made** (CLAUDE.md rule 4). The setup is a `quickbooks_setup` row in the outgoing table before QuickBooks is touched. The adapter finds each record before creating it -- payment term, customer, category, vendor, product -- so a crash or a refusal part-way is finished by the next attempt, never duplicated.
+4. **It will not change what is already there.** An existing vendor with a different email, or an existing product at a different rate, is refused with what QuickBooks holds; Kevin fixes it by hand. An existing vendor with no email gets this one; an existing customer with no invoice code gets this one in its Notes. Nothing else is ever updated.
+5. **Dry run creates nothing**, here as everywhere: Kevin gets a "Dry run — would set up" email instead.
+
+**What is made**, matching `quickbooks-setup.md`: the customer (display name the client's short name, company name its legal name, billing email, a payment term of the right number of days, `Invoice code: XX` in Notes); a category named as the customer; the vendor (the consultant's name, the firm as company name, the timesheet address as email, a term for when Icon pays); and the product under the category with the sales price, the purchase cost, the vendor, and `Start:` in the purchase description. A payment term of the right length is made if the company has none. The income and expense accounts are **copied from an existing engagement product**, since nothing in Kevin's answers says which; with none to copy, it stops and says so.
+
+**Then** the agent takes a fresh copy of the engagements, handles the email that started it as the new consultant's, and tells Kevin what it made and what it reused. A refusal from QuickBooks is reported once per distinct reason and retried every run until it succeeds or Kevin replies `cancel`.
+
+**This changes rule 1 in CLAUDE.md**, deliberately and only this far: a rate can now reach QuickBooks from an email, but only Kevin's own setup form, read by code, shown back to him in full, and confirmed with the one-time number. Once there it is read back from the product like any other rate.
+
+**Not done here:** a timesheet from a consultant who already has one engagement covering the dates is matched to that engagement whatever client the timesheet names (`checks.match_engagement`), so a consultant starting at a second client while still at the first is not asked about. Decision 57 is how that is caught.
+
+## 57. Icon runs in ask first, and "wrong client" on the approval email puts it right
+
+**Ask first is the production mode.** Every invoice waits for Kevin's "approve" before anything goes to a client, in production as in testing. Automatic mode stays in the code but is not used; `running-it.md` and `how-it-works.md` say so. This is what makes the rest of this decision safe: a draft on the wrong client has been seen only by Kevin.
+
+**The gap it closes.** A consultant starting at a second client while still at the first sends a timesheet for dates only the first engagement covers, so the agent puts it there (decision 56 left this alone, because timesheets often name an end client rather than Icon's client). Kevin sees it in the approval email: right consultant, wrong client.
+
+**What "wrong client" does**, read by code from the first two words like "approve" and "cancel":
+
+1. **The draft is voided**, exactly as "cancel" voids it: renamed `-VOID` first so its number comes free, then voided (decisions 33 and 34). A void QuickBooks refuses is a review telling Kevin to do it by hand, as with "cancel".
+2. **The item is not cancelled. It goes back to `waiting_for_timesheet`** -- a new allowed change, `waiting_for_approval` to `waiting_for_timesheet` -- with the timesheet taken off it and its amounts cleared, in one change with one line of history naming the detached files. The first client's period still needs its own timesheet: the consultant still works there, and cancelling would have swallowed that timesheet when it came.
+3. **The email is set aside** as `ENGAGEMENT_UNCLEAR`, with the setup form (decision 56) filled in with the consultant, their address and the period's first day, and the client left for Kevin. It is remembered as **not for** the first client: however it is handled again, it is never put back there.
+4. **Then either:** Kevin fills in the form for the right client -- new, or existing with just the engagement missing -- and confirms with the number; or he sets it up by hand and replies "try again". Either way the email is handled again. After a setup through the agent it is **pinned** to the client just made, which matters when the timesheet names an end client and both engagements now cover the dates. A new **Approve this invoice?** comes for the right client, under its own invoice code.
+
+Nothing reaches the client or the consultant from the wrong draft: the billing email and the payment instruction are only written down once Kevin approves, and "wrong client" stands in place of approving. Replied after the invoice has gone, "wrong client" changes nothing and says so; that is a correction, which has its own path.
+
+`Store` gained `put_back_to_waiting` (the change above, as one transaction) and `get_message`.
+
+## 58. An outage is told to Kevin once it lasts, and a client's email goes straight to him
+
+Writing `pathways.md` found three paths where the agent did less than the documents said (gaps G1-G3).
+
+**The mailbox or Claude cannot be reached.** Before, the run stopped with an error. Nothing was lost -- the mailbox position only moves once mail is stored, and an email is only marked handled once it has been -- but nobody was told, however long it went on. `MAILBOX_PROBLEM` was a review reason nothing raised.
+
+- **The run carries on.** A mailbox that cannot be read means no new mail this run; everything already stored is still handled, sends still go, QuickBooks is still checked. Claude unreachable means the email it was reading, and the ones after it, wait for a later run -- they would all need Claude.
+- **Filing an email in a folder can no longer stop a run.** It is a courtesy for a person looking at the mailbox; a failure there used to leave a handled email unmarked, to be handled again.
+- **Kevin is told once it has lasted an hour**, or at once when it cannot clear by itself: a refused mailbox password, or a refused Anthropic key or unknown model. One email per outage, with when it began, what was said, and what to check; one more, **Working again**, when it is over. The question closes itself. A blip that clears inside the hour is never mentioned: fifteen-minute runs make one-run failures ordinary, and an email for each would teach Kevin to ignore them. "ignore" closes the question, read by code because Claude may be what is down.
+- **A new review reason, `CLAUDE_UNAVAILABLE`.** `MAILBOX_PROBLEM` is now raised. The ports gained `MailboxFailed` and `ReaderUnavailable`, each saying whether it is `lasting`, so the application catches them without naming an adapter. The IMAP adapter now also wraps a connection dropping part-way, which used to escape as a raw error.
+- **What this does not cover:** sending goes through the same provider as the mailbox, so if both are down the email to Kevin waits in the outgoing table until it can go. An agent that cannot say anything at all is the heartbeat's job (`fops serve`, roadmap PR 14).
+
+**A client writes.** Before, a client's email was filed and nothing else; `emails.md` said it was forwarded and listed in the Monday summary, and neither was true. Now each one goes to Kevin at once as **From a client: <subject>**, with the sender, the time, the text (cut short past 6,000 characters, saying where the rest is) and every attachment as it came. The agent acts on nothing in it: a client asking to change where invoices go is Kevin's to read, not the agent's to follow (CLAUDE.md rule 7). It is written down once, like every email, so it is sent once.
+
 ## 59. Kevin answers in his own words; code checks each request and says what it did
 
 Testing the first live cycle showed how brittle the replies were. QuickBooks refused Manoj's invoice because a leftover already held its number. Kevin replied, reasonably, "append -revised to the number so it can go through, and send it back to me as a draft for approval". The agent had no way to take a new number, so it answered with a fixed list of example phrases, none of which fitted. Approvals were stricter still: anything that did not start with `approve` or `cancel` got the same short refusal (decision 9).
@@ -647,3 +742,10 @@ The recorded answers are still the `investigate_v1` ones, re-scored under the co
 - The planted instruction is flagged and refused.
 
 Reading them also turned up one bug outside the investigator. An answered or ignored missing-invoice review was raised again by the next morning's paid check, and emailed every day. Now it is raised once per invoice.
+
+**Merged with decisions 54–58, which arrived on `main` while this was in review.** Two things had to be settled rather than just joined:
+
+- **"Try again" had two meanings.** Decision 55 added it as "look again", recording nothing and leaving the question open, because closing a question that waits on QuickBooks could let an item be invoiced on unconfirmed figures. Decision 61 made it close the question and retry, but only where an invoice or a send failed. Now both hold. Where an invoice or a send failed, it retries now and closes the question. Anywhere else, including a `QUICKBOOKS_FAILED` question that waits on an item's rates (it begins with `RATES_UNCONFIRMED`, now in `domain/review.py` so both sides read the same words), it is acknowledged, the question stays open, and Kevin is told so. `retries_on_try_again` in `domain/investigation.py` decides, and both the reply handling and the investigator's options use it.
+- **"Wrong client" (decision 57) comes first on the approval email.** Code reads it before "approve" and "cancel", and before the model reads anything, and the "Sorry, I couldn't tell" reply names it alongside the other two.
+
+The reply prompt versions were renumbered so each name means one text: `reply_v2` is decision 55's, and this work's are `reply_v3` and `reply_v4` (the one in use, carrying decision 55's "try again" examples).

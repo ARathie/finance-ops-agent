@@ -53,6 +53,10 @@ class EmailAttachment:
     sha256: str  # the content lives in the file store
 
 
+# How much of a client's email is copied into the one to Kevin.
+CLIENT_TEXT_LIMIT = 6000
+
+
 @dataclass(frozen=True)
 class OutgoingEmail:
     to: tuple[str, ...]
@@ -128,6 +132,41 @@ def _summary_lines(summary: TimesheetSummary) -> list[str]:
 # 1. Timesheet details for your records
 
 
+def client_wrote(
+    admin: str,
+    sender: str,
+    subject: str,
+    received: str,
+    body: str,
+    attachments: tuple[EmailAttachment, ...],
+) -> OutgoingEmail:
+    """A client's email to the agent's mailbox, passed to Kevin as it came.
+
+    The agent never acts on what a client writes: it is read by Kevin, not by
+    the agent (CLAUDE.md rule 7). Attachments go with it unchanged."""
+    text = body.strip()
+    if len(text) > CLIENT_TEXT_LIMIT:
+        cut = "[... cut short here; the whole email is in the agent's Processed folder]"
+        text = text[:CLIENT_TEXT_LIMIT].rstrip() + "\n" + cut
+    return OutgoingEmail(
+        to=(admin,),
+        subject=f"From a client: {subject or '(no subject)'}",
+        body="\n".join(
+            [
+                "A client wrote to the agent's mailbox. I haven't acted on it -- what a",
+                "client writes is for you to read, not for me to follow.",
+                "",
+                f"From: {sender}",
+                f"Received: {received}",
+                f"Subject: {subject or '(no subject)'}",
+                "",
+                text or "(no text)",
+            ]
+        ),
+        attachments=attachments,
+    )
+
+
 def timesheet_details(
     admin: str,
     summary: TimesheetSummary,
@@ -164,7 +203,12 @@ def needs_review(
     summary: TimesheetSummary | None = None,
     timesheet: EmailAttachment | None = None,
     asking_again: bool = False,
+    what_you_can_do: list[str] | None = None,
+    then: list[str] | None = None,
 ) -> OutgoingEmail:
+    """`what_you_can_do` replaces the usual closing lines where the answers
+    that work are not the timesheet ones: an email from an address the agent
+    does not know, or QuickBooks that cannot be asked (decision 55)."""
     headline = problems[0].rstrip(".") if len(problems) == 1 else "several things to check"
     body_lines = [
         "I need your help with this one."
@@ -175,14 +219,19 @@ def needs_review(
         body_lines += ["", "What I read:", *_summary_lines(summary)]
     body_lines += ["", "What needs your review:"]
     body_lines += [f"- {problem}" for problem in problems]
-    body_lines += [
-        "",
-        "You can fix or add the row in the engagement list, or just reply to this",
-        'email with the answer, or reply "ignore".',
-        "Write it however you like, for example:",
-        '"this is for Acme", "use 152 hours", "approved by Jane Doe on 9/3",',
-        '"use the new one", "ignore".',
-    ]
+    if what_you_can_do is not None:
+        body_lines += ["", "What you can do:", *[f"- {line}" for line in what_you_can_do]]
+    if then:
+        body_lines += ["", *then]
+    else:
+        body_lines += [
+            "",
+            "You can fix or add the row in the engagement list, or just reply to this",
+            'email with the answer, or reply "ignore".',
+            "Write it however you like, for example:",
+            '"this is for Acme", "use 152 hours", "approved by Jane Doe on 9/3",',
+            '"use the new one", "ignore".',
+        ]
     return OutgoingEmail(
         to=(admin,),
         subject=f"Needs your review: {about} — {headline}",
@@ -211,6 +260,8 @@ def approve_invoice(
         body="\n".join(
             [
                 'Everything checks out. Reply "approve" to send, or "cancel" to stop.',
+                'Right consultant but the wrong client? Reply "wrong client": I\'ll void'
+                " this invoice and help you set up the right one.",
                 "",
                 f"Client: {item.client}",
                 f"Billing email: {', '.join(item.snapshot.billing_emails)}",

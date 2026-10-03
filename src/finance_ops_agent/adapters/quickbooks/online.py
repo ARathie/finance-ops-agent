@@ -37,6 +37,7 @@ from finance_ops_agent.adapters.quickbooks.client import (
 from finance_ops_agent.domain.invoice_numbers import is_voided_number
 from finance_ops_agent.domain.invoices import Invoice
 from finance_ops_agent.domain.money import Money, invoice_amount
+from finance_ops_agent.domain.setup import EngagementSetup
 from finance_ops_agent.ports.accounting import (
     AccountingEngagement,
     AccountingParty,
@@ -44,6 +45,7 @@ from finance_ops_agent.ports.accounting import (
     EngagementListing,
     EngagementRates,
     InvoiceLookup,
+    SetupDone,
 )
 
 PRIVATE_NOTE_PREFIX = "fops item"
@@ -51,6 +53,10 @@ PRIVATE_NOTE_PREFIX = "fops item"
 _DUPLICATE_NUMBER = ("6140", "Duplicate Document Number")
 # What QuickBooks says when asked for an invoice it does not have.
 _NOT_FOUND = ('"code":"610"', "Object Not Found")
+# Creating a category needs a record shape newer than the default. Asked for
+# only on the calls that set an engagement up, and only when the operator has
+# not chosen a version already (decision 56).
+SETUP_MINORVERSION = "75"
 # A sentinel for "not asked yet", because "asked, and the company has no
 # default" is a real and different answer that must not be asked again.
 _UNREAD: Any = object()
@@ -272,7 +278,8 @@ class QuickBooksOnline:
                 f"QuickBooks has no customer whose name or company is"
                 f" {quickbooks_customer!r}. Add it in QuickBooks, or fix the"
                 ' "QuickBooks customer" column in the engagement list. I never'
-                " create customers myself."
+                " create a customer on my own, only when you fill in my setup form"
+                " and confirm it."
             )
         reference = str(rows[0]["Id"])
         logs.log(
@@ -350,7 +357,8 @@ class QuickBooksOnline:
                 f" {' or '.join(tried) or 'a category'}, and for a product called"
                 f" {consultant!r} on its own. Every engagement needs a product, under a"
                 " category named for the client, with the rate on it. I never create"
-                " products myself."
+                " a product on my own, only when you fill in my setup form and"
+                " confirm it."
             )
         return self._remember(key, consultant, rows[0], self._parent_name(rows[0]))
 
@@ -784,6 +792,195 @@ class QuickBooksOnline:
         raw = self._client.get(self.company_url(f"/invoice/{external_id}"))
         invoice = raw.get("Invoice", raw)
         return Money(max(_cents(invoice.get("Balance", 0)), 0))
+
+    # --- setting an engagement up (decision 56) ---
+
+    def set_up_engagement(self, setup: EngagementSetup) -> SetupDone:
+        """Find each record first and create only what is missing.
+
+        The order is the order things depend on each other: terms before the
+        customer and vendor that name them, the category before the product
+        that sits under it. A failure part-way leaves what was made in place,
+        and the next attempt finds it and carries on."""
+        done = SetupDone(created=[], reused=[])
+        customer_id = self._set_up_customer(setup, done)
+        category_id = self._set_up_category(setup.client, done)
+        vendor_id = self._set_up_vendor(setup, done)
+        self._set_up_product(setup, category_id, vendor_id, done)
+        logs.log(
+            "quickbooks engagement set up",
+            customer_id=customer_id,
+            created=len(done.created),
+            reused=len(done.reused),
+        )
+        return done
+
+    def _setup_url(self, suffix: str) -> str:
+        url = self.company_url(suffix)
+        if "minorversion=" not in url:
+            url += ("&" if "?" in url else "?") + f"minorversion={SETUP_MINORVERSION}"
+        return url
+
+    def _created(self, entity: str, body: dict[str, Any]) -> dict[str, Any]:
+        raw = self._client.post(self._setup_url(f"/{entity.lower()}"), json=body)
+        row: dict[str, Any] = raw.get(entity, raw)
+        return row
+
+    def _term_for(self, days: int, done: SetupDone) -> str:
+        """The id of a payment term of exactly `days` days, made if there is none."""
+        for reference, term_days in self._term_days().items():
+            if term_days == days:
+                return reference
+        row = self._created("Term", {"Name": f"Net {days}", "DueDays": days})
+        reference = str(row["Id"])
+        self._term_days()[reference] = days
+        done.created.append(f"payment term Net {days}")
+        return reference
+
+    def _set_up_customer(self, setup: EngagementSetup, done: SetupDone) -> str:
+        try:
+            reference = self.customer_ref(setup.client)
+        except QuickBooksFailed as error:
+            if "has no customer" not in str(error):
+                raise  # ambiguous: never guessed between
+            if not setup.new_client:
+                raise
+            body: dict[str, Any] = {
+                "DisplayName": setup.client,
+                "CompanyName": setup.client_legal_name or setup.client,
+                "PrimaryEmailAddr": {"Address": setup.client_email},
+                "SalesTermRef": {"value": self._term_for(setup.client_pays_within_days, done)},
+                "Notes": f"Invoice code: {setup.invoice_code}",
+            }
+            reference = str(self._created("Customer", body)["Id"])
+            self._customers[setup.client] = reference
+            done.created.append(f"customer {setup.client}")
+            return reference
+        done.reused.append(f"customer {setup.client}")
+        if setup.new_client and setup.invoice_code:
+            # Already in QuickBooks but with no invoice code, which is why the
+            # agent did not know it: the code is added, nothing else changed.
+            rows = self._client.query(f"SELECT * FROM Customer WHERE Id = '{_escape(reference)}'")
+            notes = str(rows[0].get("Notes") or "") if rows else ""
+            if rows and "invoice code:" not in notes.casefold():
+                self._client.post(
+                    self._setup_url("/customer"),
+                    json={
+                        "Id": reference,
+                        "SyncToken": rows[0]["SyncToken"],
+                        "sparse": True,
+                        "Notes": (notes + "\n" if notes else "")
+                        + f"Invoice code: {setup.invoice_code}",
+                    },
+                )
+                done.created.append(f"invoice code {setup.invoice_code} on {setup.client}")
+        return reference
+
+    def _set_up_category(self, client: str, done: SetupDone) -> str:
+        rows = self._client.query(f"SELECT * FROM Item WHERE Name = '{_escape(client)}'")
+        for row in rows:
+            if str(row.get("Type") or "") == "Category":
+                done.reused.append(f"category {client}")
+                return str(row["Id"])
+        row = self._created("Item", {"Name": client, "Type": "Category"})
+        done.created.append(f"category {client}")
+        return str(row["Id"])
+
+    def _set_up_vendor(self, setup: EngagementSetup, done: SetupDone) -> str:
+        rows = self._client.query(
+            f"SELECT * FROM Vendor WHERE DisplayName = '{_escape(setup.consultant)}'"
+        )
+        if rows:
+            row = rows[0]
+            email = _clean((row.get("PrimaryEmailAddr") or {}).get("Address"))
+            if email and email.casefold() != setup.consultant_email.casefold():
+                raise QuickBooksFailed(
+                    f"QuickBooks already has a vendor called {setup.consultant!r}, with"
+                    f" the email {email}, not {setup.consultant_email}. I won't change"
+                    " who an existing vendor is. Fix the vendor in QuickBooks, then"
+                    ' reply "try again".'
+                )
+            if not email:
+                self._client.post(
+                    self._setup_url("/vendor"),
+                    json={
+                        "Id": row["Id"],
+                        "SyncToken": row["SyncToken"],
+                        "sparse": True,
+                        "PrimaryEmailAddr": {"Address": setup.consultant_email},
+                    },
+                )
+                done.created.append(f"email {setup.consultant_email} on vendor {setup.consultant}")
+            done.reused.append(f"vendor {setup.consultant}")
+            return str(row["Id"])
+        body: dict[str, Any] = {
+            "DisplayName": setup.consultant,
+            "PrimaryEmailAddr": {"Address": setup.consultant_email},
+            "TermRef": {"value": self._term_for(setup.pay_within_days, done)},
+        }
+        if setup.firm:
+            body["CompanyName"] = setup.firm
+        row = self._created("Vendor", body)
+        done.created.append(f"vendor {setup.consultant}")
+        return str(row["Id"])
+
+    def _accounts_from_another_engagement(self) -> tuple[dict[str, Any], dict[str, Any]]:
+        """The income and expense accounts Icon's engagements already use.
+
+        A product needs both and nothing in Kevin's answers says which, so a
+        new engagement is filed like the existing ones. With none to copy, it
+        is refused rather than guessed."""
+        rows = self._client.query(
+            f"SELECT {PRODUCT_FIELDS} FROM Item WHERE Active = true MAXRESULTS {PRODUCT_PAGE}"
+        )
+        for row in rows:
+            income, expense = row.get("IncomeAccountRef"), row.get("ExpenseAccountRef")
+            if row.get("ParentRef") and income and expense:
+                return dict(income), dict(expense)
+        raise QuickBooksFailed(
+            "I couldn't find an engagement product in QuickBooks with both an income"
+            " and an expense account to copy, so I don't know which accounts a new"
+            " one belongs in. Set one engagement up by hand first."
+        )
+
+    def _set_up_product(
+        self, setup: EngagementSetup, category_id: str, vendor_id: str, done: SetupDone
+    ) -> None:
+        path = f"{setup.client}:{setup.consultant}"
+        rows = self._client.query(
+            f"SELECT {PRODUCT_FIELDS} FROM Item WHERE FullyQualifiedName = '{_escape(path)}'"
+        )
+        if rows:
+            row = rows[0]
+            if row.get("UnitPrice") is not None and _cents(row["UnitPrice"]) != (
+                setup.bill_rate.cents
+            ):
+                raise QuickBooksFailed(
+                    f"QuickBooks already has the product {path} at"
+                    f" ${Money(_cents(row['UnitPrice']))} an hour, not ${setup.bill_rate}."
+                    " I won't change a rate that is already there. Fix it in QuickBooks,"
+                    ' then reply "try again".'
+                )
+            done.reused.append(f"product {path}")
+            return
+        income, expense = self._accounts_from_another_engagement()
+        self._created(
+            "Item",
+            {
+                "Name": setup.consultant,
+                "Type": "Service",
+                "SubItem": True,
+                "ParentRef": {"value": category_id},
+                "UnitPrice": setup.bill_rate.cents / 100,
+                "PurchaseCost": setup.pay_rate.cents / 100,
+                "PrefVendorRef": {"value": vendor_id},
+                "PurchaseDesc": f"Start: {setup.start.isoformat()}",
+                "IncomeAccountRef": income,
+                "ExpenseAccountRef": expense,
+            },
+        )
+        done.created.append(f"product {path}")
+        self._products.clear()  # the next lookup must see the new one
 
     # --- helpers ---
 

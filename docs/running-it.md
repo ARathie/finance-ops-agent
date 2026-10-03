@@ -15,7 +15,7 @@ The schedule is **every 15 minutes**. Two runs can never overlap: each run takes
 
 `fops serve` (PR 14) is the long-running form: one process that does a run every 15 minutes, a backup once a night, and a heartbeat check-in after each. It is what the container runs in stage 2. In stage 1, launchd runs `fops run` on a timer instead.
 
-The mode comes from `FOPS_MODE` in `.env`. **`dry_run` is the stop button.** While it is set to `dry_run`, nothing can be sent to a client and nothing can be created in QuickBooks, not even with a command-line flag asking for it. To stop the agent acting, set `FOPS_MODE=dry_run` and the next run is harmless; you do not have to uninstall anything.
+The mode comes from `FOPS_MODE` in `.env`. Production runs with `FOPS_MODE=ask_first` (decision 57): every invoice waits for Kevin's "approve". **`dry_run` is the stop button.** While it is set to `dry_run`, nothing can be sent to a client and nothing can be created in QuickBooks, not even with a command-line flag asking for it. To stop the agent acting, set `FOPS_MODE=dry_run` and the next run is harmless; you do not have to uninstall anything.
 
 ## Getting it onto a machine
 

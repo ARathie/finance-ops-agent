@@ -323,8 +323,9 @@ def test_a_quote_must_be_his_whole_words(env: ScenarioEnv) -> None:
     assert "wasn't sure enough" in last_reply_body(env)
 
 
-def test_try_again_on_a_question_about_a_timesheet_is_not_taken(env: ScenarioEnv) -> None:
-    """It would close the question with nothing answered."""
+def test_try_again_on_a_question_about_a_timesheet_leaves_it_open(env: ScenarioEnv) -> None:
+    """Nothing failed that could be attempted again, so the question stays open
+    and Kevin is told so; it is never closed with nothing answered (decision 61)."""
     env.add_email(PRIYA, scripted_reading=reading(AUG_START, AUG_END, approved=False))
     env.run()
     subject = next(s for s in env.sent_subjects() if s.startswith("Needs your review"))
@@ -340,4 +341,38 @@ def test_try_again_on_a_question_about_a_timesheet_is_not_taken(env: ScenarioEnv
 
     assert [r.code for r in env.store.open_reviews()] == ["NO_APPROVAL"]
     assert env.the_item().status is ItemStatus.NEEDS_REVIEW
-    assert "nothing for me to try again" in last_reply_body(env)
+    assert "stays open until it is settled" in last_reply_body(env)
+
+
+def test_try_again_never_closes_a_question_waiting_on_rates(env: ScenarioEnv) -> None:
+    """It carries the same code as a failed invoice, but the item waits while it
+    is open; closing it early would invoice on figures nobody confirmed
+    (decisions 55 and 61)."""
+    from finance_ops_agent.domain import emails
+    from finance_ops_agent.domain.review import RATES_UNCONFIRMED
+    from finance_ops_agent.ports.accounting import AccountingFailed
+
+    env.add_email(PRIYA, scripted_reading=reading(AUG_START, AUG_END, approved=False))
+    env.run()
+    item = env.the_item()
+    message = f"{RATES_UNCONFIRMED} for Priya Shah at Acme Corp, so I won't invoice this yet."
+    env.store.open_review(item.id, "QUICKBOOKS_FAILED", message)
+    email = emails.needs_review("kevin@icon-technologies.com", "Priya Shah — Acme Corp", [message])
+    env.store.record_outgoing("review_email", "review:rates", item.id, email.payload())
+    # QuickBooks stays down, so the question cannot close by itself.
+    env.accounting.fail_with = AccountingFailed("QuickBooks is down")
+    env.run()  # sends it
+    env.replies["fixed it, try again"] = ReplyReading(
+        answers=[
+            ReplyAnswer(
+                review_code="QUICKBOOKS_FAILED",
+                kind=ReplyAnswerKind.TRY_AGAIN,
+                quote="try again",
+            )
+        ]
+    )
+    env.reply_from_kevin(email.subject, "fixed it, try again")
+    env.run()
+
+    [rates] = [r for r in env.store.reviews_for_item(item.id) if r.message == message]
+    assert rates.status == "open"  # Kevin's "try again" did not close it

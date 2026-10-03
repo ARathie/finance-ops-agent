@@ -168,6 +168,7 @@ class ScenarioEnv:
     engagements_from: str = "list"
     replies: dict[str, ReplyReading] = field(default_factory=dict)
     investigator: Investigator | None = None
+    reader_fails_with: Exception | None = None  # Claude unreachable (decision 58)
     _deps: RunDeps | None = field(default=None, repr=False)
 
     def add_email(
@@ -211,7 +212,7 @@ class ScenarioEnv:
         return RunDeps(
             engagement_list=FakeEngagementList(self.workbook),
             inbox=self.mailbox,
-            reader=FakeReader(self.readings, self.replies),
+            reader=self._reader(),
             store=self.store,
             clock=FakeClock(self.today, self.now),
             settings=Settings(
@@ -224,6 +225,11 @@ class ScenarioEnv:
             renderer=TextPdfRenderer(),
             investigator=self.investigator,
         )
+
+    def _reader(self) -> FakeReader:
+        reader = FakeReader(self.readings, self.replies)
+        reader.fail_with = self.reader_fails_with
+        return reader
 
     def run(self) -> RunReport:
         return run_once(self.deps())

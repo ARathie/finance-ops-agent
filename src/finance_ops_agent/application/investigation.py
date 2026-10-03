@@ -27,10 +27,10 @@ from finance_ops_agent.application.diagnosis import looking_at
 from finance_ops_agent.domain.emails import format_period
 from finance_ops_agent.domain.engagements import EngagementWorkbook
 from finance_ops_agent.domain.investigation import (
-    RETRYABLE_REVIEWS,
     Investigation,
     Proposal,
     problems_with_answer,
+    retries_on_try_again,
     without_money,
 )
 from finance_ops_agent.domain.items import OutgoingRecord, ReviewRecord
@@ -133,7 +133,7 @@ def investigate_pending_reviews(
             payload["investigated"] = "no answer"
             deps.store.amend_pending_outgoing(record.idempotency_key, payload)
             continue
-        retryable = any(review.code in RETRYABLE_REVIEWS for review in reviews)
+        retryable = any(retries_on_try_again(review.code, review.message) for review in reviews)
         proposals = [p for p in result.investigation.proposals if _acceptable(p, retryable)][
             :MAX_PROPOSALS
         ]
