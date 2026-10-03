@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import date
 
 from finance_ops_agent import logs
-from finance_ops_agent.application import outages, paid_check, set_aside
+from finance_ops_agent.application import investigation, outages, paid_check, set_aside
 from finance_ops_agent.application import outgoing as outgoing_steps
 from finance_ops_agent.application import replies as reply_steps
 from finance_ops_agent.application import summary as summary_steps
@@ -49,7 +49,7 @@ from finance_ops_agent.domain.messages import (
 from finance_ops_agent.domain.money import Money
 from finance_ops_agent.domain.periods import BillingPeriod, billing_periods
 from finance_ops_agent.domain.reading import ReadingHints, TimesheetReading
-from finance_ops_agent.domain.review import ReviewCode
+from finance_ops_agent.domain.review import RATES_UNCONFIRMED, ReviewCode
 from finance_ops_agent.domain.statuses import ItemStatus
 from finance_ops_agent.ports.accounting import (
     AccountingFailed,
@@ -78,6 +78,11 @@ def run_once(deps: RunDeps, report: RunReport | None = None) -> RunReport:
     _engagement_work(deps, report)
     outgoing_steps.plan_outgoing(deps, report)
     paid_check.check_paid_invoices(deps, report)
+    # Last before anything is sent: every review email written this run is
+    # still pending, so it can gain what the investigator found (decision 61).
+    # No engagement list: a quiet run asks QuickBooks nothing (decision 54),
+    # and the investigator only looks when something is already stuck.
+    investigation.investigate_pending_reviews(deps, report)
     tracking_sha = _write_tracking(deps)
     summary_steps.enqueue_monday_summary(deps, report, tracking_sha)
     outgoing_steps.send_pending(deps, report)
@@ -855,7 +860,6 @@ _STILL_PRICEABLE = (
     ItemStatus.RECEIVED,
     ItemStatus.NEEDS_REVIEW,
 )
-RATES_UNCONFIRMED = "I couldn't check the rates and billing details in QuickBooks"
 
 
 def _unconfirmed_finding(item: Item, failures: list[AccountingFailed]) -> Finding:

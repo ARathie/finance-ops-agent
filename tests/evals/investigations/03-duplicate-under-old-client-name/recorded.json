@@ -1,0 +1,56 @@
+{
+  "investigation": {
+    "found": "The same month of Manoj Koottappilly's work at MasTec has been recorded twice. An invoice numbered 083126MT-MK was already made for the first copy and is sitting waiting for approval, so QuickBooks refused to make a second invoice with the same number for this one. Nothing went to the client, and there is no second month of work here to bill — this item is simply a duplicate of the one already invoiced.",
+    "evidence": [
+      "Item 2: Manoj Koottappilly, MasTec North America, Inc., Aug 1-31, 2026, status ready, invoice creation failed because number 083126MT-MK already exists.",
+      "Invoice 083126MT-MK (QuickBooks id 2) belongs to item 1, the invoice the agent made for that item.",
+      "Item 1: Manoj Koottappilly, MasTec, Aug 1-31, 2026, status waiting_for_approval, invoice 083126MT-MK created.",
+      "Both items are the same consultant, same client and the same billing period; the only difference is the short and full form of the client name.",
+      "These are the only two timesheet items on file."
+    ],
+    "proposals": [
+      {
+        "what_to_do": "Drop this duplicate copy and let the invoice already made for August go ahead as normal.",
+        "reply_to_choose": "ignore",
+        "why": "Right when you agree this is the same August work as the invoice already waiting for approval."
+      },
+      {
+        "what_to_do": "If you believe these are genuinely two different pieces of work rather than one month recorded twice, check the two timesheets in the inbox and the invoice already in QuickBooks before anything is billed, and tell us which one is real. Do not give this item a new invoice number until that is settled, because a second invoice would bill MasTec twice for August.",
+        "reply_to_choose": "",
+        "why": "Right only if you have reason to think the two entries are not the same month of work."
+      }
+    ],
+    "sure": true
+  },
+  "calls": [
+    {
+      "name": "describe_item",
+      "arguments": {
+        "item_id": 2
+      },
+      "ok": true
+    },
+    {
+      "name": "explain_invoice_number",
+      "arguments": {
+        "number": "083126MT-MK",
+        "item_id": 2
+      },
+      "ok": true
+    },
+    {
+      "name": "describe_item",
+      "arguments": {
+        "item_id": 1
+      },
+      "ok": true
+    },
+    {
+      "name": "list_items",
+      "arguments": {
+        "status": "any"
+      },
+      "ok": true
+    }
+  ]
+}

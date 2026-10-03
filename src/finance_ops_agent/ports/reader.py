@@ -9,7 +9,12 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict
 
-from finance_ops_agent.domain.reading import ReadingHints, ReplyReading, TimesheetReading
+from finance_ops_agent.domain.reading import (
+    ReadingHints,
+    ReplyContext,
+    ReplyReading,
+    TimesheetReading,
+)
 
 
 class CantReadAttachmentError(Exception):
@@ -82,6 +87,11 @@ class TimesheetReader(Protocol):
         """Fill in the whole form, or raise CantReadAttachmentError. Never partial."""
         ...
 
-    def read_reply(self, reply_text: str, questions: list[tuple[str, str]]) -> ReplyReading:
-        """Kevin's short reply, read into typed answers per review reason asked."""
+    def read_reply(
+        self,
+        reply_text: str,
+        questions: list[tuple[str, str]],
+        context: ReplyContext | None = None,
+    ) -> ReplyReading:
+        """Kevin's reply, in his own words, read into typed answers per reason asked."""
         ...

@@ -220,6 +220,22 @@ class TestTheLoopbackListener:
 
         assert b"Something went wrong" in body
 
+    def test_it_listens_without_looking_up_its_own_name(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # On macOS the host-name lookup HTTPServer does before listening can
+        # take seconds, and the redirect then finds nothing there. A lookup
+        # that never returns stands in for it on every platform.
+        def never_answers(name: str = "") -> str:
+            raise AssertionError(f"the listener looked up a host name ({name!r})")
+
+        monkeypatch.setattr(socket, "getfqdn", never_answers)
+
+        body, seen = serve_one("the-state", "code=a-code&realmId=913&state=the-state")
+
+        assert b"QuickBooks is connected" in body
+        assert seen[0].code == "a-code"
+
 
 PUBLIC_CALLBACK = "https://icon.example/icon-legal/callback.html"
 

@@ -1,0 +1,31 @@
+{
+  "description": "QuickBooks already has 083126MT-MK, made by hand: it carries none of the agent's notes. It may be the same month billed manually.",
+  "items": [
+    {
+      "key": "manoj",
+      "consultant": "Manoj Koottappilly",
+      "client": "MasTec North America, Inc.",
+      "period_start": "2026-08-01",
+      "period_end": "2026-08-31",
+      "status": "ready",
+      "client_code": "MT",
+      "consultant_code": "MK"
+    }
+  ],
+  "quickbooks_invoices": [
+    {
+      "external_id": "7",
+      "number": "083126MT-MK",
+      "customer": "MasTec North America, Inc.",
+      "total_cents": 1627500,
+      "issued": "2026-09-29",
+      "item": null
+    }
+  ],
+  "review": {
+    "item": "manoj",
+    "code": "QUICKBOOKS_FAILED",
+    "as_the_agent_writes": "number_taken",
+    "number": "083126MT-MK"
+  }
+}

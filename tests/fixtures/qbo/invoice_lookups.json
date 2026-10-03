@@ -1,0 +1,104 @@
+{
+  "_note": "Invoice lookups for fops diagnose (decision 60): one found, one QuickBooks does not have (error 610, as production answered for a sandbox invoice id), and a search by number finding the agent's own invoice and a voided one made by hand.",
+  "exchanges": [
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/invoice/146",
+      "response": {
+        "status": 200,
+        "json": {
+          "Invoice": {
+            "Id": "146",
+            "DocNumber": "083126AC-PS",
+            "TotalAmt": 21840.0,
+            "Balance": 21840.0,
+            "PrivateNote": "fops item 30",
+            "TxnDate": "2026-09-03",
+            "CustomerRef": {
+              "value": "58",
+              "name": "Acme Corporation"
+            },
+            "SyncToken": "0"
+          }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/invoice/153",
+      "response": {
+        "status": 400,
+        "json": {
+          "Fault": {
+            "Error": [
+              {
+                "Message": "Object Not Found",
+                "Detail": "Object Not Found : Something you're trying to use has been made inactive. Check the fields with accounts, customers, items, vendors or employees.",
+                "code": "610",
+                "element": ""
+              }
+            ],
+            "type": "ValidationFault"
+          },
+          "time": "2026-09-03T09:55:54.521-07:00"
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20%2A%20FROM%20Invoice%20WHERE%20DocNumber%20%3D%20%27083126AC-PS%27",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {
+            "Invoice": [
+              {
+                "Id": "146",
+                "DocNumber": "083126AC-PS",
+                "TotalAmt": 21840.0,
+                "Balance": 21840.0,
+                "PrivateNote": "fops item 30",
+                "TxnDate": "2026-09-03",
+                "CustomerRef": {
+                  "value": "58",
+                  "name": "Acme Corporation"
+                },
+                "SyncToken": "0"
+              },
+              {
+                "Id": "201",
+                "DocNumber": "083126AC-PS",
+                "TotalAmt": 0,
+                "Balance": 0,
+                "PrivateNote": "Voided",
+                "TxnDate": "2026-09-02",
+                "CustomerRef": {
+                  "value": "58",
+                  "name": "Acme Corporation"
+                }
+              }
+            ]
+          }
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20%2A%20FROM%20Invoice%20WHERE%20DocNumber%20%3D%20%27083126AC-XX%27",
+      "response": {
+        "status": 200,
+        "json": {
+          "QueryResponse": {}
+        },
+        "headers": {
+          "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5d"
+        }
+      }
+    }
+  ]
+}

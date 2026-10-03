@@ -4,6 +4,7 @@ hours, compute both amounts once, and make the item ready. Kevin's answered
 
 from datetime import date
 
+from finance_ops_agent.application.answers import answered_actions
 from finance_ops_agent.application.context import RunDeps, RunReport
 from finance_ops_agent.domain import checks
 from finance_ops_agent.domain.items import Item, TimesheetRecord
@@ -26,13 +27,10 @@ def reading_span(reading: TimesheetReading) -> tuple[date, date] | None:
 def hours_override(deps: RunDeps, item: Item) -> Hours | None:
     """Kevin's answered "use N hours" reply, if any; the latest answer wins."""
     override: Hours | None = None
-    for review in deps.store.reviews_for_item(item.id):
-        if review.status != "answered":
-            continue
-        answer = deps.store.review_answer(review.id) or {}
-        if answer.get("kind") == "hours" and answer.get("value"):
+    for action in answered_actions(deps, item.id):
+        if action.get("kind") == "hours" and action.get("value"):
             try:
-                override = Hours.parse(str(answer["value"]))
+                override = Hours.parse(str(action["value"]))
             except ValueError:
                 continue
     return override

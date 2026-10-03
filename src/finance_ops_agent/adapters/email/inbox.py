@@ -21,9 +21,10 @@ from finance_ops_agent.adapters.email.client import (
     open_imap,
 )
 from finance_ops_agent.adapters.email.parse import ParsedMessage, parse_message
-from finance_ops_agent.domain.messages import InboundEmail
+from finance_ops_agent.domain.messages import InboundEmail, InboxEntry
 
 INBOX = "INBOX"
+LISTING_LIMIT = 200  # the newest; the agent files mail out, so its inbox stays short
 
 
 def encode_position(uidvalidity: int, last_uid: int) -> str:
@@ -88,6 +89,43 @@ class ImapInbox:
                 self._cache[parsed.email.message_id] = parsed
                 emails.append(parsed.email)
             return emails, encode_position(uidvalidity, newest)
+        finally:
+            client.logout()
+
+    def inbox_listing(self, position: str | None) -> list[InboxEntry]:
+        """Every message in INBOX, read-only and with BODY.PEEK, so looking
+        changes nothing: not the position, not the read flags, not the folder.
+
+        The same two tests a run applies, answered per message: is its UID past
+        the last one read, and does the mail start date let it through? IMAP's
+        SINCE compares the date the server received it (INTERNALDATE), which
+        moving a message between folders keeps.
+        """
+        client = self._connect(self._account)
+        try:
+            info = client.select_folder(INBOX, readonly=True)
+            last = decode_position(position, int(info[b"UIDVALIDITY"]))
+            uids = sorted(int(uid) for uid in client.search(["ALL"]))[-LISTING_LIMIT:]
+            entries: list[InboxEntry] = []
+            for uid in uids:
+                data = client.fetch([uid], ["BODY.PEEK[]", "INTERNALDATE"])[uid]
+                raw = data[b"BODY[]"]
+                internal = data.get(b"INTERNALDATE")
+                assert isinstance(raw, bytes)
+                arrived = internal if isinstance(internal, datetime) else None
+                email = parse_message(raw, arrived).email
+                day = (arrived or email.received_at).date()
+                entries.append(
+                    InboxEntry(
+                        message_id=email.message_id,
+                        from_address=email.from_address,
+                        subject=email.subject,
+                        received_at=arrived or email.received_at,
+                        after_position=uid > last,
+                        on_or_after_start=self._start_date is None or day >= self._start_date,
+                    )
+                )
+            return entries
         finally:
             client.logout()
 

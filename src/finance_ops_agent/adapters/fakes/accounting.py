@@ -12,10 +12,13 @@ from finance_ops_agent.domain.invoices import Invoice
 from finance_ops_agent.domain.setup import EngagementSetup
 from finance_ops_agent.ports.accounting import (
     AccountingEngagement,
+    AccountingFailed,
+    AccountingNumberTaken,
     AccountingParty,
     CreatedInvoice,
     EngagementListing,
     EngagementRates,
+    InvoiceLookup,
     SetupDone,
 )
 
@@ -46,6 +49,12 @@ class FakeAccounting:
         # payee, by the id an engagement's rates carry.
         self.customers: dict[str, AccountingParty] = {}
         self.payees: dict[str, AccountingParty] = {}
+        # Numbers another invoice already holds, as a leftover in QuickBooks would.
+        self.taken_numbers: set[str] = set()
+        # Invoices someone made outside the agent, or that outlived the item
+        # they were made for, as QuickBooks would hold them. Keyed by id.
+        self.other_invoices: dict[str, InvoiceLookup] = {}
+        self.lookups: list[str] = []  # what diagnosis asked, so tests can see it
         self.create_attempts = 0
         # Every question asked, by method name: how tests see that a run asks
         # QuickBooks only about what is in front of it (decisions 54 and 55).
@@ -62,6 +71,10 @@ class FakeAccounting:
         existing = self.find_invoice(item_id)
         if existing is not None:
             return existing
+        if invoice.number in self.taken_numbers:
+            raise AccountingNumberTaken(
+                f"Duplicate Document Number Error: {invoice.number}", invoice.number
+            )
         self._counter += 1
         created = CreatedInvoice(
             number=invoice.number, external_id=f"ext-{self._counter}", pdf=b"%PDF-fake"
@@ -119,7 +132,41 @@ class FakeAccounting:
         if self.fail_with is not None:
             raise self.fail_with
         self.asked.extend(external_ids)
+        held = {held.external_id for held in self._held()}
+        for external_id in external_ids:
+            if external_id not in held:
+                # As QuickBooks answers for an invoice it does not have (610).
+                raise AccountingFailed(f"Object Not Found: invoice {external_id}")
         return {external_id: external_id in self.paid for external_id in external_ids}
+
+    can_look_up_invoices = True
+
+    def _held(self) -> list[InvoiceLookup]:
+        held = list(self.other_invoices.values())
+        for item_id, created in self.invoices.items():
+            held.append(
+                InvoiceLookup(
+                    external_id=created.external_id,
+                    number=self.renamed.get(created.external_id, created.number),
+                    total_cents=0 if created.external_id in self.cancelled else 1,
+                    balance_cents=0 if created.external_id in self.paid else 1,
+                    customer="",
+                    item_id=item_id,
+                )
+            )
+        return held
+
+    def invoice_lookup(self, external_id: str) -> InvoiceLookup | None:
+        self.lookups.append(external_id)
+        if self.fail_with is not None:
+            raise self.fail_with
+        return next((held for held in self._held() if held.external_id == external_id), None)
+
+    def invoices_numbered(self, number: str) -> list[InvoiceLookup]:
+        self.lookups.append(number)
+        if self.fail_with is not None:
+            raise self.fail_with
+        return [held for held in self._held() if held.number == number]
 
     def set_up_engagement(self, setup: EngagementSetup) -> SetupDone:
         """Find-or-create, as the real adapter does: a second call after the

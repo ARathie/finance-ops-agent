@@ -16,6 +16,7 @@ import pytest
 from finance_ops_agent.adapters.quickbooks.client import (
     QuickBooksClient,
     QuickBooksFailed,
+    QuickBooksNumberTaken,
     QuickBooksReconnect,
 )
 from finance_ops_agent.adapters.quickbooks.online import (
@@ -239,6 +240,18 @@ class TestCreateInvoice:
         assert "Custom transaction numbers" in message  # and what to turn on
         assert any("operation=void" in url for _, url in replay.calls)
         assert replay.bodies[-1] == {"Id": "145", "SyncToken": "0"}
+
+    def test_a_number_another_invoice_holds_is_its_own_failure(self, tmp_path: Path) -> None:
+        """Error 6140 is something Kevin can settle by reply -- delete the
+        leftover or name another number -- so it is told apart (decision 59)."""
+        replay = replay_from("test_invoice_duplicate_number")
+        accounting, _, _ = build(replay, tmp_path)
+
+        with pytest.raises(QuickBooksNumberTaken) as error:
+            accounting.create_invoice(worked_example_invoice(), item_id=1)
+
+        assert error.value.number == "083126AC-PS"
+        assert isinstance(error.value, QuickBooksFailed)  # still a QuickBooks failure
 
     def test_intuits_trace_id_is_kept_and_repeated_back(self, tmp_path: Path) -> None:
         """Intuit's support team asks for intuit_tid first, so it is captured
@@ -1692,3 +1705,51 @@ class TestTheEngagementsFromQuickBooksAlone:
         (problem,) = built.problems
         assert "Dana Cruz" in problem.message
         assert "Start:" in problem.message
+
+
+class TestLookingUpInvoices:
+    """Read-only lookups for `fops diagnose` (decision 60)."""
+
+    def test_an_invoice_it_has_names_the_item_it_was_made_for(self, tmp_path: Path) -> None:
+        replay = replay_from("invoice_lookups")
+        accounting, _, _ = build(replay, tmp_path)
+
+        held = accounting.invoice_lookup("146")
+
+        assert held is not None
+        assert (held.number, held.item_id, held.customer) == ("083126AC-PS", 30, "Acme Corporation")
+        assert (held.total_cents, held.balance_cents, held.issued) == (
+            2_184_000,
+            2_184_000,
+            "2026-09-03",
+        )
+
+    def test_an_invoice_it_does_not_have_is_none_not_a_failure(self, tmp_path: Path) -> None:
+        """Error 610 is the answer the paid check kept failing on: production
+        QuickBooks asked for an invoice id that only ever existed in the sandbox."""
+        replay = replay_from("invoice_lookups")
+        accounting, _, _ = build(replay, tmp_path)
+
+        assert accounting.invoice_lookup("153") is None
+
+    def test_every_invoice_holding_a_number_voided_ones_included(self, tmp_path: Path) -> None:
+        replay = replay_from("invoice_lookups")
+        accounting, _, _ = build(replay, tmp_path)
+
+        held = accounting.invoices_numbered("083126AC-PS")
+
+        assert [(h.external_id, h.item_id, h.total_cents) for h in held] == [
+            ("146", 30, 2_184_000),
+            ("201", None, 0),
+        ]
+        assert accounting.invoices_numbered("083126AC-XX") == []
+
+    def test_looking_never_writes(self, tmp_path: Path) -> None:
+        replay = replay_from("invoice_lookups")
+        accounting, _, _ = build(replay, tmp_path)
+
+        accounting.invoice_lookup("146")
+        accounting.invoice_lookup("153")
+        accounting.invoices_numbered("083126AC-PS")
+
+        assert {method for method, _ in replay.calls} == {"GET"}

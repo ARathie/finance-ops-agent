@@ -14,7 +14,9 @@ from datetime import datetime, timedelta
 from email.utils import make_msgid
 
 from finance_ops_agent import logs
+from finance_ops_agent.application.answers import chosen_invoice_number, wants_to_see_it_first
 from finance_ops_agent.application.context import Mode, RunDeps, RunReport
+from finance_ops_agent.application.diagnosis import explain_invoice_number, looking_at
 from finance_ops_agent.domain import emails
 from finance_ops_agent.domain.emails import EmailAttachment, OutgoingEmail
 from finance_ops_agent.domain.guardrails import GuardrailCheck, check_guardrails
@@ -33,6 +35,7 @@ from finance_ops_agent.domain.statuses import ItemStatus
 from finance_ops_agent.ports.accounting import (
     AccountingFailed,
     AccountingNeedsReconnect,
+    AccountingNumberTaken,
     CreatedInvoice,
 )
 from finance_ops_agent.ports.inbox import NEEDS_REVIEW_FOLDER, MailboxFailed
@@ -50,6 +53,7 @@ EMAIL_KINDS = (
     "preview_email",
     "summary_email",
     "ask_again_email",
+    "reply_email",
     # "Shall I set this up in QuickBooks?", answered "confirm" and a code
     # (decision 56).
     "setup_request",
@@ -137,10 +141,18 @@ def next_invoice_number(deps: RunDeps, item: Item) -> str | None:
     the replacement covers the same period as the invoice it replaces, whose
     number is spent, so it takes the next one along.
 
+    A number Kevin named in a reply wins over all of that, as long as no
+    invoice of the agent's already holds it.
+
     None means the agent cannot number it and has asked Kevin instead. Nothing
     is invented: the two letters are the client's own and the initials are the
     consultant's.
     """
+    chosen = chosen_invoice_number(deps, item.id)
+    if chosen is not None and not deps.store.invoice_number_in_use(chosen):
+        # Kevin named the number in a reply (decision 59). It was checked when
+        # he gave it; whether QuickBooks takes it is QuickBooks' to say.
+        return chosen
     client_code = item.snapshot.client_invoice_code
     consultant_code = item.snapshot.consultant_code
     if not client_code or not consultant_code:
@@ -169,6 +181,29 @@ def next_invoice_number(deps: RunDeps, item: Item) -> str | None:
         " Nothing was created or sent.",
     )
     return None
+
+
+def planned_invoice_number(deps: RunDeps, item: Item) -> str:
+    """The number this item's invoice has or would have, without asking anyone.
+
+    For telling the reader of Kevin's reply which number he is talking about
+    ("add -revised to it"). Empty when there is none to name.
+    """
+    live = [r for r in deps.store.invoices_for_item(item.id) if r.status != "cancelled"]
+    if live:
+        return live[-1].number
+    chosen = chosen_invoice_number(deps, item.id)
+    if chosen is not None:
+        return chosen
+    client_code = item.snapshot.client_invoice_code
+    consultant_code = item.snapshot.consultant_code
+    if not client_code or not consultant_code:
+        return ""
+    for attempt in range(1, MAX_NUMBER_ATTEMPTS + 1):
+        candidate = invoice_number(item.period.end, client_code, consultant_code, attempt)
+        if not deps.store.invoice_number_in_use(candidate):
+            return candidate
+    return ""
 
 
 def refile_for_review(deps: RunDeps, item: Item) -> None:
@@ -235,17 +270,41 @@ def _create_invoice(
         report.note(f"QuickBooks needs reconnecting; no invoice for {item.consultant}")
         return None
     except AccountingFailed as error:
-        message = (
-            f"I could not make the invoice for {item.consultant} at {item.client}"
-            f" ({item.period.start} to {item.period.end}) in QuickBooks, so nothing"
-            f" went to the client. I will try again next run. QuickBooks said: {error}"
-        )
+        if isinstance(error, AccountingNumberTaken):
+            # Kevin can settle this one from his inbox (decision 59), so the
+            # email says how, rather than only what QuickBooks said.
+            message = (
+                f"QuickBooks already has an invoice numbered {error.number}, so I could"
+                f" not make the invoice for {item.consultant} at {item.client}"
+                f" ({item.period.start} to {item.period.end}). Nothing went to the"
+                " client. If that invoice is a leftover, delete it in QuickBooks and"
+                ' reply "try again". Or reply with the number to use instead, for'
+                f' example "use {error.number}-revised".'
+            )
+            # Who holds it decides which of those is right, so look (decision 61).
+            held = [
+                finding.what
+                for finding in explain_invoice_number(looking_at(deps), error.number, item.id)
+                if finding.needs_attention
+            ]
+            if held:
+                message += " What I found: " + " ".join(held)
+        else:
+            message = (
+                f"I could not make the invoice for {item.consultant} at {item.client}"
+                f" ({item.period.start} to {item.period.end}) in QuickBooks, so nothing"
+                f" went to the client. I will try again next run. QuickBooks said: {error}"
+            )
         if deps.store.open_review(item.id, ReviewCode.QUICKBOOKS_FAILED.value, message):
             report.reviews_opened += 1
             email = emails.needs_review(
                 deps.settings.admin_email, f"{item.consultant} — {item.client}", [message]
             )
-            enqueue_email(deps, "review_email", f"review:quickbooks:{item.id}", item.id, email)
+            # Counted, so a failure after Kevin answered the last one (he said
+            # "try again" and it failed again) still reaches him.
+            raised = len(deps.store.reviews_for_item(item.id))
+            key = f"review:quickbooks:{item.id}:{raised}"
+            enqueue_email(deps, "review_email", key, item.id, email)
             refile_for_review(deps, item)
         report.note(f"QuickBooks would not make the invoice for {item.consultant}: {error}")
         return None
@@ -447,10 +506,16 @@ def plan_outgoing(deps: RunDeps, report: RunReport) -> None:
         if report.quickbooks_unavailable:
             continue  # the connection is down; Kevin already has the review
         guardrails = guardrails_for(deps, item) if mode is Mode.AUTO else None
-        if guardrails is not None and guardrails.may_send_automatically:
+        see_first = guardrails is not None and wants_to_see_it_first(deps, item.id)
+        if guardrails is not None and guardrails.may_send_automatically and not see_first:
             approve_item(deps, item, report)
         else:
-            if guardrails is not None:
+            if see_first:
+                report.note(
+                    f"asking rather than sending automatically ({item.consultant}"
+                    f" at {item.client}): Kevin asked to see it first"
+                )
+            elif guardrails is not None:
                 report.note(
                     f"asking rather than sending automatically ({item.consultant}"
                     f" at {item.client}): {guardrails.why_not()}"

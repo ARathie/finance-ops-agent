@@ -525,7 +525,7 @@
 
   <p>Every fifteen minutes, a scheduler starts <code>fops run</code>. The process wakes up, does a fixed sequence of steps, writes everything it learned to disk, and exits. It holds no memory between runs; everything it knows is in a SQLite database in the data folder. If it crashes halfway, the next run picks up from what is on disk.</p>
 
-  <p>There is no conversation, no autonomous planning loop, no "agent decides what to do next." The model is called at exactly two points: to read a timesheet into a form, and to read one of Kevin's free-text replies into typed answers. Everything else is ordinary code executing in a fixed order.</p>
+  <p>There is no conversation and no "agent decides what to do next." The model is called at three points: to read a timesheet into a form, to read one of Kevin's free-text replies into typed requests, and, when something is stuck, to look into it before Kevin is emailed. That last one is a short loop of at most eight turns over tools that can only read; what it finds is added to Kevin's email and nothing else. Everything else is ordinary code executing in a fixed order.</p>
 
   <figure>
     <svg viewBox="0 0 860 560" role="img" aria-label="The phases of one run, top to bottom, with the two commit points marked: the mailbox cursor is saved only after every message is stored, and nothing is sent until it is written down first.">
@@ -638,8 +638,9 @@ flowchart TD
     paid -- "yes" --&gt; monday
     askpaid --&gt; monday{"Monday?"}
     monday -- "yes" --&gt; summary["Write the Monday summary (J8)"]
-    monday -- "no" --&gt; send
-    summary --&gt; send["Send everything written down, never twice (J1-J3)"]
+    monday -- "no" --&gt; look
+    summary --&gt; look["Look into each stuck item before Kevin's email goes (L1)"]
+    look --&gt; send["Send everything written down, never twice (J1-J3)"]
     send --&gt; tracking["Rewrite the tracking sheet"]
     tracking --&gt; done(["Run ends"])
 </pre></div>
@@ -733,7 +734,8 @@ flowchart TD
     r(["A record is ready"]) --&gt; m{"Mode"}
     m -- "dry run" --&gt; preview["Kevin gets Dry run - would invoice; nothing made (A5)"]
     m -- "ask first" --&gt; make["Make the invoice in QuickBooks"]
-    make -- "QuickBooks refuses" --&gt; qbfail["Review: QUICKBOOKS_FAILED; nothing to the client (J4)"]
+    make -- "QuickBooks refuses" --&gt; qbfail["Review: QUICKBOOKS_FAILED, saying who holds a taken number; nothing to the client (J4)"]
+    qbfail --&gt; looked["The review gains what was found and lettered ways out (L1)"]
     make -- "total disagrees" --&gt; voidnow["Voided at once; both totals reported (J5)"]
     make --&gt; approve["Kevin gets Approve? with the real invoice (H1)"]
     approve --&gt; answer{"Kevin's reply, first words, read by code"}
@@ -743,7 +745,10 @@ flowchart TD
     answer -- "cancel" --&gt; cancel["Invoice voided; record cancelled (H3)"]
     answer -- "wrong client" --&gt; wrong["Invoice voided; first client waits for its own timesheet; timesheet set aside with the setup form (H4)"]
     wrong --&gt; six["Picture 6, then back to picture 3 for the right client"]
-    answer -- "anything else" --&gt; askwords["Short reply: approve, cancel or wrong client (H6)"]
+    answer -- "anything else" --&gt; plain{"Claude reads it; code checks the words are his"}
+    plain -- "approves, and nothing else" --&gt; bill
+    plain -- "cancels" --&gt; cancel
+    plain -- "asks for a change, or unclear" --&gt; askwords["Reply: it can go as it is, be cancelled, or be the wrong client (H6)"]
 </pre></div>
 
   <h3>6 · A set-aside email, and setting something up in QuickBooks</h3>
@@ -928,7 +933,9 @@ flowchart TD
       <tr><td><code>approve</code> · <code>cancel</code> · <code>wrong client</code></td><td>Code, first words</td><td>Sends the invoice · voids it · voids it and re-routes the timesheet to the right client</td></tr>
       <tr><td><code>confirm 4821</code> · <code>cancel</code></td><td>Code, word and number</td><td>Creates a new client, consultant and engagement in QuickBooks, or doesn't</td></tr>
       <tr><td>The setup form, filled in</td><td>Code, labelled lines</td><td>Becomes a plan shown back to Kevin in full; nothing made yet</td></tr>
-      <tr><td>"use 152 hours", "this is for Acme", "approved by Jane on 9/3", "try again", "this is from Priya Shah", "ignore"</td><td>Claude, then code</td><td>Claude turns the words into typed answers; code applies them</td></tr>
+      <tr><td>"looks good, send it" · "don't send this one"</td><td>Claude, then code</td><td>Sends or voids only when that is the one thing asked and his words are really in the reply; "approve, but make it 150 hours" sends nothing</td></tr>
+      <tr><td>"use 152 hours", "this is for Acme", "approved by Jane on 9/3", "use 083126MT-MK-revised", "try again", "this is from Priya Shah", "ignore", or several at once</td><td>Claude, then code</td><td>Claude turns the words into typed requests, each quoting him; code checks every one, does what it can, and replies saying what it did</td></tr>
+      <tr><td>"A" · "option 2" · "go with B"</td><td>Code</td><td>Stands for the words of the option the agent offered, which are then checked as if he had written them</td></tr>
     </tbody>
   </table>
   </div>
@@ -941,6 +948,9 @@ flowchart TD
   <h3>Right consultant, wrong client</h3>
   <p>A consultant starting at a second client while still at the first sends a timesheet whose dates only the first engagement covers, so it lands there. Kevin catches it at approval and replies <code>wrong client</code>. The draft is voided, the first client's period goes back to <em>waiting for its own timesheet</em> (cancelling it would have swallowed the real one), and the timesheet is set aside with the setup form. It is remembered as <em>never this client again</em> and, once the right one is set up, <em>pinned</em> to it. A new approval comes for the right client.</p>
 
+
+  <h3>When something is stuck</h3>
+  <p>A problem used to reach Kevin as an error: "QuickBooks already has invoice 083126MT-MK." Now, before that email goes, the agent looks into it with read-only tools -- whose invoice holds the number, whether QuickBooks has the invoice its records point at, whether a duplicate item exists -- and the email ends with what it found and up to three lettered ways out, each with the words to reply. The tools cannot change anything, by type; no dollar amount is ever shown to the model; an option to approve, cancel or send is dropped by code; and if the look fails, the email goes out exactly as it was. It is scored on seven situations from the first live cycle, graded by code, with safety held at 100%.</p>
 </section>
 
 <section id="p9">

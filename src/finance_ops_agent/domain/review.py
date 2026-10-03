@@ -85,3 +85,9 @@ REVIEW_MESSAGES: dict[ReviewCode, str] = {
     ReviewCode.QUICKBOOKS_RECONNECT: "QuickBooks needs to be reconnected.",
     ReviewCode.CLAUDE_UNAVAILABLE: "I can't reach Claude, which reads the timesheets.",
 }
+
+
+# How a question waiting on QuickBooks for an item's rates begins. That question
+# closes by itself once QuickBooks answers, and the item waits while it is
+# open, so nothing Kevin replies may close it early (decisions 55 and 61).
+RATES_UNCONFIRMED = "I couldn't check the rates and billing details in QuickBooks"

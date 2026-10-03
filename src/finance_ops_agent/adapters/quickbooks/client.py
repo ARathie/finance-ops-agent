@@ -18,7 +18,11 @@ import httpx
 
 from finance_ops_agent import logs
 from finance_ops_agent.adapters.quickbooks.tokens import Tokens, TokenStore, utcnow
-from finance_ops_agent.ports.accounting import AccountingFailed, AccountingNeedsReconnect
+from finance_ops_agent.ports.accounting import (
+    AccountingFailed,
+    AccountingNeedsReconnect,
+    AccountingNumberTaken,
+)
 
 # Intuit puts a trace id on every response. Their support asks for it first
 # when anything is wrong, so it is logged on every call and repeated in any
@@ -34,6 +38,10 @@ MAX_TRIES = 3
 
 class QuickBooksFailed(AccountingFailed):
     """A QuickBooks call failed (becomes QUICKBOOKS_FAILED)."""
+
+
+class QuickBooksNumberTaken(QuickBooksFailed, AccountingNumberTaken):
+    """QuickBooks already has an invoice under the number asked for (error 6140)."""
 
 
 class QuickBooksReconnect(AccountingNeedsReconnect):

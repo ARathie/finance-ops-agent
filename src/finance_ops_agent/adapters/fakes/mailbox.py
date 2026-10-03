@@ -9,7 +9,7 @@ which tests can inspect.
 from pathlib import Path
 
 from finance_ops_agent.adapters.email.parse import ParsedMessage, parse_message
-from finance_ops_agent.domain.messages import InboundEmail
+from finance_ops_agent.domain.messages import InboundEmail, InboxEntry
 
 
 class FakeMailbox:
@@ -43,3 +43,19 @@ class FakeMailbox:
         if self.fail_moves_with is not None:
             raise self.fail_moves_with
         self.folders[message_id] = folder
+
+    def inbox_listing(self, position: str | None) -> list[InboxEntry]:
+        """Whatever has not been moved out, as the real inbox would show it."""
+        start = int(position) if position else 0
+        return [
+            InboxEntry(
+                message_id=entry.email.message_id,
+                from_address=entry.email.from_address,
+                subject=entry.email.subject,
+                received_at=entry.email.received_at,
+                after_position=index >= start,
+                on_or_after_start=True,
+            )
+            for index, entry in enumerate(self._parsed())
+            if entry.email.message_id not in self.folders
+        ]

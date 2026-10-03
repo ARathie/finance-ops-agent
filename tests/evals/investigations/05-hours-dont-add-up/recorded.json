@@ -1,0 +1,51 @@
+{
+  "investigation": {
+    "found": "Priya Shah's August timesheet for Acme Corp disagrees with itself: the day-by-day rows add up to 152 hours, but the total printed at the top says 160 — a gap of exactly 8 hours, which looks like one working day either missing from the daily rows or double-counted in the total. Nothing else is holding this item up: there is no invoice for it yet, no invoice number clash, and no second or corrected timesheet for Priya at Acme for August. The agent just needs to be told which hours figure to bill.",
+    "evidence": [
+      "Item 1 is Priya Shah at Acme Corp, Aug 1-31 2026, status needs_review, with one open review: HOURS_DONT_ADD_UP.",
+      "The only open review anywhere is this one; nothing else is waiting on Kevin.",
+      "The item's history shows only creation and the status change - no invoice was ever made, so there is no invoice or numbering problem.",
+      "The timesheet shows total hours printed 160.00 against daily hours of 152.00, a difference of 8 hours (one day).",
+      "There is no other timesheet item for Priya Shah at Acme Corp for August 2026, so no corrected timesheet and no duplicate."
+    ],
+    "proposals": [
+      {
+        "what_to_do": "If the daily rows are the true record and the printed total was typed wrong, tell the agent to bill 152 hours and it will raise the invoice for Acme.",
+        "reply_to_choose": "use 152 hours",
+        "why": "Right when the day-by-day entries are complete and the summary total is simply a typo."
+      },
+      {
+        "what_to_do": "If the printed total of 160 is correct and one day's row was left off the timesheet, tell the agent to bill 160 hours.",
+        "reply_to_choose": "use 160 hours",
+        "why": "Right when Priya worked a full month and only the daily grid is missing an entry."
+      },
+      {
+        "what_to_do": "If neither figure can be trusted, ask Priya or the Acme approver for a corrected timesheet first; when it arrives as a new timesheet email, reply \"use the new one\" so the agent bills from the corrected version instead.",
+        "reply_to_choose": "use the new one",
+        "why": "Right when the 8-hour gap needs to be settled by the consultant or client before anything is billed."
+      }
+    ],
+    "sure": true
+  },
+  "calls": [
+    {
+      "name": "describe_item",
+      "arguments": {
+        "item_id": 1
+      },
+      "ok": true
+    },
+    {
+      "name": "list_open_reviews",
+      "arguments": {},
+      "ok": true
+    },
+    {
+      "name": "list_items",
+      "arguments": {
+        "status": "any"
+      },
+      "ok": true
+    }
+  ]
+}

@@ -100,3 +100,20 @@ class StoredMessage:
     kind: MessageKind
     processed: bool
     attachments: tuple[StoredAttachment, ...]
+
+
+@dataclass(frozen=True)
+class InboxEntry:
+    """One message sitting in the inbox, and whether the next run will read it.
+
+    For diagnosis only (docs/decisions.md #60): a run decides what is new by
+    how far it has read and by the mail start date, and a message that fails
+    either is skipped without a word. This says which, so nobody has to guess.
+    """
+
+    message_id: str
+    from_address: str
+    subject: str
+    received_at: datetime
+    after_position: bool  # the run has not read past it yet
+    on_or_after_start: bool  # the mail start date does not rule it out

@@ -5,6 +5,7 @@ from finance_ops_agent.domain.reading import (
     ReadingHints,
     ReplyAnswer,
     ReplyAnswerKind,
+    ReplyContext,
     ReplyReading,
     TimesheetReading,
 )
@@ -22,6 +23,7 @@ class FakeReader:
     ) -> None:
         self.readings = readings
         self.replies = replies or {}
+        self.last_reply_context: ReplyContext | None = None
         # Set to make Claude unreachable, as the real one sometimes is.
         self.fail_with: Exception | None = None
 
@@ -39,9 +41,15 @@ class FakeReader:
         except KeyError as error:
             raise CantReadAttachmentError(f"no scripted reading for {filename}") from error
 
-    def read_reply(self, reply_text: str, questions: list[tuple[str, str]]) -> ReplyReading:
+    def read_reply(
+        self,
+        reply_text: str,
+        questions: list[tuple[str, str]],
+        context: ReplyContext | None = None,
+    ) -> ReplyReading:
         if self.fail_with is not None:
             raise self.fail_with
+        self.last_reply_context = context
         scripted = self.replies.get(reply_text.strip())
         if scripted is not None:
             return scripted

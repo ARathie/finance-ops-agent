@@ -1,0 +1,60 @@
+{
+  "investigation": {
+    "found": "QuickBooks already has an invoice numbered 083126MT-MK for MasTec North America, Inc., dated 30 September 2026, so I could not create the invoice for Manoj Koottappilly's August 2026 work. Nothing went to the client. That invoice is one I made earlier for the same consultant, client and billing period, but the timesheet item it belonged to was removed from my records afterwards, while the invoice stayed behind in QuickBooks. So either that August invoice already went to the client and this item is the same month over again, or it is a leftover from a run that was undone and should be deleted before I try again.",
+    "evidence": [
+      "Item 1: Manoj Koottappilly, MasTec North America, Inc., Aug 1-31 2026, status ready, waiting on an open QuickBooks failure.",
+      "QuickBooks invoice 083126MT-MK (id 2) is for MasTec North America, Inc., dated 2026-09-30, and was created by me.",
+      "That invoice belonged to an earlier item for the same work, which was removed from my records with 'fops forget'; the invoice was not removed from QuickBooks.",
+      "This Manoj Koottappilly / MasTec August item is the only item I now hold, so no other item of mine is billing that month.",
+      "No other invoice in my records is missing or renumbered in QuickBooks.",
+      "The invoice number itself says MasTec, Manoj Koottappilly, period ending 08/31/26, so it covers exactly the same month as this item."
+    ],
+    "proposals": [
+      {
+        "what_to_do": "Open invoice 083126MT-MK in QuickBooks and see whether it was ever sent to MasTec or paid. If it was never sent, delete it (delete, not void - a voided invoice keeps its number), then reply \"try again\" and I will make the August invoice fresh under the same number.",
+        "reply_to_choose": "try again",
+        "why": "Right when the old invoice is a leftover that never reached the client, so the August work is still unbilled."
+      },
+      {
+        "what_to_do": "If invoice 083126MT-MK was already sent to MasTec for Manoj's August work, leave it alone and reply \"ignore\" for this item, so the same month is not billed twice.",
+        "reply_to_choose": "ignore",
+        "why": "Right when the August work has already been invoiced to the client under that number."
+      },
+      {
+        "what_to_do": "If the old invoice has to stay in QuickBooks for the records but the August work was never actually billed to MasTec, reply with a different number for me to use.",
+        "reply_to_choose": "use 083126MT-MK-revised",
+        "why": "Right only when the existing invoice must be kept and you are sure the client was never billed for this month."
+      }
+    ],
+    "sure": true
+  },
+  "calls": [
+    {
+      "name": "describe_item",
+      "arguments": {
+        "item_id": 1
+      },
+      "ok": true
+    },
+    {
+      "name": "explain_invoice_number",
+      "arguments": {
+        "number": "083126MT-MK",
+        "item_id": 1
+      },
+      "ok": true
+    },
+    {
+      "name": "list_items",
+      "arguments": {
+        "status": "any"
+      },
+      "ok": true
+    },
+    {
+      "name": "check_recorded_invoices",
+      "arguments": {},
+      "ok": true
+    }
+  ]
+}

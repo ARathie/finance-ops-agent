@@ -23,6 +23,18 @@ class AccountingFailed(Exception):
     """
 
 
+class AccountingNumberTaken(AccountingFailed):
+    """The accounting system already has an invoice under this number.
+
+    Its own kind because Kevin can settle it from his inbox: delete the old
+    invoice and say "try again", or name a different number (decision 59).
+    """
+
+    def __init__(self, message: str, number: str) -> None:
+        super().__init__(message)
+        self.number = number
+
+
 class AccountingNeedsReconnect(AccountingFailed):
     """The connection is no longer usable (becomes QUICKBOOKS_RECONNECT).
 
@@ -128,6 +140,24 @@ class CreatedInvoice:
 
 
 @dataclass(frozen=True)
+class InvoiceLookup:
+    """An invoice as the accounting system holds it right now.
+
+    For diagnosis only (docs/decisions.md #60). `item_id` is the agent's own
+    item, read from the marker it writes on every invoice it makes; None means
+    the invoice carries no such marker, so someone made it by hand.
+    """
+
+    external_id: str
+    number: str
+    total_cents: int
+    balance_cents: int
+    customer: str
+    item_id: int | None
+    issued: str = ""  # the invoice date as the accounting system writes it
+
+
+@dataclass(frozen=True)
 class SetupDone:
     """What setting an engagement up did, in Kevin's words: what was made new
     and what was already there and used as it was."""
@@ -185,6 +215,21 @@ class AccountingSystem(Protocol):
         ...
 
     def paid_status(self, external_ids: list[str]) -> dict[str, bool]: ...
+
+    @property
+    def can_look_up_invoices(self) -> bool:
+        """Whether there is an accounting system to ask. Manual mode says no:
+        its invoices live only in the agent's own records."""
+        ...
+
+    def invoice_lookup(self, external_id: str) -> InvoiceLookup | None:
+        """The invoice the accounting system knows by this id, or None if it
+        has no such invoice (deleted, or made in a different company)."""
+        ...
+
+    def invoices_numbered(self, number: str) -> list[InvoiceLookup]:
+        """Every invoice holding this number, voided ones included."""
+        ...
 
     def set_up_engagement(self, setup: EngagementSetup) -> SetupDone:
         """Make what Kevin confirmed: the customer and its category for a new

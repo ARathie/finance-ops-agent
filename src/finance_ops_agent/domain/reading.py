@@ -154,7 +154,14 @@ class EmailClassification(BaseModel):
 
 
 class ReplyAnswerKind(StrEnum):
-    """What kind of answer Kevin's reply gives for one review reason."""
+    """What one part of Kevin's reply asks for.
+
+    A reply is free text, and one reply can ask for several things ("use
+    083126MT-MK-revised, and send it to me before it goes out"). The model
+    names each of them as one of these; code checks each one and either does
+    it or tells Kevin why not. Anything outside this list is `unclear`, never
+    a guess (docs/decisions.md #59).
+    """
 
     CONSULTANT_NAME = "consultant_name"
     CLIENT_NAME = "client_name"
@@ -164,18 +171,25 @@ class ReplyAnswerKind(StrEnum):
     APPROVAL_NOTE = "approval_note"
     IGNORE = "ignore"
     USE_NEW_ONE = "use_new_one"
+    APPROVE = "approve"  # send the invoice he was shown, unchanged
+    CANCEL = "cancel"  # stop it; the invoice is voided
+    INVOICE_NUMBER = "invoice_number"  # make the invoice under this number instead
     # "Try again": Kevin has fixed something in QuickBooks or the engagement
-    # list and wants the agent to look again (decision 55).
+    # list and wants the agent to look again (decision 55). Where an invoice or
+    # a send failed it is attempted again now (decision 61).
     TRY_AGAIN = "try_again"
+    SHOW_ME_FIRST = "show_me_first"  # he wants to approve this one before it goes out
     UNCLEAR = "unclear"
 
 
 class ReplyAnswer(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    review_code: str  # which review reason this answers
+    review_code: str  # which review reason this answers ("APPROVAL" for an approval request)
     kind: ReplyAnswerKind
-    value: str | None = None  # dates as YYYY-MM-DD, hours as written ("152"), names as written
+    # Dates as YYYY-MM-DD, hours as written ("152"), names as written, and an
+    # invoice number spelled out in full as Kevin wants it to read.
+    value: str | None = None
     quote: str | None = None  # Kevin's words
 
 
@@ -185,6 +199,29 @@ class ReplyReading(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     answers: list[ReplyAnswer]
+    # In plain words, for the email back to Kevin: what he asked for, and
+    # what is still missing if anything is. Never instructions to the code.
+    understood: str = ""
+    still_unclear: str = ""
+
+
+class ReplyContext(BaseModel):
+    """What the reply is about, so a reply in Kevin's own words can be read.
+
+    Names, the period and the invoice number only: never rates, never
+    addresses (the same rule as ReadingHints).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    asked: str  # "approval" or "review"
+    consultant: str = ""
+    client: str = ""
+    period: str = ""
+    invoice_number: str = ""
+    # The replies the agent offered Kevin as ways out, in letter order (A, B,
+    # C), when it looked into the problem first (decision 61).
+    offered: list[str] = Field(default_factory=list)
 
 
 class ReadingHints(BaseModel):

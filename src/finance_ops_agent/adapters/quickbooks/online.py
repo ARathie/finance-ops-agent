@@ -31,6 +31,7 @@ from finance_ops_agent import logs
 from finance_ops_agent.adapters.quickbooks.client import (
     QuickBooksClient,
     QuickBooksFailed,
+    QuickBooksNumberTaken,
     with_trace,
 )
 from finance_ops_agent.domain.invoice_numbers import is_voided_number
@@ -43,10 +44,15 @@ from finance_ops_agent.ports.accounting import (
     CreatedInvoice,
     EngagementListing,
     EngagementRates,
+    InvoiceLookup,
     SetupDone,
 )
 
 PRIVATE_NOTE_PREFIX = "fops item"
+# What QuickBooks says when another invoice already holds the number asked for.
+_DUPLICATE_NUMBER = ("6140", "Duplicate Document Number")
+# What QuickBooks says when asked for an invoice it does not have.
+_NOT_FOUND = ('"code":"610"', "Object Not Found")
 # Creating a category needs a record shape newer than the default. Asked for
 # only on the calls that set an engagement up, and only when the operator has
 # not chosen a version already (decision 56).
@@ -110,6 +116,19 @@ def _escape(value: str) -> str:
 def _cents(amount: Any) -> int:
     """QuickBooks sends money as a JSON number; compare in whole cents only."""
     return round(float(amount) * 100)
+
+
+def _lookup_from(row: dict[str, Any]) -> InvoiceLookup:
+    customer = row.get("CustomerRef") or {}
+    return InvoiceLookup(
+        external_id=str(row.get("Id", "")),
+        number=str(row.get("DocNumber") or ""),
+        total_cents=_cents(row.get("TotalAmt", 0)),
+        balance_cents=_cents(row.get("Balance", 0)),
+        customer=_clean(customer.get("name")) if isinstance(customer, dict) else "",
+        item_id=item_id_from_note(str(row.get("PrivateNote") or "")),
+        issued=str(row.get("TxnDate") or ""),
+    )
 
 
 def client_names(invoice: Invoice) -> list[str]:
@@ -432,7 +451,15 @@ class QuickBooksOnline:
             consultant=invoice.consultant,
             client=invoice.client_legal_name,
         )
-        created = self._client.post(self.company_url("/invoice"), json=body)
+        try:
+            created = self._client.post(self.company_url("/invoice"), json=body)
+        except QuickBooksFailed as error:
+            # 6140 is QuickBooks saying another invoice already holds this
+            # number: usually a leftover Kevin can delete, or a number he wants
+            # to change. Its own kind, so he is told exactly that (decision 59).
+            if any(marker in str(error) for marker in _DUPLICATE_NUMBER):
+                raise QuickBooksNumberTaken(str(error), invoice.number) from error
+            raise
         raw = created.get("Invoice", created)
         quickbooks_id = str(raw["Id"])
         total_cents = _cents(raw.get("TotalAmt", 0))
@@ -742,6 +769,24 @@ class QuickBooksOnline:
             invoice = raw.get("Invoice", raw)
             paid[external_id] = _cents(invoice.get("Balance", 0)) == 0
         return paid
+
+    # --- looking, for diagnosis (docs/decisions.md #60); never writes ---
+
+    can_look_up_invoices = True
+
+    def invoice_lookup(self, external_id: str) -> InvoiceLookup | None:
+        try:
+            raw = self._client.get(self.company_url(f"/invoice/{external_id}"))
+        except QuickBooksFailed as error:
+            # 610 is "Object Not Found": deleted, or never in this company.
+            if any(marker in str(error) for marker in _NOT_FOUND):
+                return None
+            raise
+        return _lookup_from(raw.get("Invoice", raw))
+
+    def invoices_numbered(self, number: str) -> list[InvoiceLookup]:
+        rows = self._client.query(f"SELECT * FROM Invoice WHERE DocNumber = '{_escape(number)}'")
+        return [_lookup_from(row) for row in rows]
 
     def remaining_balance(self, external_id: str) -> Money:
         raw = self._client.get(self.company_url(f"/invoice/{external_id}"))

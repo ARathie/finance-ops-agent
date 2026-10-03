@@ -3,12 +3,14 @@
 from datetime import timedelta
 
 from finance_ops_agent.application.context import RunDeps, RunReport
+from finance_ops_agent.application.diagnosis import diagnose_everything, looking_at
 from finance_ops_agent.application.outgoing import enqueue_email
 from finance_ops_agent.domain import emails
 from finance_ops_agent.domain.emails import EmailAttachment, SummaryData, format_period
 from finance_ops_agent.domain.money import Money
 from finance_ops_agent.domain.statuses import ItemStatus
 from finance_ops_agent.domain.tracking import TrackingRow
+from finance_ops_agent.ports.accounting import AccountingFailed
 
 LAST_SUMMARY_KEY = "last_summary"
 MISSING_TIMESHEET_GRACE_DAYS = 7
@@ -110,9 +112,25 @@ def enqueue_monday_summary(deps: RunDeps, report: RunReport, tracking_sha: str |
             and item.period.end + timedelta(days=MISSING_TIMESHEET_GRACE_DAYS) <= today
         ],
         set_aside=[review.message for review in reviews if review.code == "UNKNOWN_SENDER"],
+        looks_stuck=_looks_stuck(deps),
     )
     attachment = EmailAttachment("tracking.xlsx", tracking_sha) if tracking_sha else None
     email = emails.monday_summary(deps.settings.admin_email, data, attachment)
     if enqueue_email(deps, "summary_email", f"summary:{today.isoformat()}", None, email):
         deps.store.set_state(LAST_SUMMARY_KEY, today.isoformat())
         report.note("Monday summary written down")
+
+
+def _looks_stuck(deps: RunDeps) -> list[str]:
+    """What the read-only diagnosis finds, with what to do about each. A
+    QuickBooks that cannot be asked leaves the section out rather than the
+    summary."""
+    try:
+        findings = diagnose_everything(looking_at(deps), None)
+    except AccountingFailed:
+        return []
+    return [
+        f"{finding.what} What to do: {finding.next_step}" if finding.next_step else finding.what
+        for finding in findings
+        if finding.needs_attention
+    ]

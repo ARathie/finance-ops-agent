@@ -48,7 +48,7 @@ Because the credentials belong to one mailbox, the agent cannot reach anyone els
 
 ## Kevin's replies
 
-Kevin replies from his own mailbox to an email the agent sent. The reply arrives in the agent's `INBOX` with `In-Reply-To` (and `References`) naming the agent's Message-ID; Outlook, Apple Mail, and phones all set these. The agent matches on that first and on the subject as a fallback (decision 17). Only replies from Kevin's address count; approval replies must start with `approve` or `cancel`; review answers are read by Claude into typed answers as before.
+Kevin replies from his own mailbox to an email the agent sent. The reply arrives in the agent's `INBOX` with `In-Reply-To` (and `References`) naming the agent's Message-ID; Outlook, Apple Mail, and phones all set these. The agent matches on that first and on the subject as a fallback (decision 17). Only replies from Kevin's address count; a reply starting with `approve` or `cancel` is taken as it stands, and anything else is read by Claude into typed requests that code checks (decision 59).
 
 ## Errors
 

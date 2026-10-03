@@ -1,0 +1,26 @@
+{
+  "must_call_any": [
+    "describe_item",
+    "check_recorded_invoices"
+  ],
+  "found_mentions": [
+    [
+      "sandbox",
+      "another company",
+      "different company",
+      "deleted",
+      "test"
+    ]
+  ],
+  "proposals_mention": [
+    [
+      "fops forget",
+      "forget",
+      "remove"
+    ]
+  ],
+  "replies_forbidden": [
+    "use \\S+",
+    "try again"
+  ]
+}

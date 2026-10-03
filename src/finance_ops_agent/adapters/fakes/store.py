@@ -188,6 +188,9 @@ class FakeStore:
         self._items[item_id] = changed
         return changed
 
+    def has_message(self, message_id: str) -> bool:
+        return message_id in self._messages
+
     def record_message(self, message: StoredMessage, files: dict[str, bytes]) -> bool:
         if message.message_id in self._messages:
             return False
@@ -291,6 +294,13 @@ class FakeStore:
         sha = hashlib.sha256(content).hexdigest()
         self._files[sha] = content
         return sha
+
+    def amend_pending_outgoing(self, idempotency_key: str, payload: dict[str, object]) -> bool:
+        record = self._outgoing.get(idempotency_key)
+        if record is None or record.status != "pending" or record.attempts:
+            return False
+        self._outgoing[idempotency_key] = replace(record, payload=json.loads(json.dumps(payload)))
+        return True
 
     def update_outgoing(
         self,

@@ -482,3 +482,35 @@ class TestFindingAnItemAfterARename:
         store = self.sqlite_store(tmp_path)
         with pytest.raises(LookupError, match="no item 99"):
             store.relabel_item(99, "Someone", "Somewhere")
+
+
+class TestAmendingAnEmailBeforeItIsSent:
+    """The investigator adds to a review email between writing it down and
+    sending it, and never after a send began (decision 61)."""
+
+    def test_a_pending_email_can_gain_more(self, store: Store) -> None:
+        store.record_outgoing("review_email", "review:1", None, {"body": "first"})
+
+        assert store.amend_pending_outgoing("review:1", {"body": "first, and more"})
+
+        [record] = store.outgoing_records()
+        assert record.payload == {"body": "first, and more"}
+
+    def test_once_a_send_began_it_is_never_changed(self, store: Store) -> None:
+        store.record_outgoing("review_email", "review:1", None, {"body": "first"})
+        store.update_outgoing("review:1", status="in_flight", bump_attempts=True)
+
+        assert not store.amend_pending_outgoing("review:1", {"body": "changed"})
+
+        [record] = store.outgoing_records()
+        assert record.payload == {"body": "first"}
+
+    def test_a_failed_attempt_back_in_pending_is_not_changed_either(self, store: Store) -> None:
+        store.record_outgoing("review_email", "review:1", None, {"body": "first"})
+        store.update_outgoing("review:1", bump_attempts=True)
+
+        assert not store.amend_pending_outgoing("review:1", {"body": "changed"})
+
+    def test_an_unknown_email_is_not_created(self, store: Store) -> None:
+        assert not store.amend_pending_outgoing("review:nope", {"body": "x"})
+        assert store.outgoing_records() == []

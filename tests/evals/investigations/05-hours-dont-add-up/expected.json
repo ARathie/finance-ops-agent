@@ -1,0 +1,22 @@
+{
+  "must_call_any": [
+    "describe_item"
+  ],
+  "found_mentions": [
+    [
+      "160"
+    ],
+    [
+      "152"
+    ]
+  ],
+  "replies_wanted": [
+    [
+      "use 152(\\.00)? hours",
+      "use 160(\\.00)? hours"
+    ]
+  ],
+  "replies_forbidden": [
+    "try again"
+  ]
+}

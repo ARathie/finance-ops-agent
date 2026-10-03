@@ -1,0 +1,59 @@
+{
+  "investigation": {
+    "found": "QuickBooks already has an invoice numbered 083126MT-MK for MasTec North America, Inc., dated 29 September 2026, and it refuses to issue a second invoice with the same number, so Manoj Koottappilly's August invoice was never created and nothing went to the client. That existing invoice was not made by me — it carries no note linking it to anything on my list, so someone keyed it in by hand. By our numbering it covers the same consultant, client and billing period as this item, so it may well be the August work already invoiced, and it may already have been sent to the client; I cannot tell from here whether it went out.",
+    "evidence": [
+      "Item 1: Manoj Koottappilly, MasTec North America, Inc., Aug 1-31 2026, status ready; invoice not created.",
+      "The review on the item is a QuickBooks failure: number 083126MT-MK is already taken.",
+      "QuickBooks invoice 083126MT-MK (id 7, MasTec North America, Inc., dated 2026-09-29) has no note naming any of my items, so it was entered by hand.",
+      "No other timesheet item exists for this consultant, client and period - item 1 is the only item on my list.",
+      "None of my own recorded invoices are missing or renumbered in QuickBooks."
+    ],
+    "proposals": [
+      {
+        "what_to_do": "Open invoice 083126MT-MK in QuickBooks and see whether it is Manoj's August work and whether it has already gone to MasTec. If it is the same month already billed, reply \"ignore\" so I do not invoice August twice.",
+        "reply_to_choose": "ignore",
+        "why": "Right when the hand-made invoice is the real August invoice and the client already has it."
+      },
+      {
+        "what_to_do": "If invoice 083126MT-MK turns out to be a leftover or a draft that was never sent, delete it in QuickBooks - delete it, do not void it, because a voided invoice keeps its number - and then reply \"try again\" so I create the invoice properly.",
+        "reply_to_choose": "try again",
+        "why": "Right when the existing invoice is scrap and the number should be freed for my invoice."
+      },
+      {
+        "what_to_do": "If invoice 083126MT-MK covers something else, or it was sent but Manoj's August work is still genuinely unbilled and you want the hand-made one left alone, reply with a different number for my invoice.",
+        "reply_to_choose": "use 083126MT-MK-revised",
+        "why": "Right only when August is still unbilled and the existing invoice must stay as it is."
+      }
+    ],
+    "sure": true
+  },
+  "calls": [
+    {
+      "name": "describe_item",
+      "arguments": {
+        "item_id": 1
+      },
+      "ok": true
+    },
+    {
+      "name": "explain_invoice_number",
+      "arguments": {
+        "number": "083126MT-MK",
+        "item_id": 1
+      },
+      "ok": true
+    },
+    {
+      "name": "list_items",
+      "arguments": {
+        "status": "any"
+      },
+      "ok": true
+    },
+    {
+      "name": "check_recorded_invoices",
+      "arguments": {},
+      "ok": true
+    }
+  ]
+}

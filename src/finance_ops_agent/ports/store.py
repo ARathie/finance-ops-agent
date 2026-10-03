@@ -106,6 +106,10 @@ class Store(Protocol):
         Returns False (storing nothing) if its Message-ID was already seen."""
         ...
 
+    def has_message(self, message_id: str) -> bool:
+        """Whether this Message-ID is already stored, so a run would skip it."""
+        ...
+
     def unprocessed_messages(self) -> list[StoredMessage]: ...
 
     def mark_processed(self, message_id: str) -> None: ...
@@ -194,6 +198,12 @@ class Store(Protocol):
         """Advance one outgoing record through pending -> in_flight -> done
         (or failed), recording the Message-ID before the send and the moment
         the server accepted it. `clear_times` forgets both times for a resend."""
+        ...
+
+    def amend_pending_outgoing(self, idempotency_key: str, payload: dict[str, object]) -> bool:
+        """Replace what a written-down email says, only while nothing has been
+        attempted (status pending). False, changing nothing, once it has: an
+        email is never altered after the agent began sending it."""
         ...
 
     # Invoices and payment instructions

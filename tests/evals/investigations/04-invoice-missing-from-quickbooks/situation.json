@@ -1,0 +1,28 @@
+{
+  "description": "Invoice 153: the agent's records say 053125IS-SA was sent, but production QuickBooks has no such invoice; it was made in the sandbox under the client's old name.",
+  "items": [
+    {
+      "key": "sa",
+      "consultant": "Subramanian Arumugam",
+      "client": "iStream",
+      "period_start": "2025-05-01",
+      "period_end": "2025-05-31",
+      "status": "invoice_sent",
+      "client_code": "IS",
+      "consultant_code": "SA",
+      "invoices": [
+        {
+          "number": "053125IS-SA",
+          "external_id": "153",
+          "status": "sent",
+          "in_quickbooks": false
+        }
+      ]
+    }
+  ],
+  "review": {
+    "item": "sa",
+    "code": "QUICKBOOKS_FAILED",
+    "as_the_agent_writes": "invoice_missing"
+  }
+}

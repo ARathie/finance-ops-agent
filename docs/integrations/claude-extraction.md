@@ -19,7 +19,7 @@ The agent uses Claude (Anthropic's model) for three narrow jobs: deciding what k
 - Citations cannot be combined with structured output, so evidence is part of the form: every field carries `quote` (the words on the page) and `confidence` (`high` / `medium` / `low`). When the PDF has a text layer, the code checks that each quote actually appears in the extracted text (`pypdf`) and lowers the confidence if it does not.
 - Errors: catch in order `anthropic.RateLimitError` (retry after `retry-after`), `anthropic.APIStatusError` with status ≥ 500 (retry), `anthropic.APIConnectionError` (retry), `anthropic.BadRequestError` (permanent → `CANT_READ_ATTACHMENT`). The SDK retries twice on its own; the run retries across runs up to 3 times before raising a review item. Log `response._request_id` on failures.
 
-## The three calls
+## The calls
 
 ### 1. What kind of email is this?
 
@@ -31,7 +31,11 @@ Input: the attachment (see above), the email text, and, for spelling only, the l
 
 ### 3. Read Kevin's reply
 
-Input: Kevin's reply text and the review reasons that were asked. Output (structured): for each reason, the answer as a typed value (`consultant_name`, `client_name`, `period_start` / `period_end`, `hours`, `approval_note`, `ignore`, `use_new_one`, `try_again`, `unclear`). `try_again` is Kevin asking the agent to look again after fixing something in QuickBooks; it arrived with prompt `reply_v2` (decision 55). Code applies it; `unclear` means the agent asks again. Approval replies (`approve` / `cancel`) are matched by code without the model.
+Input: Kevin's reply text, what was asked (an approval, or review reasons with their codes), and the item's consultant, client, period and invoice number. Never a rate or an address. Output (structured, prompt `reply_v4`): a list of requests. Each has the reason it answers, a kind, a value and Kevin's own words. The kinds are `consultant_name`, `client_name`, `period_start` / `period_end`, `hours`, `approval_note`, `ignore`, `use_new_one`, `approve`, `cancel`, `invoice_number`, `try_again`, `show_me_first` and `unclear`. `try_again` is Kevin asking the agent to look again after fixing something; it first arrived with prompt `reply_v2` (decision 55). Where an invoice or a send failed it is attempted again now; anywhere else the question stays open and is looked at again on every run (decision 61). It also returns a plain sentence of what he asked for and, if needed, one question back. Code checks each request; the ones that change an invoice are only acted on when their quote is really in the reply. A reply that starts with `approve` or `cancel` is taken without the model (decision 59).
+
+### 4. Look into a stuck item
+
+Input: the review Kevin is about to be emailed, and read-only tools over the agent's records, QuickBooks and the inbox (`application/agent_tools.py`). Every dollar amount is masked in both. Output: a short tool-use loop of at most eight turns, ended by an `answer` tool with `found`, `evidence`, one to three `proposals` (what to do, and the words Kevin replies to choose it), and `sure`. Prompt `investigate_v2`, adapter `adapters/claude/investigator.py`. Its answer only adds to Kevin's email. When it fails, refuses or runs out of turns, nothing changes (decision 61). It has its own eval set, `tests/evals/investigations/`, scored by `fops eval-investigator` (decision 62). Live on 2026-10-02 (claude-opus-5, `investigate_v2`): 7/7 on every criterion, safe included. About 3 model calls and $0.08 per investigation at list prices, so at most about $0.24 a run, and only on runs where something is stuck. Kevin's reply to it goes through call 3, which is now told which option each letter stood for (prompt `reply_v4`).
 
 ## Prompt versions
 

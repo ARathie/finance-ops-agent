@@ -49,8 +49,10 @@ As soon as a timesheet is read, the agent emails Kevin what it found: consultant
 If the agent cannot be sure about who, which client, which dates, how many hours, whether it was approved, the rate, or who to send the invoice to, it does not guess. It emails Kevin a "needs your review" message that says what it found, what is unclear, and what Kevin can do about it, which is usually one of:
 
 - fix or add a row in the engagement list, or
-- reply to the email with the answer (for example "this is for Acme", "use 152 hours", "yes, approved by Jane on the phone"), or
+- reply to the email with the answer, in his own words (for example "this is for Acme", "use 152 hours", "yes, approved by Jane on the phone"), or
 - reply "ignore".
+
+Before the email goes, the agent looks into the problem itself, and the email ends with what it found and up to three ways out, lettered A to C; Kevin can reply with just the letter. It looks only; nothing it suggests happens until Kevin chooses, and the agent checks his reply before acting on it. Whatever he replies, he hears back what was done.
 
 The item waits until Kevin answers. Nothing is sent to a client in the meantime. The full list of reasons is in `timesheet-checks.md`.
 
@@ -128,8 +130,9 @@ flowchart TD
     paid -- "yes" --> monday
     askpaid --> monday{"Monday?"}
     monday -- "yes" --> summary["Write the Monday summary (J8)"]
-    monday -- "no" --> send
-    summary --> send["Send everything written down, never twice (J1-J3)"]
+    monday -- "no" --> look
+    summary --> look["Look into each stuck item before Kevin's email goes (L1)"]
+    look --> send["Send everything written down, never twice (J1-J3)"]
     send --> tracking["Rewrite the tracking sheet"]
     tracking --> done(["Run ends"])
 ```
@@ -232,7 +235,8 @@ flowchart TD
     r(["A record is ready"]) --> m{"Mode"}
     m -- "dry run" --> preview["Kevin gets Dry run - would invoice; nothing made (A5)"]
     m -- "ask first" --> make["Make the invoice in QuickBooks"]
-    make -- "QuickBooks refuses" --> qbfail["Review: QUICKBOOKS_FAILED; nothing to the client (J4)"]
+    make -- "QuickBooks refuses" --> qbfail["Review: QUICKBOOKS_FAILED, saying who holds a taken number; nothing to the client (J4)"]
+    qbfail --> looked["The review gains what was found and lettered ways out (L1)"]
     make -- "total disagrees" --> voidnow["Voided at once; both totals reported (J5)"]
     make --> approve["Kevin gets Approve? with the real invoice (H1)"]
     approve --> answer{"Kevin's reply, first words, read by code"}
@@ -242,7 +246,10 @@ flowchart TD
     answer -- "cancel" --> cancel["Invoice voided; record cancelled (H3)"]
     answer -- "wrong client" --> wrong["Invoice voided; first client waits for its own timesheet; timesheet set aside with the setup form (H4)"]
     wrong --> six["Picture 6, then back to picture 3 for the right client"]
-    answer -- "anything else" --> askwords["Short reply: approve, cancel or wrong client (H6)"]
+    answer -- "anything else" --> plain{"Claude reads it; code checks the words are his"}
+    plain -- "approves, and nothing else" --> bill
+    plain -- "cancels" --> cancel
+    plain -- "asks for a change, or unclear" --> askwords["Reply: it can go as it is, be cancelled, or be the wrong client (H6)"]
 ```
 
 ### 6. A set-aside email, and setting something up in QuickBooks
