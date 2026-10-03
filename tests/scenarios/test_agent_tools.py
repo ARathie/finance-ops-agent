@@ -27,6 +27,8 @@ def test_every_tool_has_a_strict_shaped_schema(env: ScenarioEnv) -> None:
         "explain_invoice_number",
         "check_recorded_invoices",
         "list_items",
+        "item_timesheets",
+        "describe_email",
         "list_open_reviews",
     ]
     for spec in specs:
@@ -48,7 +50,9 @@ def test_the_inbox_and_items_tools_appear_only_when_there_is_something_to_look_a
             workbook=parse_workbook(env.workbook),
         )
     )
-    assert {"check_inbox", "check_items"} <= {spec.name for spec in full.specs()}
+    assert {"check_inbox", "check_items", "look_up_engagements"} <= {
+        spec.name for spec in full.specs()
+    }
 
 
 def test_describe_item_answers_with_facts(env: ScenarioEnv) -> None:

@@ -14,6 +14,7 @@ from finance_ops_agent.domain.items import (
     Item,
     OutgoingRecord,
     ReviewRecord,
+    TimesheetRecord,
 )
 from finance_ops_agent.domain.messages import InboxEntry, StoredMessage
 from finance_ops_agent.ports.accounting import InvoiceLookup
@@ -41,6 +42,10 @@ class StoreToLookAt(Protocol):
     def has_message(self, message_id: str) -> bool: ...
 
     def unprocessed_messages(self) -> list[StoredMessage]: ...
+
+    def get_message(self, message_id: str) -> StoredMessage | None: ...
+
+    def timesheets_for_item(self, item_id: int) -> list[TimesheetRecord]: ...
 
     def get_state(self, key: str) -> str | None: ...
 

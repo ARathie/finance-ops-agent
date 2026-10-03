@@ -9,10 +9,11 @@ says what it cost (docs/decisions.md #62).
 """
 
 import argparse
+import hashlib
 import json
 import os
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from finance_ops_agent.adapters.fakes.accounting import FakeAccounting
@@ -24,7 +25,7 @@ from finance_ops_agent.application.diagnosis import (
     check_recorded_invoices,
     explain_invoice_number,
 )
-from finance_ops_agent.application.investigation import problem_for
+from finance_ops_agent.application.investigation import forms_for, problem_for
 from finance_ops_agent.application.investigation_eval import (
     InvestigationCase,
     InvestigationReport,
@@ -33,12 +34,22 @@ from finance_ops_agent.application.investigation_eval import (
     RecordedCall,
     Situation,
     below_investigation_thresholds,
+    has_recorded,
     load_investigation_cases,
     read_recorded,
     score_investigation,
 )
 from finance_ops_agent.domain import emails
-from finance_ops_agent.domain.items import EngagementSnapshot, InvoiceRecord
+from finance_ops_agent.domain.engagements import RawRow, RawWorkbook, parse_workbook
+from finance_ops_agent.domain.investigation import ReplyForm
+from finance_ops_agent.domain.items import (
+    EngagementSnapshot,
+    InvoiceRecord,
+    OutgoingRecord,
+    ReviewRecord,
+    TimesheetRecord,
+)
+from finance_ops_agent.domain.messages import MessageKind, StoredAttachment, StoredMessage
 from finance_ops_agent.domain.statuses import ItemStatus
 from finance_ops_agent.ports.accounting import CreatedInvoice, InvoiceLookup
 
@@ -57,6 +68,86 @@ ISSUED = date(2026, 9, 30)
 class Built:
     looking: Looking
     problem: str
+    forms: list[ReplyForm]
+    seen: str  # everything the tools could show, for the safety check
+
+
+# Complete rows for each sheet, as the engagement list template has them; a
+# case's rows are merged over these, so it names only what matters to it.
+_DEFAULT_ROWS: dict[str, dict[str, str]] = {
+    "clients": {
+        "Client": "Acme Corp",
+        "Legal name": "Acme Corporation",
+        "Billing contact": "Accounts Payable",
+        "Billing email": "ap@acme.example",
+        "CC email": "",
+        "Payment terms (days)": "30",
+        "Delivery": "email",
+        "Time system": "",
+        "Names on timesheets": "Acme",
+        "Email domains": "acme.example",
+        "QuickBooks customer": "",
+        "Invoice code": "AC",
+        "Notes": "",
+        "Active": "yes",
+    },
+    "consultants": {
+        "Consultant": "Priya Shah",
+        "Initials": "",
+        "Other names": "",
+        "Email": "priya@shah.example",
+        "Type": "contractor",
+        "Vendor company": "",
+        "Paid by": "bank transfer",
+        "Pay timing (days)": "15",
+        "Active": "yes",
+    },
+    "vendors": {
+        "Vendor company": "BluePeak Staffing",
+        "Contact emails": "",
+        "Paid by": "bank transfer",
+        "Pay timing (days)": "30",
+        "Active": "yes",
+    },
+    "engagements": {
+        "Consultant": "Priya Shah",
+        "Client": "Acme Corp",
+        "End client": "",
+        "Role": "Developer",
+        "Start date": "2026-01-01",
+        "End date": "",
+        "Billing schedule": "monthly",
+        "First period start": "",
+        "Bill rate": "100.00",
+        "Pay rate": "70.00",
+        "Rates from": "2026-01-01",
+        "Send automatically": "no",
+        "Active": "yes",
+    },
+}
+
+
+def _workbook(rows: dict[str, list[dict[str, str]]]) -> RawWorkbook:
+    def sheet(name: str) -> list[RawRow]:
+        return [
+            RawRow(number, {**_DEFAULT_ROWS[name], **cells})
+            for number, cells in enumerate(rows.get(name, []), start=2)
+        ]
+
+    return RawWorkbook(
+        clients=sheet("clients"),
+        consultants=sheet("consultants"),
+        vendors=sheet("vendors"),
+        engagements=sheet("engagements"),
+    )
+
+
+def _message_id(key: str) -> str:
+    return f"<{key}@eval>"
+
+
+def _sha(email_key: str, filename: str) -> str:
+    return hashlib.sha256(f"{email_key}/{filename}".encode()).hexdigest()
 
 
 def _snapshot(client_code: str, consultant_code: str, payee: str) -> EngagementSnapshot:
@@ -79,18 +170,61 @@ def build_situation(situation: Situation) -> Built:
     store = FakeStore()
     accounting = FakeAccounting()
     ids: dict[str, int] = {}
+    for mail in situation.emails:
+        store.record_message(
+            StoredMessage(
+                message_id=_message_id(mail.key),
+                in_reply_to="",
+                references=(),
+                from_address=mail.sender,
+                to_addresses="timesheets@icon-technologies.com",
+                subject=mail.subject,
+                body_text=mail.body,
+                received_at=datetime.fromisoformat(mail.received),
+                kind=MessageKind(mail.kind),
+                processed=False,
+                attachments=tuple(
+                    StoredAttachment(
+                        filename=name,
+                        mime_type="application/pdf",
+                        sha256=_sha(mail.key, name),
+                        size_bytes=1000,
+                    )
+                    for name in mail.attachments
+                ),
+            ),
+            {},
+        )
+        store.mark_processed(_message_id(mail.key))
     for spec in situation.items:
+        snapshot = _snapshot(spec.client_code, spec.consultant_code, spec.consultant)
+        snapshot = EngagementSnapshot(
+            **{**snapshot.__dict__, "billing_emails": list(spec.billing_emails)}
+        )
         item = store.create_item(
             spec.consultant,
             spec.client,
             spec.period(),
             ItemStatus.RECEIVED,
-            _snapshot(spec.client_code, spec.consultant_code, spec.consultant),
+            snapshot,
         )
         # Through the same status changes a run would make, never round them.
         for step in _PATH_TO[spec.status]:
             item = store.change_status(item.id, step, {"why": "eval situation"})
         ids[spec.key] = item.id
+        for timesheet in spec.timesheets:
+            source = next(m for m in situation.emails if m.key == timesheet.email)
+            store.record_timesheet(
+                TimesheetRecord(
+                    item_id=item.id,
+                    sha256=_sha(source.key, source.attachments[0]),
+                    reading=dict(timesheet.reading),
+                    model="eval",
+                    prompt_version="eval",
+                    is_duplicate=timesheet.is_duplicate,
+                    is_correction=timesheet.is_correction,
+                )
+            )
         for invoice in spec.invoices:
             store.record_invoice(
                 InvoiceRecord(
@@ -121,9 +255,16 @@ def build_situation(situation: Situation) -> Built:
             item_id=item_id,
             issued=held.issued,
         )
-    looking = Looking(store=store, accounting=accounting)
+    workbook = (
+        None
+        if situation.engagement_list is None
+        else parse_workbook(_workbook(situation.engagement_list))
+    )
+    looking = Looking(store=store, accounting=accounting, workbook=workbook)
 
     review = situation.review
+    if review.item is None:
+        return _build_without_an_item(situation, looking)
     item_id = ids[review.item]
     item = store.get_item(item_id)
     message = review.message
@@ -163,7 +304,90 @@ def build_situation(situation: Situation) -> Built:
     store.record_outgoing("review_email", "review:eval", item_id, payload)
     [record] = store.outgoing_records()
     reviews = [r for r in store.open_reviews() if r.item_id == item_id]
-    return Built(looking=looking, problem=problem_for(store, record, reviews))
+    return _built(situation, looking, record, reviews)
+
+
+def _build_without_an_item(situation: Situation, looking: Looking) -> Built:
+    """A question with no item: one email that could not be placed or read,
+    or the engagement list's own problems -- written as the run writes them."""
+    store = looking.store
+    assert isinstance(store, FakeStore)
+    review = situation.review
+    asked = [review.message, *review.messages] if review.message else list(review.messages)
+    for text in asked:
+        store.open_review(None, review.code, text)
+    extra: dict[str, object] = {}
+    if review.email is not None:
+        message_id = _message_id(review.email)
+        mail = store.get_message(message_id)
+        assert mail is not None, f"no email {review.email} in the situation"
+        about = f"an email from {mail.from_address}"
+        if review.set_aside:
+            # As application/set_aside.py remembers it.
+            store.set_state(
+                "set_aside",
+                json.dumps(
+                    [
+                        {
+                            "message_id": message_id,
+                            "code": review.code,
+                            "review_message": review.message,
+                            "sender": mail.from_address,
+                            "subject": mail.subject,
+                        }
+                    ]
+                ),
+            )
+            extra["set_aside"] = message_id
+        else:
+            extra["about_email"] = message_id
+    else:
+        about = "the engagement list"
+        extra["list_problems"] = asked
+    email = emails.needs_review(ADMIN, about, asked)
+    body = email.body
+    if situation.what_i_read:
+        first, _, rest = body.partition("\n")
+        body = "\n".join([first, "", "What I read:", *situation.what_i_read, rest])
+    store.record_outgoing(
+        "review_email", "review:eval", None, {**email.payload(), "body": body, **extra}
+    )
+    [record] = store.outgoing_records()
+    reviews = [r for r in store.open_reviews() if f"- {r.message}" in body]
+    return _built(situation, looking, record, reviews)
+
+
+def _built(
+    situation: Situation, looking: Looking, record: OutgoingRecord, reviews: list[ReviewRecord]
+) -> Built:
+    return Built(
+        looking=looking,
+        problem=problem_for(looking.store, record, reviews),
+        forms=forms_for(record, reviews),
+        seen=_everything_shown(looking, [_message_id(mail.key) for mail in situation.emails]),
+    )
+
+
+def _everything_shown(looking: Looking, message_ids: list[str]) -> str:
+    """What every tool could show about this situation: a fact the
+    investigator offers must be in here or in the problem, or it invented it."""
+    toolbox = ReadOnlyToolbox(looking)
+    shown: list[str] = []
+    for spec in toolbox.specs():
+        if not spec.input_schema["required"]:
+            shown.append(toolbox.call(spec.name, {})[0])
+    for item in looking.store.list_items():
+        shown.append(toolbox.call("describe_item", {"item_id": item.id})[0])
+        shown.append(toolbox.call("item_timesheets", {"item_id": item.id})[0])
+    for message_id in message_ids:
+        shown.append(toolbox.call("describe_email", {"message_id": message_id})[0])
+    if looking.workbook is not None:
+        names = {c.name for c in looking.workbook.consultants} | {
+            c.name for c in looking.workbook.clients
+        }
+        for name in names:
+            shown.append(toolbox.call("look_up_engagements", {"name_or_address": name})[0])
+    return "\n".join(shown)
 
 
 def run_investigator_eval(args: argparse.Namespace) -> int:
@@ -180,9 +404,13 @@ def run_investigator_eval(args: argparse.Namespace) -> int:
             return 2
 
     report = InvestigationReport()
+    waiting: list[str] = []
     for case in cases:
         built = build_situation(case.situation)
         case_dir = args.cases / case.name
+        if investigator is None and not has_recorded(case_dir):
+            waiting.append(case.name)
+            continue
         if investigator is not None:
             result = investigator.investigate(built.problem, ReadOnlyToolbox(built.looking))
             recorded = Recorded(
@@ -194,12 +422,15 @@ def run_investigator_eval(args: argparse.Namespace) -> int:
                 ],
             )
             (case_dir / "recorded.json").write_text(recorded.model_dump_json(indent=2) + "\n")
-        elif not (case_dir / "recorded.json").exists():
-            raise SystemExit(f"{case.name} has no recorded.json; run with --live once")
         else:
             recorded = read_recorded(case_dir)
-        report.scores.append(score_investigation(case, recorded, built.problem))
+        report.scores.append(
+            score_investigation(case, recorded, built.problem, built.forms, built.seen)
+        )
     print(report.format())
+    if waiting:
+        print(f"\nNot yet recorded ({len(waiting)}): {', '.join(waiting)}.")
+        print("Run `fops eval-investigator --live` to record them.")
 
     if investigator is not None:
         from finance_ops_agent.application.eval_runner import MODEL_PRICES, UsageReport
@@ -219,6 +450,14 @@ def run_investigator_eval(args: argparse.Namespace) -> int:
         )
 
     thresholds = InvestigationThresholds.model_validate_json(args.thresholds.read_text())
+    if thresholds.re_record_for is not None:
+        print(
+            f"\nWAITING FOR A LIVE RUN: the recorded answers were written by"
+            f" {thresholds.prompt_version}, and the investigator now uses"
+            f" {thresholds.re_record_for}. The floor is not enforced until"
+            " `fops eval-investigator --live` records its answers."
+        )
+        return 0
     if thresholds.source == "bootstrap":
         print(
             "\nWARNING: these recorded answers were written by hand, so the scores prove the"
@@ -240,6 +479,7 @@ def _stamp(path: Path, model: str, prompt_version: str) -> None:
             "model": model,
             "prompt_version": prompt_version,
             "recorded_on": date.today().isoformat(),
+            "re_record_for": None,
         }
     )
     path.write_text(json.dumps(raw, indent=2) + "\n")
@@ -247,4 +487,5 @@ def _stamp(path: Path, model: str, prompt_version: str) -> None:
 
 def scored_case(case: InvestigationCase, recorded: Recorded) -> list[str]:
     """The misses for one case, for tests."""
-    return score_investigation(case, recorded, build_situation(case.situation).problem).misses
+    built = build_situation(case.situation)
+    return score_investigation(case, recorded, built.problem, built.forms, built.seen).misses

@@ -762,12 +762,16 @@ class QuickBooksOnline:
         return str(renamed.get("SyncToken", sync_token))
 
     def paid_status(self, external_ids: list[str]) -> dict[str, bool]:
-        """Balance == 0 means paid. Partial payments are not paid."""
+        """Balance == 0 on an invoice for something means paid. Partial payments
+        are not paid, and nor is a voided invoice: QuickBooks voids one by
+        zeroing its total, which leaves its balance zero too (decision 67)."""
         paid: dict[str, bool] = {}
         for external_id in external_ids:
             raw = self._client.get(self.company_url(f"/invoice/{external_id}"))
             invoice = raw.get("Invoice", raw)
-            paid[external_id] = _cents(invoice.get("Balance", 0)) == 0
+            paid[external_id] = (
+                _cents(invoice.get("Balance", 0)) == 0 and _cents(invoice.get("TotalAmt", 0)) > 0
+            )
         return paid
 
     # --- looking, for diagnosis (docs/decisions.md #60); never writes ---

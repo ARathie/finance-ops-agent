@@ -76,14 +76,14 @@ __all__ = ["Mode", "RunDeps", "RunReport", "Settings", "run_once"]
 def run_once(deps: RunDeps, report: RunReport | None = None) -> RunReport:
     report = report or RunReport()
     logs.log("run started", mode=deps.settings.mode.value)
-    _engagement_work(deps, report)
+    workbook = _engagement_work(deps, report)
     outgoing_steps.plan_outgoing(deps, report)
     paid_check.check_paid_invoices(deps, report)
     # Last before anything is sent: every review email written this run is
     # still pending, so it can gain what the investigator found (decision 61).
     # No engagement list: a quiet run asks QuickBooks nothing (decision 54),
     # and the investigator only looks when something is already stuck.
-    investigation.investigate_pending_reviews(deps, report)
+    investigation.investigate_pending_reviews(deps, report, workbook)
     tracking_sha = _write_tracking(deps)
     summary_steps.enqueue_monday_summary(deps, report, tracking_sha)
     outgoing_steps.send_pending(deps, report)
@@ -103,7 +103,7 @@ def run_once(deps: RunDeps, report: RunReport | None = None) -> RunReport:
     return report
 
 
-def _engagement_work(deps: RunDeps, report: RunReport) -> None:
+def _engagement_work(deps: RunDeps, report: RunReport) -> EngagementWorkbook:
     """Everything that needs the engagement list.
 
     The list comes from the agent's own copy of QuickBooks, taken once a day
@@ -143,6 +143,9 @@ def _engagement_work(deps: RunDeps, report: RunReport) -> None:
     # After the messages, so a "try again" Kevin sent this run is acted on now.
     if set_aside.look_again(deps, engagements, report):
         _process_messages(deps, engagements, report)
+    # The list as the run ended with it, for the investigator to look things
+    # up in (decision 67). Already in hand: no second read, no QuickBooks call.
+    return engagements.workbook
 
 
 def _write_tracking(deps: RunDeps) -> str | None:
@@ -1045,7 +1048,9 @@ def _process_timesheet(
             f' ("{message.subject}").',
         )
         _open_review(deps, report, None, finding)
-        _enqueue_review_email(deps, key, None, [finding], None, None)
+        _enqueue_review_email(
+            deps, key, None, [finding], None, None, about_email=message.message_id
+        )
         return NEEDS_REVIEW_FOLDER
     attachment = message.attachments[0]
     if all(deps.store.timesheet_seen(part.sha256) for part in message.attachments):
@@ -1066,6 +1071,7 @@ def _process_timesheet(
     readings: list[TimesheetReading] = []
     read_attachments: list[StoredAttachment] = []
     unreadable: list[str] = []
+    why_not: list[str] = []
     for part in message.attachments:
         try:
             readings.append(
@@ -1078,13 +1084,19 @@ def _process_timesheet(
             # Why it could not be read is the whole diagnosis, and it is the
             # reader's own words: never discard it.
             report.note(f"could not read {part.filename}: {error}")
+            why_not.append(" ".join(str(error).split())[:200])
             continue
         read_attachments.append(part)
     if not readings:
         names = ", ".join(unreadable) or attachment.filename
+        # What stopped it -- an encrypted PDF, a file type it cannot open, a
+        # document that is not a timesheet -- is the whole diagnosis: Kevin and
+        # the investigator both see it (decision 67).
+        said = "; ".join(dict.fromkeys(why_not))
         finding = Finding(
             ReviewCode.CANT_READ_ATTACHMENT,
-            f'I couldn\'t read the attachment {names} ("{message.subject}").',
+            f'I couldn\'t read the attachment {names} ("{message.subject}").'
+            + (f" What stopped me: {said}." if said else ""),
         )
         _open_review(deps, report, None, finding)
         _enqueue_review_email(
@@ -1094,6 +1106,7 @@ def _process_timesheet(
             [finding],
             None,
             EmailAttachment(attachment.filename, attachment.sha256),
+            about_email=message.message_id,
         )
         return NEEDS_REVIEW_FOLDER
     # The attachment filed against the item, shown to Kevin and sent to the
@@ -1221,10 +1234,15 @@ def _process_timesheet(
         deps.settings.admin_email, summary, next_step, timesheet_attachment
     )
     outgoing_steps.enqueue_email(deps, "details_email", f"details:{key}", item_id, details)
-    unplaced = [f for f in findings if f.code.value in set_aside.PLACEABLE]
-    if item is None and unplaced:
+    if item is None and findings:
         # Nothing to hang Kevin's answer on but the email itself, so it is set
-        # aside, and his "try again" or "this is from ..." reads it again.
+        # aside, and his "try again" (or "this is from ...") reads it again.
+        # Every timesheet that could not become an item, not only one whose
+        # consultant or client is unknown: dates that do not fit the billing
+        # schedule, an engagement that ended, a rate that changes mid-period
+        # are all fixed in the list, and the same file sent again would only be
+        # filed as a duplicate (decision 67).
+        unplaced = [f for f in findings if f.code.value in set_aside.PLACEABLE] or findings
         set_aside.set_aside(
             deps,
             message,
@@ -1280,6 +1298,7 @@ def _enqueue_review_email(
     findings: list[Finding],
     summary: TimesheetSummary | None,
     timesheet: EmailAttachment | None,
+    about_email: str = "",
 ) -> None:
     about = (
         f"{summary.consultant} — {summary.client}"
@@ -1293,4 +1312,13 @@ def _enqueue_review_email(
         summary,
         timesheet,
     )
-    outgoing_steps.enqueue_email(deps, "review_email", f"review:{message_id}", item_id, email)
+    outgoing_steps.enqueue_email(
+        deps,
+        "review_email",
+        f"review:{message_id}",
+        item_id,
+        email,
+        # Which email it is about, when no item says so: what the investigator
+        # looks at first (decision 67).
+        {"about_email": about_email} if about_email and item_id is None else None,
+    )

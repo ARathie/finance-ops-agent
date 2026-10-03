@@ -523,6 +523,18 @@ def _handle_review_reply(
     # go to their own handlers: put to the reader alongside every other open
     # question without an item, an "ignore" would close them all (decision 55).
     if record.payload.get("set_aside"):
+        # A letter picks one of the investigator's options here too (decision
+        # 67): read by code, then handled as if he had written its words.
+        asked = str(record.payload.get("body", ""))
+        mine = [
+            review
+            for review in deps.store.open_reviews()
+            if review.item_id is None and f"- {review.message}" in asked
+        ]
+        picked = picked_option(body, offered_replies(deps, mine))
+        if picked is not None:
+            report.note(f'Kevin picked an option: "{picked}"')
+            body = picked
         set_aside.handle_reply(deps, message, record, body, report)
         return
     if record.payload.get("engagement_refresh"):

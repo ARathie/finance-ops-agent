@@ -47,6 +47,22 @@
           }
         }
       }
+    },
+    {
+      "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/invoice/148",
+      "response": {
+        "status": 200,
+        "json": {
+          "Invoice": {
+            "Id": "148",
+            "DocNumber": "1045",
+            "TotalAmt": 0.0,
+            "SyncToken": "2",
+            "PrivateNote": "Voided - fops item 1",
+            "Balance": 0.0
+          }
+        }
+      }
     }
   ]
 }

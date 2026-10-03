@@ -37,9 +37,9 @@ from finance_ops_agent.ports.investigator import Toolbox
 from finance_ops_agent.ports.reader import TokenUsage
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
-INVESTIGATE_PROMPT_VERSION = "investigate_v2"
+INVESTIGATE_PROMPT_VERSION = "investigate_v3"
 MAX_TOKENS = 16000
-MAX_STEPS = 8  # model turns; each may call several tools
+MAX_STEPS = 10  # model turns; each may call several tools
 ANSWER_TOOL = "answer"
 
 _ANSWER_SCHEMA: dict[str, Any] = {

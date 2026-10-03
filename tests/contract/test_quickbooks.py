@@ -964,6 +964,14 @@ class TestPaidAndVoid:
 
         assert paid == {"145": True, "146": False, "147": False}
 
+    def test_a_voided_invoice_is_not_paid(self, tmp_path: Path) -> None:
+        """QuickBooks voids an invoice by zeroing its total, so its balance is
+        zero too: before decision 67 one voided by hand read as paid."""
+        replay = replay_from("balances")
+        accounting, _, _ = build(replay, tmp_path)
+
+        assert accounting.paid_status(["148"]) == {"148": False}
+
     def test_the_remaining_balance_is_reported_in_whole_cents(self, tmp_path: Path) -> None:
         replay = replay_from("balances")
         accounting, _, _ = build(replay, tmp_path)
