@@ -771,3 +771,29 @@ Decision:
 - **Duplicates filed last week**, one line each: the file and who sent it for an exact copy; the consultant, client and period for the same hours in a new file. Each is written down with the day it was filed (the agent's own state, not a new table) and kept two weeks, enough for any Monday to see the week before.
 - **Unpaid invoices past their due date**, oldest first: number, client, amount, due date and how many days ago. "Unpaid" is what the daily paid check last heard from QuickBooks, which runs before the summary is written. In manual mode the agent cannot see payments, so the section is left out rather than listing every invoice it ever sent as late.
 - **For Kevin only.** The agent still never writes to a client about payment and sends no reminders (objective 5); chasing payment stays with Kevin, as today. This only saves him looking.
+
+## 65. A client with no billing email is still a client; only its invoices wait
+
+Gap G6 in `pathways.md`. Writing the whole-run test for `NO_BILLING_CONTACT` found it could never be raised. A client row delivered by email with no billing email was a row error, so the client was dropped from the list -- and every timesheet for it then looked like one for a client nobody knew: *I can't tell which client this is for*, with the real reason only in a separate email about the list. QuickBooks mode did the same with a customer that had no email.
+
+Decision: **the client stays; the invoice waits.**
+
+- The missing address is still reported as a problem in the list (or QuickBooks), naming the row, but the client is kept. A row with any other fault is still left out.
+- A timesheet for it is read, placed and kept as usual. The check is made on the item's own details, which take QuickBooks' customer email where there is one (decision 52), so a blank cell QuickBooks fills is no problem. A client paid through a portal needs no address.
+- With no address anywhere, the item waits with a `NO_BILLING_CONTACT` review naming where to add it. Nothing is invoiced or sent: there is nowhere to send it.
+- **It carries on by itself.** Every run looks at the waiting items' clients in the list in hand; once one has an address, its details are taken again, the question closes, and the item goes on to be invoiced as usual. A run asks QuickBooks nothing while there is still no address. "Ignore" drops the timesheet, as anywhere else.
+
+## 66. A question with nothing behind it is not closed by an answer, and closes by itself when its cause is fixed
+
+Gap G7 in `pathways.md`. Three faults, found together:
+
+- **A problem in the engagement list never closed.** Fixing the row did not close its question, so the Monday summary listed it as waiting for Kevin for ever.
+- **An answer to a question with no timesheet behind it** -- a list problem, an email with no attachment, one that could not be read -- was written down as answered and the question closed, though there was nothing to apply it to. "The invoice code is AC" closed the question while the row stayed wrong.
+- **"Ignore" closed too much.** A reply to one such email closed every open question without an item -- the list's, another email's -- not just that email's.
+
+Decision:
+
+- **A list problem closes by itself** on the first run whose list no longer has it. Only on a list read that day (an old copy of QuickBooks says nothing about what was fixed), and only the questions raised from the list's own problems: a question raised another way, such as a product with no row, is left alone.
+- **Its email says there is nothing to reply.** A reply is not read -- by Claude or anyone -- and changes nothing; it gets one note back saying which of the problems are fixed and which are still there. A reply to that note, an out-of-office one included, is not answered again: matching it by its subject would have answered it with the same note, and again.
+- **An answer with nothing to apply it to is not written down.** The question stays open and Kevin is told there is no timesheet behind it, and what would help.
+- **A reply to an email without an item closes only that email's questions.**

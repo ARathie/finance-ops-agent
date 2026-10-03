@@ -12,6 +12,7 @@ table once per thing, and sent draft-then-send with restart reconciliation
 """
 
 import hashlib
+import json
 from dataclasses import dataclass
 from datetime import date
 
@@ -122,7 +123,7 @@ def _engagement_work(deps: RunDeps, report: RunReport) -> None:
         outages.failed(deps, report, outages.MAILBOX, error, error.lasting)
         mailbox_up, fetched, new_position = False, [], position or ""
     engagements = Engagements(deps, report)
-    _report_list_problems(deps, engagements.workbook, report)
+    _report_list_problems(deps, engagements, report)
     if deps.store.get_state(LAST_EXPECTED_CHECK_KEY) != today:
         asked = _create_expected_items(deps, engagements.workbook, report)
         # Not marked done when QuickBooks could not be asked: the next run
@@ -137,6 +138,7 @@ def _engagement_work(deps: RunDeps, report: RunReport) -> None:
         else:
             outages.working(deps, report, outages.MAILBOX)
     _retry_unconfirmed(deps, engagements, report)
+    _retry_no_billing_contact(deps, engagements, report)
     _process_messages(deps, engagements, report)
     # After the messages, so a "try again" Kevin sent this run is acted on now.
     if set_aside.look_again(deps, engagements, report):
@@ -167,14 +169,53 @@ def describe_problem(problem: ListRowProblem) -> str:
     return f"{problem.sheet} sheet, row {problem.row_number}: {problem.message}"
 
 
-def _report_list_problems(deps: RunDeps, workbook: EngagementWorkbook, report: RunReport) -> None:
-    problems = [describe_problem(problem) for problem in workbook.problems]
+# The engagement list's own problems as of the last complete read, so a fixed
+# one can be told apart from a question raised some other way (decision 66).
+LIST_PROBLEMS_KEY = "list_problems"
+
+
+def _report_list_problems(deps: RunDeps, engagements: Engagements, report: RunReport) -> None:
+    problems = [describe_problem(problem) for problem in engagements.workbook.problems]
+    if engagements.complete:
+        # A problem no longer in the list has been fixed: its question closes
+        # by itself, with nothing for Kevin to reply (decision 66). Only on a
+        # list read today -- an old copy says nothing about what he has fixed
+        # -- and only the questions this step raised from the list itself.
+        reported = set(json.loads(deps.store.get_state(LIST_PROBLEMS_KEY) or "[]"))
+        for review in deps.store.open_reviews():
+            if (
+                review.item_id is None
+                and review.code == ReviewCode.LIST_ROW_PROBLEM.value
+                and review.message in reported
+                and review.message not in problems
+            ):
+                deps.store.answer_review(
+                    review.id, {"kind": "resolved", "why": "fixed in the list"}, "answered"
+                )
+                report.note(f"fixed in the engagement list: {review.message}")
+        deps.store.set_state(LIST_PROBLEMS_KEY, json.dumps(sorted(problems)))
     for message in problems:
         _open_review(deps, report, None, Finding(ReviewCode.LIST_ROW_PROBLEM, message))
     if problems:
         digest = hashlib.sha256("|".join(sorted(problems)).encode()).hexdigest()[:16]
-        email = emails.needs_review(deps.settings.admin_email, "the engagement list", problems)
-        outgoing_steps.enqueue_email(deps, "review_email", f"list-problems:{digest}", None, email)
+        where = "QuickBooks" if engagements.from_quickbooks else "the engagement list"
+        email = emails.needs_review(
+            deps.settings.admin_email,
+            "the engagement list",
+            problems,
+            then=[
+                f"Fix these in {where}. I read it on every run, and each one closes by",
+                "itself once it is right: there is nothing to reply.",
+            ],
+        )
+        outgoing_steps.enqueue_email(
+            deps,
+            "review_email",
+            f"list-problems:{digest}",
+            None,
+            email,
+            {"list_problems": problems},
+        )
 
 
 def _engagement_pairs(
@@ -843,14 +884,6 @@ def _place(
         if period is not None:
             rate_row, rate_findings = checks.rate_row_in_force(rows, period)
             findings.extend(rate_findings)
-        client = _client_by_name(workbook, client_name)
-        if client is not None and client.delivery is Delivery.EMAIL and not client.billing_emails:
-            findings.append(
-                Finding(
-                    ReviewCode.NO_BILLING_CONTACT,
-                    "The engagement list has no billing email for this client.",
-                )
-            )
     return _Placed(consultant, client_name, period, rate_row, findings)
 
 
@@ -880,6 +913,79 @@ def _unconfirmed_finding(item: Item, failures: list[AccountingFailed]) -> Findin
         + ' Reply "ignore" to drop this timesheet instead.'
         + f" QuickBooks said: {str(failures[0])[:200]}",
     )
+
+
+def _nowhere_to_send(item: Item) -> bool:
+    """An invoice delivered by email with no address to send it to. Checked on
+    the item's own details, which take QuickBooks' customer email where there
+    is one (decision 52), so a blank list cell QuickBooks fills is no problem."""
+    return item.snapshot.client_delivery == Delivery.EMAIL.value and not (
+        item.snapshot.billing_emails
+    )
+
+
+def _no_billing_contact(deps: RunDeps, item: Item) -> Finding:
+    where = (
+        f"the {item.client} customer in QuickBooks"
+        if deps.settings.engagements_from == "quickbooks"
+        else f"{item.client}'s row on the Clients sheet"
+    )
+    return Finding(
+        ReviewCode.NO_BILLING_CONTACT,
+        f"There is no billing email for {item.client}, so I won't invoice this yet."
+        f" Add one to {where}; I check on every run and carry on by myself once"
+        ' it is there. Reply "ignore" to drop this timesheet instead.',
+    )
+
+
+def _retry_no_billing_contact(deps: RunDeps, engagements: Engagements, report: RunReport) -> None:
+    """Carry on with the items waiting for a billing email, once one is there
+    (decision 65). Only an address in the list in hand starts it, so a run
+    asks QuickBooks nothing while there is still none."""
+    waiting = [
+        review
+        for review in deps.store.open_reviews()
+        if review.item_id is not None and review.code == ReviewCode.NO_BILLING_CONTACT.value
+    ]
+    if not waiting or report.quickbooks_unavailable:
+        return
+    workbook = engagements.workbook
+    pairs = _engagement_pairs(workbook)
+    for review in waiting:
+        assert review.item_id is not None
+        item = deps.store.get_item(review.item_id)
+        client = _client_by_name(workbook, item.client)
+        if item.status not in _STILL_PRICEABLE or client is None:
+            continue
+        if client.delivery is Delivery.EMAIL and not client.billing_emails:
+            continue  # still nowhere to send it
+        rows = next(
+            (
+                found
+                for (consultant, client_name), found in pairs.items()
+                if checks.names_match(consultant, item.consultant)
+                and checks.names_match(client_name, item.client)
+            ),
+            [],
+        )
+        rate_row, problems = checks.rate_row_in_force(rows, item.period) if rows else (None, [])
+        if rate_row is None or problems:
+            continue
+        failures: list[AccountingFailed] = []
+        snapshot = build_snapshot(workbook, rate_row, deps.accounting, failures)
+        if snapshot is None or failures:
+            continue
+        item = deps.store.replace_snapshot(item.id, snapshot)
+        if _nowhere_to_send(item):
+            continue
+        deps.store.answer_review(
+            review.id, {"kind": "resolved", "why": "a billing email was added"}, "answered"
+        )
+        report.note(
+            f"{item.client} has a billing email now: {item.consultant}'s invoice goes ahead"
+        )
+        _ask_about_the_rates(deps, item, report)
+        complete_if_covered(deps, deps.store.get_item(item.id), report)
 
 
 def _retry_unconfirmed(deps: RunDeps, engagements: Engagements, report: RunReport) -> None:
@@ -1044,6 +1150,8 @@ def _process_timesheet(
             item = deps.store.change_status(item.id, ItemStatus.RECEIVED, {})
         if item is not None and unconfirmed:
             findings.append(_unconfirmed_finding(item, unconfirmed))
+        if item is not None and not unconfirmed and _nowhere_to_send(item):
+            findings.append(_no_billing_contact(deps, item))
         if item is not None:
             span = _span(reading)
             for record in deps.store.timesheets_for_item(item.id):

@@ -27,6 +27,7 @@ from finance_ops_agent.domain.engagements import (
     Client,
     Consultant,
     ConsultantType,
+    Delivery,
     Engagement,
     EngagementWorkbook,
     ListRowProblem,
@@ -94,6 +95,14 @@ def workbook_from_accounting(accounting: AccountingSystem) -> EngagementWorkbook
         built = _client(category, customer(category))
         if isinstance(built, Client):
             clients[category] = built
+            if built.delivery is Delivery.EMAIL and not built.billing_emails:
+                # Still a client (decision 65): only its invoices wait.
+                problems.append(
+                    _problem(
+                        f"customer {built.quickbooks_customer}: no email, so its invoices"
+                        " wait until there is one"
+                    )
+                )
         else:
             problems.extend(built)
             bad_clients.add(category)
@@ -149,10 +158,6 @@ def _client(category: str, held: _Party) -> Client | list[ListRowProblem]:
     setup = customer_setup(record.notes)
     problems = [f"customer {record.name}: {said}" for said in setup.problems]
     emails = tuple(split_addresses(record.email))
-    if not emails and setup.delivery.value == "email":
-        problems.append(
-            f"customer {record.name}: no email, so there is nowhere to send its invoices"
-        )
     if record.payment_terms_days is None:
         problems.append(
             f"customer {record.name}: no payment terms"

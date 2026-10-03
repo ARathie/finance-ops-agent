@@ -211,6 +211,18 @@ class TestBadRowsFromTheDocs:
     def test_no_billing_email_for_a_client_delivered_by_email(self) -> None:
         parsed = parse_workbook(workbook(clients=[client_row(7, **{"Billing email": ""})]))
         assert any("billing email" in m for m in problems_on(parsed.problems, "Clients", 7))
+        # Still a client (decision 65): its timesheets are placed, and only its
+        # invoices wait for an address.
+        [client] = parsed.clients
+        assert client.billing_emails == ()
+
+    def test_a_client_with_no_billing_email_and_another_fault_is_dropped(self) -> None:
+        parsed = parse_workbook(
+            workbook(clients=[client_row(7, **{"Billing email": "", "Invoice code": ""})])
+        )
+        problems = problems_on(parsed.problems, "Clients", 7)
+        assert any("billing email" in m for m in problems)
+        assert any("Invoice code" in m for m in problems)
         assert parsed.clients == []
 
     def test_portal_client_needs_no_billing_email(self) -> None:

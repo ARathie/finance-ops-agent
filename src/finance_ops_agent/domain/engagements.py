@@ -223,6 +223,12 @@ class _RowReader:
         return [ListRowProblem(self.sheet, self.raw.row_number, message) for message in self.errors]
 
 
+NO_BILLING_EMAIL_PROBLEM = (
+    "there is no billing email for a client delivered by email, so its invoices"
+    " wait until there is one"
+)
+
+
 def _split(text: str) -> tuple[str, ...]:
     return tuple(part.strip() for part in text.split(";") if part.strip())
 
@@ -237,8 +243,10 @@ def _parse_client(raw: RawRow) -> tuple[Client | None, list[ListRowProblem]]:
     legal_name = row.required("Legal name")
     delivery_value = row.choice("Delivery", Delivery)
     billing_emails = row.emails("Billing email")
-    if delivery_value == Delivery.EMAIL.value and not billing_emails:
-        row.errors.append("there is no billing email for a client delivered by email")
+    # Still a client: its timesheets are read and placed, and only its
+    # invoices wait for an address (decision 65). Dropping the row made every
+    # timesheet for it look like one for a client nobody knows.
+    no_billing_email = delivery_value == Delivery.EMAIL.value and not billing_emails
     # The two letters in the middle of every invoice number for this client
     # (docs/engagement-list.md). There is no rule that derives MT from Mastec,
     # so a blank one is a question for Kevin, never a guess.
@@ -265,7 +273,10 @@ def _parse_client(raw: RawRow) -> tuple[Client | None, list[ListRowProblem]]:
         active=active,
         row_number=raw.row_number,
     )
-    return (client if not row.errors else None), row.problems()
+    problems = row.problems()
+    if no_billing_email:
+        problems.append(ListRowProblem("Clients", raw.row_number, NO_BILLING_EMAIL_PROBLEM))
+    return (client if not row.errors else None), problems
 
 
 def _parse_consultant(raw: RawRow) -> tuple[Consultant | None, list[ListRowProblem]]:
