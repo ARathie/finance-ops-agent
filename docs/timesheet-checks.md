@@ -59,8 +59,8 @@ The code is what the software uses; the message is what Kevin sees. Every review
 | `CANT_READ_ATTACHMENT` | I couldn't read the attachment. | Ask for a PDF or spreadsheet, or reply with the details. |
 | `CONSULTANT_UNKNOWN` | I can't tell which consultant this timesheet is for. | Add or fix the consultant in QuickBooks (or "Other names") and reply "try again", or reply "this is from <consultant>". |
 | `ENGAGEMENT_UNCLEAR` | I can't tell which client this is for, or there is no active engagement for these dates. | Fix the engagement in QuickBooks (or its row) and reply "try again". |
-| `PERIOD_UNCLEAR` | I can't tell which dates this covers. | Reply with the first and last date. |
-| `PERIOD_MISMATCH` | The dates don't line up with the billing schedule for this engagement. | Fix the schedule on the engagement row, or reply with the period to use. |
+| `PERIOD_UNCLEAR` | I can't tell which dates this covers. | Ask the consultant for a timesheet with the dates written out; the new file is read as it arrives, and "ignore" drops this one. (A reply cannot give the dates of a timesheet that has no record yet: `failure-modes.md`, T6.) |
+| `PERIOD_MISMATCH` | The dates don't line up with the billing schedule for this engagement. | Fix the billing schedule on the engagement row, then reply "try again" (decision 67). |
 | `HOURS_MISSING` | I can't find the hours on this timesheet. | Reply with the approved hours. |
 | `HOURS_DONT_ADD_UP` | The daily hours don't add up to the total. | Reply with the hours to use. |
 | `HOURS_UNUSUAL` | The hours look unusually high, or are zero. | Reply "hours are right" or with the correct hours. |
@@ -68,7 +68,7 @@ The code is what the software uses; the message is what Kevin sees. Every review
 | `PART_WEEK_DISAGREES` | A note on the timesheet and the total on the invoice disagree about how many of a straddling week's hours belong to this month. | Reply with the hours to use for that week. |
 | `NO_APPROVAL` | I can't see that the client approved these hours. | Forward the client's approval, or reply "approved by <name> on <date>". |
 | `NOT_SURE` | I read this timesheet but I'm not confident about <field>. | Confirm or correct the field. |
-| `RATE_MISSING` | The engagement list has no rate for these dates. | Add a row with the rate and its start date. |
+| `RATE_MISSING` | The engagement list has no rate for these dates. | Add a row with the rate and its start date, then reply "try again" (decision 67). |
 | `NO_BILLING_CONTACT` | There is no billing email for this client, so I won't invoice this yet. | Add it to the Clients sheet (or the customer in QuickBooks, in QuickBooks mode). The invoice carries on by itself on the next run; nothing to reply (decision 65). |
 | `LIST_ROW_PROBLEM` | A row in the engagement list is incomplete or contradicts another row. | Fix the row named in the email. The question closes by itself on the next run; a reply cannot fix a row (decision 66). |
 | `CORRECTION` | This looks like a corrected version of a timesheet I already handled. | Reply "use the new one" or "ignore". See `status-tracking.md`. |
