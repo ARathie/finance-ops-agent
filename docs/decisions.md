@@ -693,7 +693,7 @@ Decision 60 built the read-only diagnosis for a person to run. This one puts it 
 - **It only ever adds.** The email is changed only while still `pending`, and the store refuses to change one once a send has begun (`amend_pending_outgoing`). If the investigator fails, refuses, runs out of its eight steps, or answers in a shape that does not fit, the email goes out exactly as it was.
 - **On the record:** what it called, and whether each call worked, is kept in the email's outgoing row and in the log.
 
-This is where rule 7 ("Claude reads; code decides") moves. Claude now chooses what to *look at* and what to *suggest*. Code still decides everything that changes anything, and Kevin chooses between the suggestions. The investigator is not given, and cannot reach, anything that acts.
+This is where rule 7 ("Claude reads; code decides") moves. Claude now chooses what to *look at* and what to *suggest*. Code still decides everything that changes anything, and Kevin chooses between the suggestions. The investigator is not given, and cannot reach, anything that acts. (`CLAUDE.md` rule 7 was reworded to say so after this merged: "Claude reads and suggests; code decides".)
 
 Not done here: an eval set for the investigator. Its answers are only scored by the scenarios, which script it. Before relying on it, record live answers for the first live cycle's incidents, the way timesheet readings are recorded (PR 12).
 
@@ -749,3 +749,25 @@ Reading them also turned up one bug outside the investigator. An answered or ign
 - **"Wrong client" (decision 57) comes first on the approval email.** Code reads it before "approve" and "cancel", and before the model reads anything, and the "Sorry, I couldn't tell" reply names it alongside the other two.
 
 The reply prompt versions were renumbered so each name means one text: `reply_v2` is decision 55's, and this work's are `reply_v3` and `reply_v4` (the one in use, carrying decision 55's "try again" examples).
+
+## 63. An email from Kevin that answers nothing is not acted on, and he is told so
+
+Gap G4 in `pathways.md`. A reply from Kevin is matched to what it answers by its reply header and, failing that, by its subject (decision 17). When neither matches -- a new email rather than a reply, a reply to an email the agent did not send, a subject he rewrote -- the only trace was a line in the run report, which Kevin never sees. An instruction he believed he had given simply did not happen.
+
+Decision: **still nothing is done with it, but Kevin is told, once, in the same thread.**
+
+- **Nothing is guessed.** Matching an instruction to "the most likely" invoice is how it lands on the wrong one. Decision 59's reading of his words applies only once it is known what they are about.
+- **The note says what happened and what to do:** that nothing was done; the subject, time and first few lines of what he wrote, so he can tell which email it was; to reply to the email of the agent's it is about. When his email had an attachment, a line says a timesheet is only read when it comes from the consultant's own address or a forwarder's -- the likeliest reason for Kevin forwarding one himself.
+- **Never a loop.** The note is its own kind (`unmatched_reply_email`) and is not something a reply can answer. An email whose reply header names one of these notes -- his answer to it, or his mailbox's out-of-office reply -- is noted in the run report and gets nothing further.
+- Written down once per email, like every email, so a second run sends nothing more.
+
+
+## 64. The Monday summary lists duplicates filed and unpaid invoices past their due date
+
+Gap G5 in `pathways.md`. `emails.md` promised both; the summary had neither. A duplicate filed quietly left only a line in the run report -- an exact copy of a file is never attached to anything -- and nothing looked at invoices whose due date had gone by.
+
+Decision:
+
+- **Duplicates filed last week**, one line each: the file and who sent it for an exact copy; the consultant, client and period for the same hours in a new file. Each is written down with the day it was filed (the agent's own state, not a new table) and kept two weeks, enough for any Monday to see the week before.
+- **Unpaid invoices past their due date**, oldest first: number, client, amount, due date and how many days ago. "Unpaid" is what the daily paid check last heard from QuickBooks, which runs before the summary is written. In manual mode the agent cannot see payments, so the section is left out rather than listing every invoice it ever sent as late.
+- **For Kevin only.** The agent still never writes to a client about payment and sends no reminders (objective 5); chasing payment stays with Kevin, as today. This only saves him looking.

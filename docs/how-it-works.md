@@ -83,7 +83,7 @@ Every timesheet item has a status (see `status-tracking.md`). The agent keeps an
 
 ### 9. The Monday summary
 
-Every Monday the agent emails Kevin: timesheets received last week, invoices sent, items waiting for his review, engagements with no timesheet yet for the last period, emails it set aside, and unpaid invoices when it knows about them.
+Every Monday the agent emails Kevin: timesheets received last week, invoices sent, items waiting for his review, engagements with no timesheet yet for the last period, unpaid invoices past their due date (when QuickBooks can say what is paid), emails it set aside, duplicates it filed, and anything that looks stuck.
 
 ## What the agent never does
 
@@ -146,7 +146,9 @@ flowchart TD
     e(["A new email"]) --> seen{"Same Message-ID seen before?"}
     seen -- "yes" --> skip["Skip it (C8)"]
     seen -- "no" --> who{"Who sent it?"}
-    who -- "Kevin" --> kevin["His reply: picture 5 or 6"]
+    who -- "Kevin" --> answers{"Answers one of the agent's emails? its reply header, then its subject"}
+    answers -- "yes" --> kevin["His reply: picture 5 or 6"]
+    answers -- "no" --> nomatch["Nothing done; Kevin told so once, in the same thread (H10)"]
     who -- "a consultant or their vendor" --> ts["A timesheet: picture 3"]
     who -- "a forwarder on the list" --> ts
     who -- "a client address or domain" --> client["Kevin gets it as it came; nothing in it is acted on (C4)"]

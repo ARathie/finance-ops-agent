@@ -55,7 +55,7 @@ The agent does not follow up on this email and does not track whether the paymen
 Every Monday morning.
 
 - **Subject:** `Weekly summary — week of Sep 7, 2026`
-- **Body:** timesheets received last week (one line each); invoices sent (one line each, with amounts); items waiting for Kevin's review, with the reason; items waiting for approval; engagements with no timesheet yet for the last period; unpaid invoices past their due date, when the agent knows about them; emails set aside from unknown senders; duplicates filed.
+- **Body:** timesheets received last week (one line each); invoices sent (one line each, with amounts); items waiting for Kevin's review, with the reason; items waiting for approval; engagements with no timesheet yet for the last period; unpaid invoices past their due date, oldest first, with how many days ago each was due -- left out in manual mode, where the agent cannot see payments; emails set aside from unknown senders; duplicates filed last week, one line each; and, when there is any, things that look stuck (decisions 61 and 64). It lists late invoices for Kevin only: the agent never writes to a client about payment.
 - **Attachments:** the tracking sheet (`tracking.xlsx`).
 
 ### 6. Something needs attention
@@ -94,6 +94,10 @@ The billing email never mentions the pay rate. The payment instruction never men
 ## Before anything goes to a client
 
 The agent checks, and records that it checked, that: the billing email address is the one on the client's row; the consultant, client, and period on the invoice match the timesheet item; the total is hours × the bill rate from the engagement list; the invoice PDF and the original timesheet file are attached; Kevin is on CC; and no invoice has already been sent for this consultant and period. It writes down that it is about to send, then sends, then writes down that it did. If the agent restarts in between, it checks its Sent folder for the email before trying again. In the rare case where it cannot tell (the program stopped in the instant between the mail server accepting the email and the agent noting it down), it does not guess: it asks Kevin, who is on CC, whether his copy arrived (`SEND_UNCERTAIN`).
+
+## An email from Kevin that answers nothing
+
+When Kevin writes and neither its reply header nor its subject matches an email the agent sent, the agent does nothing with it -- guessing what it answers is how an instruction lands on the wrong invoice -- and replies once in the same thread: *I couldn't tell which of my emails this answers, so I haven't done anything with it*, the start of what he wrote, and what to do (reply to the email it is about; how timesheets get read, when his had an attachment). An answer to that note, or an out-of-office reply to it, gets nothing further (decision 63).
 
 ## Client replies
 

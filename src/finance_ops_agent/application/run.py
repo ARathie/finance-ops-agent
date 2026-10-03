@@ -945,6 +945,9 @@ def _process_timesheet(
     if all(deps.store.timesheet_seen(part.sha256) for part in message.attachments):
         report.duplicates_filed += 1
         report.note(f"duplicate filed quietly: {attachment.filename} from {message.from_address}")
+        summary_steps.note_duplicate_filed(
+            deps, f"{attachment.filename} from {message.from_address} (the same file again)"
+        )
         return IGNORED_FOLDER
     hints = ReadingHints(
         email_subject=message.subject,
@@ -1062,6 +1065,12 @@ def _process_timesheet(
         report.note(
             f"duplicate filed quietly: same dates, hours, and approval ({attachment.filename})"
         )
+        if item is not None:
+            summary_steps.note_duplicate_filed(
+                deps,
+                f"{item.consultant} at {item.client}, {emails.format_period(item.period)}"
+                f" ({attachment.filename}: the same dates, hours and approval again)",
+            )
     if item is not None:
         deps.store.record_timesheet(
             TimesheetRecord(

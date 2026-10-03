@@ -331,6 +331,9 @@ class SummaryData:
     no_timesheet_yet: list[str] = field(default_factory=list)
     set_aside: list[str] = field(default_factory=list)
     duplicates_filed: list[str] = field(default_factory=list)
+    # None when the agent cannot see payments (manual mode): the section is
+    # left out rather than claiming nothing is late (decision 64).
+    unpaid_past_due: list[str] | None = None
     # From the read-only diagnosis (decision 61); the section only appears
     # when there is something in it.
     looks_stuck: list[str] = field(default_factory=list)
@@ -350,6 +353,11 @@ def monday_summary(
         *section("Waiting for your review", data.waiting_for_review),
         *section("Waiting for your approval", data.waiting_for_approval),
         *section("No timesheet yet for the last period", data.no_timesheet_yet),
+        *(
+            section("Unpaid invoices past their due date", data.unpaid_past_due)
+            if data.unpaid_past_due is not None
+            else []
+        ),
         *section("Emails set aside (unknown senders)", data.set_aside),
         *section("Duplicates filed", data.duplicates_filed),
         *(section("Things that look stuck", data.looks_stuck) if data.looks_stuck else []),

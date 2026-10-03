@@ -180,6 +180,7 @@ class ScenarioEnv:
         scripted_reading: TimesheetReading | None = None,
         body: str = "Please see attached.",
         attachments: list[tuple[str, bytes, TimesheetReading | None]] | None = None,
+        in_reply_to: str | None = None,
     ) -> str:
         """`attachments` carries several files in the order the email lists
         them, which is what decides nothing and must be shown to decide
@@ -193,6 +194,8 @@ class ScenarioEnv:
         message["Subject"] = subject
         message["Message-ID"] = message_id or f"<{name}@example>"
         message["Date"] = "Tue, 08 Sep 2026 09:00:00 +0000"
+        if in_reply_to:
+            message["In-Reply-To"] = in_reply_to
         message.set_content(body)
         files = (
             attachments
