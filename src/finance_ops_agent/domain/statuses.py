@@ -64,6 +64,9 @@ ALLOWED_STATUS_CHANGES: dict[ItemStatus, frozenset[ItemStatus]] = {
     ),
     ItemStatus.WAITING_FOR_APPROVAL: frozenset(
         {
+            # Kevin replied "wrong client": the timesheet was never this
+            # engagement's, so its period is still waiting for one (decision 57).
+            ItemStatus.WAITING_FOR_TIMESHEET,
             ItemStatus.INVOICE_SENT,
             ItemStatus.NEEDS_REVIEW,
             ItemStatus.CANCELLED,

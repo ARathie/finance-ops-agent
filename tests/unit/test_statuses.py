@@ -25,6 +25,7 @@ EXPECTED_ALLOWED: set[tuple[ItemStatus, ItemStatus]] = {
     (ItemStatus.READY, ItemStatus.INVOICE_SENT),
     (ItemStatus.READY, ItemStatus.NEEDS_REVIEW),
     (ItemStatus.READY, ItemStatus.CANCELLED),
+    (ItemStatus.WAITING_FOR_APPROVAL, ItemStatus.WAITING_FOR_TIMESHEET),  # "wrong client"
     (ItemStatus.WAITING_FOR_APPROVAL, ItemStatus.INVOICE_SENT),
     (ItemStatus.WAITING_FOR_APPROVAL, ItemStatus.NEEDS_REVIEW),
     (ItemStatus.WAITING_FOR_APPROVAL, ItemStatus.CANCELLED),

@@ -20,6 +20,9 @@ Sent when one or more checks fail (see `timesheet-checks.md`). One email per tim
 
 - **Subject:** `Needs your review: Priya Shah — Acme Corp — Aug 2026 — no approval found`
 - **Body:** what the agent found (same summary as above), each problem in plain words, and what Kevin can do: fix the engagement list, or reply with the answer, or reply "ignore". Examples of replies that work are included.
+- **Emails the agent set aside, and QuickBooks it could not ask** (decision 55) use the same email with their own "What you can do" list in place of the examples: add the address or consultant in QuickBooks and reply "try again", reply "this is from Priya Shah", or reply "ignore" for an email from an unknown address or a timesheet it could not place; "try again" or "ignore" when QuickBooks could not be asked for a fresh copy of the engagements, which also closes by itself once QuickBooks answers. If "try again" still finds nothing, a **Still needs your review** email says what it looked at.
+- **Setting up a new consultant, client or engagement** (decision 56): in QuickBooks mode those emails also carry a short form. Kevin's filled-in form gets back **Set up in QuickBooks? Sam Okafor at Acme Corp**, listing exactly what will be made or reused and both rates, with a one-time number; he replies `confirm 1234` (or `cancel`). Then **Set up in QuickBooks: ...** says what was made, or **Couldn't finish setting up in QuickBooks: ...** says what QuickBooks refused. In dry run: **Dry run — would set up in QuickBooks: ...**, and nothing is made.
+- **"Approve this invoice?"** also says: right consultant but the wrong client? Reply **"wrong client"** (decision 57). The invoice is voided, and Kevin gets a **Needs your review** email with the setup form, filled in with the consultant, their address and the period's first day, and the client left for him. Once the right client is set up (or he sets it up himself and replies "try again"), the timesheet is handled again and a new **Approve this invoice?** comes for the right client. Replied after the invoice has already gone, it changes nothing and says so.
 - **Attachments:** the original timesheet file -- the one showing approval, when the email carried more than one document.
 
 Kevin's reply is read by the agent. Only replies from `kevin@icon-technologies.com` in the same thread count. The agent re-runs the checks with the answer; if it still cannot proceed, it replies again saying what is still missing.
@@ -57,6 +60,8 @@ Every Monday morning.
 
 Sent at most once a day per problem: the mailbox connection stopped working, QuickBooks Online needs to be reconnected (with the steps to do it), or the engagement list could not be opened.
 
+The mailbox and Claude are told about once per outage (decision 58): **Needs your review: the mailbox** or **Needs your review: Claude** once it has lasted an hour -- at once for a refused password or key -- with what it said and what to check, and **Working again: …** when it is over. A blip that clears within the hour is never mentioned. Nothing is lost meanwhile: emails wait and are handled when it answers.
+
 ## To the client
 
 ### 7. Billing email
@@ -90,4 +95,4 @@ The agent checks, and records that it checked, that: the billing email address i
 
 ## Client replies
 
-Replies from clients land in the agent's mailbox. The agent does not answer them. It forwards them to Kevin unchanged and lists them in the Monday summary. Emails in the mailbox that are not timesheets, replies from Kevin, or client replies are left in a *Needs Review* folder for Kevin to look at.
+Replies from clients land in the agent's mailbox. The agent does not answer them, and does nothing with what they say. Each one goes straight to Kevin as **From a client: <subject>**, with who sent it, when, the text (cut short past a few pages, saying so) and every attachment (decision 58). Emails in the mailbox that are not timesheets, replies from Kevin, or client replies are left in a *Needs Review* folder for Kevin to look at.

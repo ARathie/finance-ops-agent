@@ -177,6 +177,82 @@ class TestMessages:
             "<ask@icon-technologies.com>",
         )
 
+    def test_a_set_aside_message_can_be_handled_again(self, store: Store) -> None:
+        """Kevin said who an unknown address is, so its email goes back in the
+        queue as a timesheet (decision 55)."""
+        message = replace(_stored_message(), kind=MessageKind.UNKNOWN_SENDER)
+        store.record_message(message, {})
+        store.mark_processed(message.message_id)
+
+        store.requeue_message(message.message_id, MessageKind.TIMESHEET)
+
+        [again] = store.unprocessed_messages()
+        assert again.message_id == message.message_id
+        assert again.kind is MessageKind.TIMESHEET
+        assert again.attachments == message.attachments
+
+
+class TestPutBackToWaiting:
+    def test_the_timesheets_go_and_the_amounts_clear_in_one_change(self, store: Store) -> None:
+        """Kevin said "wrong client" (decision 57): the file must be readable
+        again, and the history must say why."""
+        made = store.create_item("Priya Shah", "Acme Corp", AUGUST, ItemStatus.RECEIVED, snapshot())
+        store.record_timesheet(
+            TimesheetRecord(
+                item_id=made.id,
+                sha256="b" * 64,
+                reading={},
+                model="m",
+                prompt_version="p",
+                is_duplicate=False,
+                is_correction=False,
+            )
+        )
+        store.set_item_amounts(made.id, Hours(15_600), Money(2_184_000), Money(1_560_000))
+        store.change_status(made.id, ItemStatus.READY, {})
+        store.change_status(made.id, ItemStatus.WAITING_FOR_APPROVAL, {})
+
+        back = store.put_back_to_waiting(made.id, "Kevin said wrong client")
+
+        assert back.status is ItemStatus.WAITING_FOR_TIMESHEET
+        assert (back.approved_hours, back.invoice_amount, back.amount_owed) == (None, None, None)
+        assert store.timesheets_for_item(made.id) == []
+        assert not store.timesheet_seen("b" * 64)
+        last = store.audit_entries(made.id)[-1]
+        assert last.details["why"] == "Kevin said wrong client"
+        assert last.details["timesheets_detached"] == ["b" * 64]
+
+    def test_only_from_waiting_for_approval(self, store: Store) -> None:
+        made = store.create_item("Priya Shah", "Acme Corp", AUGUST, ItemStatus.RECEIVED, snapshot())
+        with pytest.raises(DisallowedStatusChange):
+            store.put_back_to_waiting(made.id, "too early")
+        assert store.get_item(made.id).status is ItemStatus.RECEIVED
+
+    def test_a_message_is_found_by_its_id(self, store: Store) -> None:
+        store.record_message(_stored_message(), {})
+        store.mark_processed("<m1@example>")
+        found = store.get_message("<m1@example>")
+        assert found is not None and found.subject == "August timesheet"
+        assert store.get_message("<nothing@example>") is None
+
+
+class TestRatesTakenAgain:
+    def test_a_new_snapshot_replaces_the_old_and_carries_its_id(self, store: Store) -> None:
+        """An item made when its period ended takes the rates again when its
+        timesheet is read (decision 43); the id comes with them, so a later
+        rename still finds it (decision 39)."""
+        made = store.create_item(
+            "Priya Shah", "Acme Corp", AUGUST, ItemStatus.WAITING_FOR_TIMESHEET, snapshot()
+        )
+        fresh = snapshot().model_copy(update={"bill_rate_cents": 15_000, "engagement_ref": "42"})
+
+        updated = store.replace_snapshot(made.id, fresh)
+
+        assert updated.snapshot.bill_rate_cents == 15_000
+        assert store.get_item(made.id).snapshot.bill_rate_cents == 15_000
+        assert store.find_item_by_engagement("42", AUGUST) is not None
+        assert updated.status is ItemStatus.WAITING_FOR_TIMESHEET
+
 
 class TestTimesheetsReviewsOutgoingState:
     def test_timesheet_records(self, store: Store) -> None:

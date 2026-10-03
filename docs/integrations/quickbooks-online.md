@@ -14,7 +14,7 @@ Icon uses QuickBooks Desktop today and plans to move to QuickBooks Online (QBO).
 
 This is the developer's half of it. `docs/quickbooks-setup.md` is the same setup written for Kevin -- what to click, and the `fops doctor` line that names each thing when it is wrong. Change both together (`CLAUDE.md`, definition of done).
 
-1. Icon finishes the Desktop → Online move. The Customers list in QBO must contain every client, with names matching the "QuickBooks customer" column of the engagement list. The agent never creates customers.
+1. Icon finishes the Desktop → Online move. The Customers list in QBO must contain every client, with names matching the "QuickBooks customer" column of the engagement list. The agent never creates customers on its own; see "Setting up a new engagement" below for the one way it does.
 2. **One product per engagement** -- that is, per consultant *per client*. The product is named for the consultant and sits under a **category named for the client**, so QuickBooks knows it as `MasTec:Sridhar Doraiswamy`, which is what the agent looks it up by (decision 36). The bill rate for that engagement goes on the product. A consultant at two clients has two products under two categories, which is the only way two rates can be held. The rate on the product is what the client is billed (decision 30); an engagement with no product, a product found by the client's other name, a product not yet under a category, two products of one name with no category to tell them apart (refused), or a product with no rate, is refused rather than guessed at. Create the payment terms used (Net 30 etc.).
 3. **Making a product inactive is how an engagement ends.** The agent lists the active products under a category and expects timesheets for those, so QuickBooks is the switch rather than the engagement list's own `Active` column (decision 42). The row stays on the list: the billing schedule and the start date live only there, so a product with no row behind it becomes a LIST_ROW_PROBLEM review rather than a guessed schedule. An empty listing means "not set up yet", never "everything has ended", and the engagement list decides on its own.
 4. Put each engagement's **pay rate on the purchase side of its product** (tick "I purchase this product/service from a vendor", then the cost and the preferred vendor). That is what the agent tells Kevin to pay (decision 38); where it is blank the engagement list is used instead.
@@ -74,6 +74,18 @@ When Kevin cancels an item after the invoice was created, or accepts a corrected
 ### Sandbox or production
 
 Tests never touch either: they replay recorded responses. Live work uses the production keys against Icon's own company (decisions 31 and 51), because the sandbox's sample data is nothing like Icon's setup. Switching between the two is a settings change (`QBO_ENVIRONMENT`, the matching keys, `QBO_REDIRECT_URI`) plus `fops qbo-connect`. `fops doctor` fails until the stored connection matches the setting.
+
+## Setting up a new engagement (decision 56)
+
+Only after Kevin has filled in the setup form and confirmed it with the one-time number. `QuickBooksOnline.set_up_engagement` finds each record before it creates it, in dependency order, so a second attempt finishes rather than duplicates:
+
+1. **Term**: an existing term whose `DueDays` matches, else `POST /term` with `Name` `Net N` and `DueDays`.
+2. **Customer** (new client only): found by display or company name as invoicing finds it; else `POST /customer` with `DisplayName`, `CompanyName`, `PrimaryEmailAddr`, `SalesTermRef`, and `Notes` `Invoice code: XX`. An existing customer without an invoice code gets one by sparse update; nothing else on it changes.
+3. **Category**: an `Item` of `Type` `Category` named as the customer, else `POST /item` with `Name` and `Type: Category`.
+4. **Vendor**: by `DisplayName`. An existing vendor with a different email is refused; one with no email gets this one by sparse update; else `POST /vendor` with `DisplayName`, `CompanyName` (the firm), `PrimaryEmailAddr`, `TermRef`.
+5. **Product**: by `FullyQualifiedName` `Client:Consultant`. An existing one at a different rate is refused; else `POST /item` with `Type: Service`, `SubItem: true`, `ParentRef` the category, `UnitPrice`, `PurchaseCost`, `PrefVendorRef`, `PurchaseDesc` `Start: YYYY-MM-DD`, and the `IncomeAccountRef` and `ExpenseAccountRef` copied from an existing engagement product (refused when there is none to copy).
+
+Every setup write asks for `minorversion=75` unless `FOPS_QBO_MINORVERSION` already names one: creating a category needs a newer record shape than the default. Contract tests: `tests/contract/test_quickbooks_setup.py`.
 
 ## Proving the create path: `fops qbo-test-invoice`
 

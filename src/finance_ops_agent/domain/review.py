@@ -32,6 +32,7 @@ class ReviewCode(StrEnum):
     QUICKBOOKS_FAILED = "QUICKBOOKS_FAILED"
     MAILBOX_PROBLEM = "MAILBOX_PROBLEM"
     QUICKBOOKS_RECONNECT = "QUICKBOOKS_RECONNECT"
+    CLAUDE_UNAVAILABLE = "CLAUDE_UNAVAILABLE"
 
 
 REVIEW_MESSAGES: dict[ReviewCode, str] = {
@@ -82,4 +83,5 @@ REVIEW_MESSAGES: dict[ReviewCode, str] = {
     ),
     ReviewCode.MAILBOX_PROBLEM: "I can't read the mailbox.",
     ReviewCode.QUICKBOOKS_RECONNECT: "QuickBooks needs to be reconnected.",
+    ReviewCode.CLAUDE_UNAVAILABLE: "I can't reach Claude, which reads the timesheets.",
 }

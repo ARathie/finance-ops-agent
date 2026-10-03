@@ -31,7 +31,7 @@ Input: the attachment (see above), the email text, and, for spelling only, the l
 
 ### 3. Read Kevin's reply
 
-Input: Kevin's reply text and the review reasons that were asked. Output (structured): for each reason, the answer as a typed value (`consultant_name`, `client_name`, `period_start` / `period_end`, `hours`, `approval_note`, `ignore`, `use_new_one`, `unclear`). Code applies it; `unclear` means the agent asks again. Approval replies (`approve` / `cancel`) are matched by code without the model.
+Input: Kevin's reply text and the review reasons that were asked. Output (structured): for each reason, the answer as a typed value (`consultant_name`, `client_name`, `period_start` / `period_end`, `hours`, `approval_note`, `ignore`, `use_new_one`, `try_again`, `unclear`). `try_again` is Kevin asking the agent to look again after fixing something in QuickBooks; it arrived with prompt `reply_v2` (decision 55). Code applies it; `unclear` means the agent asks again. Approval replies (`approve` / `cancel`) are matched by code without the model.
 
 ## Prompt versions
 

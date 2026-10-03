@@ -54,11 +54,11 @@ The code is what the software uses; the message is what Kevin sees. Every review
 
 | Code | Message Kevin sees | What usually fixes it |
 |---|---|---|
-| `UNKNOWN_SENDER` | This came from an address I don't recognise. | Add the address to the consultant's row, or reply "ignore". |
+| `UNKNOWN_SENDER` | This came from an address I don't recognise. | Add the address to the consultant's vendor in QuickBooks (or their row) and reply "try again", reply "this is from <consultant>", or reply "ignore". Kevin is emailed when the email has an attachment; the rest wait in the Monday summary. |
 | `NO_ATTACHMENT` | This looks like a timesheet email but has no attachment I can use. | Ask the consultant to resend, or reply with the hours and dates. |
 | `CANT_READ_ATTACHMENT` | I couldn't read the attachment. | Ask for a PDF or spreadsheet, or reply with the details. |
-| `CONSULTANT_UNKNOWN` | I can't tell which consultant this timesheet is for. | Add the name to "Other names", or reply with the consultant's name. |
-| `ENGAGEMENT_UNCLEAR` | I can't tell which client this is for, or there is no active engagement for these dates. | Fix the engagement row, or reply with the client. |
+| `CONSULTANT_UNKNOWN` | I can't tell which consultant this timesheet is for. | Add or fix the consultant in QuickBooks (or "Other names") and reply "try again", or reply "this is from <consultant>". |
+| `ENGAGEMENT_UNCLEAR` | I can't tell which client this is for, or there is no active engagement for these dates. | Fix the engagement in QuickBooks (or its row) and reply "try again". |
 | `PERIOD_UNCLEAR` | I can't tell which dates this covers. | Reply with the first and last date. |
 | `PERIOD_MISMATCH` | The dates don't line up with the billing schedule for this engagement. | Fix the schedule on the engagement row, or reply with the period to use. |
 | `HOURS_MISSING` | I can't find the hours on this timesheet. | Reply with the approved hours. |
@@ -74,12 +74,13 @@ The code is what the software uses; the message is what Kevin sees. Every review
 | `CORRECTION` | This looks like a corrected version of a timesheet I already handled. | Reply "use the new one" or "ignore". See `status-tracking.md`. |
 | `SEND_FAILED` | I couldn't send the billing email. I'll keep trying; please check the mailbox. | Usually fixes itself; otherwise check the mailbox connection. |
 | `SEND_UNCERTAIN` | I sent the billing email for <item> but couldn't confirm it left the server. You're on CC: reply "received" if you got it, or "resend". | Reply "received" or "resend". |
-| `QUICKBOOKS_FAILED` | I couldn't create the invoice in QuickBooks. I'll keep trying; please check the connection. | Reconnect QuickBooks (steps are in the email). |
-| `MAILBOX_PROBLEM` | I can't read the mailbox. | Follow the steps in the email. |
+| `QUICKBOOKS_FAILED` | I couldn't create the invoice in QuickBooks. I'll keep trying; please check the connection. Also used, with its own wording, when QuickBooks could not be asked for a fresh copy of the engagements, or for the rates of a timesheet in hand (decision 55): those close by themselves once QuickBooks answers. | Usually nothing; otherwise check the connection and reply "try again", or reply "ignore". |
+| `MAILBOX_PROBLEM` | I can't read the mailbox. | Raised once it has failed for an hour, or at once for a refused password; closes itself, with a "working again" email, when the mailbox answers (decision 58). Follow the steps in the email. |
+| `CLAUDE_UNAVAILABLE` | I can't reach Claude, which reads the timesheets. | The same: raised after an hour, or at once for a refused key; emails wait and are read when Claude answers. Check the Anthropic key or the service status (decision 58). |
 | `QUICKBOOKS_RECONNECT` | QuickBooks needs to be reconnected. | Follow the steps in the email. |
 
 Duplicates are not review items: a second copy of the same file, or a timesheet with exactly the same hours and dates for the same consultant and period, is filed with a note in the Monday summary and nothing else happens.
 
 ## How Kevin answers
 
-Kevin replies to the review email. The agent only accepts answers that come from Kevin's address as a reply in the same email thread. Short answers work: "this is Acme", "use 152 hours", "approved by Jane Doe on 9/3", "ignore", "use the new one". The agent re-runs the checks with the answer and either carries on or asks again. Kevin can also just fix the engagement list; the agent notices at its next run and re-checks anything waiting.
+Kevin replies to the review email. The agent only accepts answers that come from Kevin's address as a reply in the same email thread. Short answers work: "this is Acme", "use 152 hours", "approved by Jane Doe on 9/3", "ignore", "use the new one", and, for an email the agent set aside, "try again" or "this is from Priya Shah" (decision 55), or the setup form filled in to make a new consultant, client or engagement in QuickBooks, confirmed with the number the agent sends back (decision 56). To an "Approve this invoice?" email, "wrong client" voids it and sets the timesheet aside for the right client (decision 57). The agent re-runs the checks with the answer and either carries on or asks again. Kevin can also just fix the engagement list; the agent notices at its next run and re-checks anything waiting.

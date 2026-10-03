@@ -9,16 +9,18 @@ review answers go through the reader, and code applies them.
 
 import re
 
-from finance_ops_agent.application import outgoing
+from finance_ops_agent.application import engagement_copy, outages, outgoing, set_aside
 from finance_ops_agent.application.completion import complete_if_covered
 from finance_ops_agent.application.context import RunDeps, RunReport
-from finance_ops_agent.domain import emails
+from finance_ops_agent.domain import emails, setup
 from finance_ops_agent.domain.items import Item, OutgoingRecord, ReviewRecord
 from finance_ops_agent.domain.messages import StoredMessage
 from finance_ops_agent.domain.reading import ReplyAnswer, ReplyAnswerKind
+from finance_ops_agent.domain.review import ReviewCode
 from finance_ops_agent.domain.statuses import ItemStatus
+from finance_ops_agent.ports.inbox import NEEDS_REVIEW_FOLDER
 
-_ANSWERABLE = ("approval_request", "review_email", "ask_again_email")
+_ANSWERABLE = ("approval_request", "review_email", "ask_again_email", "setup_request")
 
 
 def _stripped_subject(subject: str) -> str:
@@ -72,7 +74,9 @@ def _handle_approval_reply(
     assert record.item_id is not None
     item = deps.store.get_item(record.item_id)
     word = _first_word(body)
-    if word == "approve":
+    if re.findall(r"[a-zA-Z]+", body.casefold())[:2] == ["wrong", "client"]:
+        _handle_wrong_client(deps, message, record, item, report)
+    elif word == "approve":
         if item.status is ItemStatus.WAITING_FOR_APPROVAL:
             outgoing.approve_item(deps, item, report)
             report.note(f"Kevin approved: {item.consultant} at {item.client}")
@@ -89,13 +93,77 @@ def _handle_approval_reply(
             subject=f"Re: {record.payload.get('subject', '')}",
             in_reply_to=message.message_id,
             body=(
-                'Sorry - I only understand replies that start with "approve" or'
-                ' "cancel" on this one. Nothing has been sent.'
+                'Sorry - I only understand replies that start with "approve",'
+                ' "cancel" or "wrong client" on this one. Nothing has been sent.'
             ),
         )
         outgoing.enqueue_email(
             deps, "ask_again_email", f"askword:{message.message_id}", item.id, ask
         )
+
+
+def _handle_wrong_client(
+    deps: RunDeps,
+    message: StoredMessage,
+    record: OutgoingRecord,
+    item: Item,
+    report: RunReport,
+) -> None:
+    """Right consultant, wrong client (decision 57).
+
+    The draft is voided, as "cancel" voids it. The item is not cancelled: its
+    engagement's period still needs its own timesheet, so it goes back to
+    waiting for one, and the timesheet that was wrongly put on it is detached
+    so it can be read again. That email is then set aside with the setup form,
+    never to be put on this client again, and is handled once Kevin has said
+    -- or set up -- the client it is for."""
+    if item.status is not ItemStatus.WAITING_FOR_APPROVAL:
+        ask = emails.OutgoingEmail(
+            to=(deps.settings.admin_email,),
+            subject=f"Re: {record.payload.get('subject', '')}",
+            in_reply_to=message.message_id,
+            body=(
+                f"This invoice is no longer waiting for your approval (it is"
+                f" {item.status.value.replace('_', ' ')}), so I haven't changed anything."
+                " If it has already gone to the client, it needs correcting as a"
+                " corrected timesheet would."
+            ),
+        )
+        outgoing.enqueue_email(
+            deps, "ask_again_email", f"wrongclient:{message.message_id}", item.id, ask
+        )
+        return
+    timesheet = outgoing.active_timesheet_attachment(deps, item)
+    originals = deps.store.message_ids_for_item(item.id)
+    wrong = item.client
+    outgoing.cancel_invoices(deps, item, report)
+    item = deps.store.put_back_to_waiting(item.id, f"Kevin said the timesheet is not for {wrong}")
+    report.note(f"Kevin said wrong client: {item.consultant}'s timesheet is not for {wrong}")
+    for message_id in originals:
+        original = deps.store.get_message(message_id)
+        if original is None:
+            continue
+        review = (
+            f'You said {item.consultant}\'s timesheet ("{original.subject}") is not for'
+            f" {wrong}. I voided that invoice; {wrong} is waiting for its own timesheet for"
+            f" the same dates. Which client is this one for?"
+        )
+        if deps.store.open_review(None, ReviewCode.ENGAGEMENT_UNCLEAR.value, review):
+            report.reviews_opened += 1
+        set_aside.set_aside(
+            deps,
+            original,
+            ReviewCode.ENGAGEMENT_UNCLEAR,
+            review,
+            email_kevin=True,
+            timesheet=timesheet,
+            prefill_extra={
+                setup.CONSULTANT: item.consultant,
+                setup.START: item.period.start.isoformat(),
+            },
+            not_client=wrong,
+        )
+        outages.file_in(deps, message_id, NEEDS_REVIEW_FOLDER)
 
 
 def _apply_answer(
@@ -112,6 +180,12 @@ def _apply_answer(
     )
     if answer.kind is ReplyAnswerKind.UNCLEAR or target is None:
         return False
+    if answer.kind is ReplyAnswerKind.TRY_AGAIN:
+        # Nothing to record: whatever waits on QuickBooks is asked again on
+        # every run anyway, and closing the review here would let an item go
+        # ahead on figures nobody confirmed (decision 55).
+        report.note("Kevin asked me to try again; I do on every run")
+        return True
     if answer.kind is ReplyAnswerKind.IGNORE:
         for review in open_reviews:
             deps.store.answer_review(review.id, {"kind": "ignore"}, "ignored")
@@ -140,6 +214,21 @@ def _handle_review_reply(
     body: str,
     report: RunReport,
 ) -> None:
+    # Answers about one set-aside email, or about QuickBooks being unreachable,
+    # go to their own handlers: put to the reader alongside every other open
+    # question without an item, an "ignore" would close them all (decision 55).
+    if record.payload.get("set_aside"):
+        set_aside.handle_reply(deps, message, record, body, report)
+        return
+    if record.payload.get("engagement_refresh"):
+        engagement_copy.handle_reply(deps, message, record, body, report)
+        return
+    if record.payload.get("outage"):
+        # Read by code, not Claude: Claude may be the thing that is down.
+        if _first_word(body) == "ignore":
+            outages.close_review(deps, str(record.payload["outage"]))
+            report.note("Kevin closed the question about an outage")
+        return
     item = None if record.item_id is None else deps.store.get_item(record.item_id)
     if record.payload.get("uncertain_key"):
         outgoing.answer_send_uncertain(deps, record, body, report)

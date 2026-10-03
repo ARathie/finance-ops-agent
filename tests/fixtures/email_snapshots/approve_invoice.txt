@@ -5,6 +5,7 @@ Subject: Approve? Invoice for Acme Corp — Priya Shah — Aug 2026 — $21,840.
 Attachments: invoice-ICON-2026-1001.pdf, priya-august.pdf
 
 Everything checks out. Reply "approve" to send, or "cancel" to stop.
+Right consultant but the wrong client? Reply "wrong client": I'll void this invoice and help you set up the right one.
 
 Client: Acme Corp
 Billing email: ap@acme.example

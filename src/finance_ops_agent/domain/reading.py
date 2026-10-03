@@ -164,6 +164,9 @@ class ReplyAnswerKind(StrEnum):
     APPROVAL_NOTE = "approval_note"
     IGNORE = "ignore"
     USE_NEW_ONE = "use_new_one"
+    # "Try again": Kevin has fixed something in QuickBooks or the engagement
+    # list and wants the agent to look again (decision 55).
+    TRY_AGAIN = "try_again"
     UNCLEAR = "unclear"
 
 

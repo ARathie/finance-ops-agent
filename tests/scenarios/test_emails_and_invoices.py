@@ -716,7 +716,9 @@ class TestWhenQuickBooksIsUnhappy:
         from finance_ops_agent.ports.accounting import AccountingFailed
 
         self._auto(env)
-        env.accounting.fail_with = AccountingFailed("Business Validation Error: no such account")
+        env.accounting.fail_create_with = AccountingFailed(
+            "Business Validation Error: no such account"
+        )
         report = env.run()
 
         review = next(r for r in env.store.open_reviews() if r.code == "QUICKBOOKS_FAILED")
@@ -747,7 +749,7 @@ class TestWhenQuickBooksIsUnhappy:
         from finance_ops_agent.ports.inbox import NEEDS_REVIEW_FOLDER
 
         self._auto(env)
-        env.accounting.fail_with = AccountingFailed("Duplicate Document Number Error")
+        env.accounting.fail_create_with = AccountingFailed("Duplicate Document Number Error")
         env.run()
 
         item = env.the_item()
@@ -763,7 +765,7 @@ class TestWhenQuickBooksIsUnhappy:
         from finance_ops_agent.ports.accounting import AccountingNeedsReconnect
 
         self._auto(env)
-        env.accounting.fail_with = AccountingNeedsReconnect("the refresh token has expired")
+        env.accounting.fail_create_with = AccountingNeedsReconnect("the refresh token has expired")
         report = env.run()
 
         assert report.quickbooks_unavailable
@@ -949,8 +951,9 @@ class TestWhatIconPays:
     def test_an_accounting_system_that_cannot_answer_does_not_stop_the_run(
         self, env: ScenarioEnv
     ) -> None:
-        """A timesheet is still read and the engagement list still has a rate;
-        the invoice is made on a later run anyway."""
+        """The timesheet is still read and kept, and Kevin hears about it; what
+        waits is the invoice, until QuickBooks can confirm the rates
+        (decision 55). It carries on by itself once it can."""
         from finance_ops_agent.ports.accounting import AccountingFailed
 
         env.accounting.fail_with = AccountingFailed("service unavailable")
@@ -958,8 +961,13 @@ class TestWhatIconPays:
         env.run()
 
         item = env.the_item()
-        assert item.status is ItemStatus.READY
-        assert item.snapshot.pay_rate_cents == 10_000  # the workbook's
+        assert item.status is ItemStatus.NEEDS_REVIEW
+        assert item.snapshot.pay_rate_cents == 10_000  # the workbook's, meanwhile
+        assert any(s.startswith("Timesheet received") for s in env.sent_subjects())
+
+        env.accounting.fail_with = None
+        env.run()
+        assert env.the_item().status is ItemStatus.READY
 
 
 class TestContactsAndTermsFromQuickBooks:
@@ -1066,8 +1074,10 @@ class TestContactsAndTermsFromQuickBooks:
         env.run()
 
         item = env.the_item()
-        assert item.status is ItemStatus.READY
         assert item.snapshot.billing_emails == ["ap@acme.example"]
+        # Where the invoice goes was not confirmed, so it waits and Kevin is told.
+        assert item.status is ItemStatus.NEEDS_REVIEW
+        assert any("no customer called that" in r.message for r in env.store.open_reviews())
 
 
 class TestARenamedEngagement:

@@ -12,7 +12,13 @@ is the same question QuickBooksOnline answers by reading the private note.
 from collections.abc import Sequence
 
 from finance_ops_agent.domain.invoices import Invoice
-from finance_ops_agent.ports.accounting import CreatedInvoice, EngagementListing
+from finance_ops_agent.domain.setup import EngagementSetup
+from finance_ops_agent.ports.accounting import (
+    AccountingFailed,
+    CreatedInvoice,
+    EngagementListing,
+    SetupDone,
+)
 from finance_ops_agent.ports.pdf import PdfRenderer
 from finance_ops_agent.ports.store import Store
 
@@ -62,6 +68,14 @@ class ManualQuickBooks:
         # Nothing to enumerate: in manual mode QuickBooks Desktop is not
         # reachable, so the engagement list says which engagements are live.
         return EngagementListing(live=[])
+
+    def set_up_engagement(self, setup: EngagementSetup) -> SetupDone:
+        # The agent only offers to set things up when it builds its engagements
+        # from QuickBooks Online; manual mode has nothing it could write to.
+        raise AccountingFailed(
+            "QuickBooks Online is not connected, so I can't set this up there."
+            " Add it to the engagement list instead."
+        )
 
     def paid_status(self, external_ids: list[str]) -> dict[str, bool]:
         # Manual mode cannot see payments; QuickBooks Online (PR 9) can.

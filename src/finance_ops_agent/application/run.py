@@ -12,16 +12,18 @@ table once per thing, and sent draft-then-send with restart reconciliation
 """
 
 import hashlib
+from dataclasses import dataclass
 from datetime import date
 
 from finance_ops_agent import logs
+from finance_ops_agent.application import outages, paid_check, set_aside
 from finance_ops_agent.application import outgoing as outgoing_steps
-from finance_ops_agent.application import paid_check
 from finance_ops_agent.application import replies as reply_steps
 from finance_ops_agent.application import summary as summary_steps
 from finance_ops_agent.application.completion import complete_if_covered
 from finance_ops_agent.application.context import Mode, RunDeps, RunReport, Settings
-from finance_ops_agent.application.from_quickbooks import workbook_from_accounting
+from finance_ops_agent.application.engagement_copy import Engagements
+from finance_ops_agent.application.senders import decide_kind
 from finance_ops_agent.domain import checks, emails
 from finance_ops_agent.domain.checks import Finding, same_addresses, split_addresses
 from finance_ops_agent.domain.emails import EmailAttachment, TimesheetSummary
@@ -34,7 +36,6 @@ from finance_ops_agent.domain.engagements import (
     EngagementWorkbook,
     ListRowProblem,
     Vendor,
-    parse_workbook,
 )
 from finance_ops_agent.domain.invoice_numbers import codes_for_client
 from finance_ops_agent.domain.items import EngagementSnapshot, Item, TimesheetRecord
@@ -52,14 +53,21 @@ from finance_ops_agent.domain.review import ReviewCode
 from finance_ops_agent.domain.statuses import ItemStatus
 from finance_ops_agent.ports.accounting import (
     AccountingFailed,
+    AccountingNeedsReconnect,
     AccountingParty,
     AccountingSystem,
     EngagementRates,
 )
-from finance_ops_agent.ports.inbox import IGNORED_FOLDER, NEEDS_REVIEW_FOLDER, PROCESSED_FOLDER
-from finance_ops_agent.ports.reader import CantReadAttachmentError
+from finance_ops_agent.ports.inbox import (
+    IGNORED_FOLDER,
+    NEEDS_REVIEW_FOLDER,
+    PROCESSED_FOLDER,
+    MailboxFailed,
+)
+from finance_ops_agent.ports.reader import CantReadAttachmentError, ReaderUnavailable
 
 MAILBOX_POSITION_KEY = "mailbox_position"
+LAST_EXPECTED_CHECK_KEY = "last_expected_check"
 
 __all__ = ["Mode", "RunDeps", "RunReport", "Settings", "run_once"]
 
@@ -67,11 +75,7 @@ __all__ = ["Mode", "RunDeps", "RunReport", "Settings", "run_once"]
 def run_once(deps: RunDeps, report: RunReport | None = None) -> RunReport:
     report = report or RunReport()
     logs.log("run started", mode=deps.settings.mode.value)
-    workbook = _engagements(deps, report)
-    _report_list_problems(deps, workbook, report)
-    _create_expected_items(deps, workbook, report)
-    _ingest_mailbox(deps, workbook, report)
-    _process_messages(deps, workbook, report)
+    _engagement_work(deps, report)
     outgoing_steps.plan_outgoing(deps, report)
     paid_check.check_paid_invoices(deps, report)
     tracking_sha = _write_tracking(deps)
@@ -93,6 +97,47 @@ def run_once(deps: RunDeps, report: RunReport | None = None) -> RunReport:
     return report
 
 
+def _engagement_work(deps: RunDeps, report: RunReport) -> None:
+    """Everything that needs the engagement list.
+
+    The list comes from the agent's own copy of QuickBooks, taken once a day
+    and again whenever something does not match it (decision 55), so a run
+    over a quiet mailbox asks QuickBooks nothing (decision 54). In list mode
+    the spreadsheet is read every run, which costs nothing.
+    """
+    today = deps.clock.today().isoformat()
+    position = deps.store.get_state(MAILBOX_POSITION_KEY)
+    mailbox_up = True
+    try:
+        fetched, new_position = deps.inbox.new_messages(position)
+    except MailboxFailed as error:
+        # Nothing is lost: the position does not move, so the same mail is
+        # fetched when the mailbox answers. Everything already stored is still
+        # handled below (decision 58).
+        outages.failed(deps, report, outages.MAILBOX, error, error.lasting)
+        mailbox_up, fetched, new_position = False, [], position or ""
+    engagements = Engagements(deps, report)
+    _report_list_problems(deps, engagements.workbook, report)
+    if deps.store.get_state(LAST_EXPECTED_CHECK_KEY) != today:
+        asked = _create_expected_items(deps, engagements.workbook, report)
+        # Not marked done when QuickBooks could not be asked: the next run
+        # tries again rather than letting an outage hide a period for a day.
+        if engagements.complete and asked:
+            deps.store.set_state(LAST_EXPECTED_CHECK_KEY, today)
+    if mailbox_up:
+        try:
+            _ingest_mailbox(deps, engagements, fetched, new_position, report)
+        except MailboxFailed as error:
+            outages.failed(deps, report, outages.MAILBOX, error, error.lasting)
+        else:
+            outages.working(deps, report, outages.MAILBOX)
+    _retry_unconfirmed(deps, engagements, report)
+    _process_messages(deps, engagements, report)
+    # After the messages, so a "try again" Kevin sent this run is acted on now.
+    if set_aside.look_again(deps, engagements, report):
+        _process_messages(deps, engagements, report)
+
+
 def _write_tracking(deps: RunDeps) -> str | None:
     if deps.render_tracking is None:
         return None
@@ -108,26 +153,6 @@ def _open_review(deps: RunDeps, report: RunReport, item_id: int | None, finding:
         report.reviews_opened += 1
         report.note(f"needs Kevin's review ({finding.code.value}): {finding.message}")
         logs.log("review opened", item_id=item_id, code=finding.code.value)
-
-
-def _engagements(deps: RunDeps, report: RunReport) -> EngagementWorkbook:
-    """The engagement list this run works from.
-
-    Built from QuickBooks where the setting says so (decision 53). If
-    QuickBooks cannot be asked, the spreadsheet or its imported copy stands in
-    for this run, and the run says so: a QuickBooks outage must not stop mail
-    being read (decision 38), and it must not read as Icon having no work.
-    """
-    if deps.settings.engagements_from == "quickbooks":
-        try:
-            return workbook_from_accounting(deps.accounting)
-        except AccountingFailed as error:
-            logs.log("could not build the engagements from quickbooks", said=str(error)[:200])
-            report.note(
-                "QuickBooks could not be asked for the engagements, so this run used the"
-                " engagement list instead"
-            )
-    return parse_workbook(deps.engagement_list.load())
 
 
 def describe_problem(problem: ListRowProblem) -> str:
@@ -218,6 +243,7 @@ def build_snapshot(
     workbook: EngagementWorkbook,
     rate_row: Engagement,
     accounting: AccountingSystem | None = None,
+    failures: list[AccountingFailed] | None = None,
 ) -> EngagementSnapshot | None:
     """The engagement row as the item will remember it.
 
@@ -230,7 +256,11 @@ def build_snapshot(
     The bill rate is the one that must be right before anything leaves: it is
     what the client is charged and what Kevin approves. Taking it here means a
     rate that has drifted is found when the timesheet is read, rather than by
-    creating the invoice and voiding it."""
+    creating the invoice and voiding it.
+
+    Where the accounting system could not be asked, what it said is added to
+    `failures`, so a caller with a timesheet in hand can tell Kevin rather than
+    invoice on figures nobody confirmed (decision 55)."""
     client = _client_by_name(workbook, rate_row.client)
     consultant = _consultant_by_name(workbook, rate_row.consultant)
     if client is None or consultant is None:
@@ -250,7 +280,7 @@ def build_snapshot(
     pay_rate_cents = rate_row.pay_rate.cents
     said: list[str] = []
     engagement_ref = ""
-    rates = _rates_from_accounting(accounting, rate_row, client)
+    rates = _rates_from_accounting(accounting, rate_row, client, failures)
     who = f"{rate_row.consultant} at {rate_row.client}"
     if rates is not None:
         engagement_ref = rates.ref
@@ -289,7 +319,9 @@ def build_snapshot(
     billing_emails = list(client.billing_emails)
     payment_terms_days = client.payment_terms_days
     legal_name = client.legal_name
-    held = _party_from_accounting(accounting, "customer", client.quickbooks_customer or legal_name)
+    held = _party_from_accounting(
+        accounting, "customer", client.quickbooks_customer or legal_name, failures
+    )
     if held is not None:
         legal_name = held.company or held.name or legal_name
         held_emails = split_addresses(held.email)
@@ -308,7 +340,9 @@ def build_snapshot(
                     " QuickBooks' terms. Make them agree."
                 )
             payment_terms_days = held.payment_terms_days
-    paid_to = _party_from_accounting(accounting, "payee", rates.payee_ref if rates else "")
+    paid_to = _party_from_accounting(
+        accounting, "payee", rates.payee_ref if rates else "", failures
+    )
     if paid_to is not None and paid_to.payment_terms_days is not None:
         if paid_to.payment_terms_days != pay_timing:
             said.append(
@@ -340,7 +374,10 @@ def build_snapshot(
 
 
 def _rates_from_accounting(
-    accounting: "AccountingSystem | None", rate_row: Engagement, client: Client
+    accounting: "AccountingSystem | None",
+    rate_row: Engagement,
+    client: Client,
+    failures: list[AccountingFailed] | None = None,
 ) -> "EngagementRates | None":
     """Ask the accounting system, and carry on without it when it cannot say.
 
@@ -358,6 +395,8 @@ def _rates_from_accounting(
     try:
         return accounting.engagement_rates(rate_row.consultant, names)
     except AccountingFailed as error:
+        if failures is not None:
+            failures.append(error)
         logs.log(
             "could not ask the accounting system about the rates",
             consultant=rate_row.consultant,
@@ -368,7 +407,10 @@ def _rates_from_accounting(
 
 
 def _party_from_accounting(
-    accounting: "AccountingSystem | None", which: str, lookup: str
+    accounting: "AccountingSystem | None",
+    which: str,
+    lookup: str,
+    failures: list[AccountingFailed] | None = None,
 ) -> "AccountingParty | None":
     """A customer or payee record, or None where the accounting system cannot
     say. Like the rates, a record QuickBooks cannot find or cannot serve right
@@ -379,6 +421,8 @@ def _party_from_accounting(
     try:
         return accounting.customer(lookup) if which == "customer" else accounting.payee(lookup)
     except AccountingFailed as error:
+        if failures is not None:
+            failures.append(error)
         logs.log(
             "could not ask the accounting system about a contact",
             which=which,
@@ -395,31 +439,41 @@ def _find_item(
     client: str,
     period: BillingPeriod,
 ) -> Item | None:
-    """This engagement's item for this period, by the accounting system's id
-    first and by name second.
+    """This engagement's item for this period, by name first and by the
+    accounting system's id when the name finds nothing.
 
     A client or consultant renamed in the accounting system is the same
     engagement, and its id says so; looking only by name would have made a
     second item and expected a second invoice (docs/decisions.md #39). Where
     the item is found by id under different names, the names catch up.
+
+    The name is tried first because it is a question for the agent's own
+    store: an item found that way needs nothing from QuickBooks, and asking
+    QuickBooks for every engagement's id on every run only to confirm an item
+    already in hand was most of what a quiet run did (decision 54). Only a
+    name the store does not know can be a rename.
     """
-    if rate_row is not None:
-        client_row = _client_by_name(workbook, rate_row.client)
-        if client_row is not None:
-            rates = _rates_from_accounting(deps.accounting, rate_row, client_row)
-            if rates is not None and rates.ref:
-                found = deps.store.find_item_by_engagement(rates.ref, period)
-                if found is not None:
-                    if (found.consultant, found.client) != (consultant, client):
-                        logs.log(
-                            "an engagement was renamed; catching the item up",
-                            item_id=found.id,
-                            was=f"{found.consultant} at {found.client}",
-                            now=f"{consultant} at {client}",
-                        )
-                        return deps.store.relabel_item(found.id, consultant, client)
-                    return found
-    return deps.store.find_item(consultant, client, period)
+    found = deps.store.find_item(consultant, client, period)
+    if found is not None or rate_row is None:
+        return found
+    client_row = _client_by_name(workbook, rate_row.client)
+    if client_row is None:
+        return None
+    rates = _rates_from_accounting(deps.accounting, rate_row, client_row)
+    if rates is None or not rates.ref:
+        return None
+    found = deps.store.find_item_by_engagement(rates.ref, period)
+    if found is None:
+        return None
+    if (found.consultant, found.client) != (consultant, client):
+        logs.log(
+            "an engagement was renamed; catching the item up",
+            item_id=found.id,
+            was=f"{found.consultant} at {found.client}",
+            now=f"{consultant} at {client}",
+        )
+        return deps.store.relabel_item(found.id, consultant, client)
+    return found
 
 
 def _ask_about_the_rates(deps: RunDeps, item: Item, report: RunReport) -> None:
@@ -455,7 +509,7 @@ def _ask_about_the_rates(deps: RunDeps, item: Item, report: RunReport) -> None:
 
 def _which_engagements_are_live(
     deps: RunDeps, workbook: EngagementWorkbook, report: RunReport
-) -> LiveEngagements:
+) -> tuple[LiveEngagements, bool]:
     """Ask the accounting system which engagements are live, and join.
 
     QuickBooks holds the engagements now, so it is what says one has finished:
@@ -474,16 +528,19 @@ def _which_engagements_are_live(
         # Built from QuickBooks' live products in the first place, so every
         # engagement here is live and every live product that could not be
         # built has already been reported with the reason.
-        return LiveEngagements(
+        live = LiveEngagements(
             live=list(dict.fromkeys((row.consultant, row.client) for row in workbook.engagements))
         )
+        return live, True
     listed: list[tuple[str, str]] = []
+    asked = True
     try:
         listed = [
             (engagement.consultant, engagement.client)
             for engagement in deps.accounting.engagements().live
         ]
     except AccountingFailed as error:
+        asked = False
         logs.log(
             "could not ask the accounting system which engagements are live", said=str(error)[:200]
         )
@@ -507,15 +564,19 @@ def _which_engagements_are_live(
         # Kevin to skim both.
         logs.log("no longer live in the accounting system", consultant=consultant, client=client)
         report.note(f"no new periods expected: {consultant} at {client} is not live in QuickBooks")
-    return answer
+    return answer, asked
 
 
-def _create_expected_items(deps: RunDeps, workbook: EngagementWorkbook, report: RunReport) -> None:
+def _create_expected_items(deps: RunDeps, workbook: EngagementWorkbook, report: RunReport) -> bool:
     """A billing period that has ended for a live engagement, with no timesheet
-    yet, becomes a waiting_for_timesheet item."""
+    yet, becomes a waiting_for_timesheet item.
+
+    Says whether the accounting system could be asked which engagements are
+    live, so the caller knows whether today's look is really done."""
     today = deps.clock.today()
     pairs = _engagement_pairs(workbook)
-    for consultant, client in _which_engagements_are_live(deps, workbook, report).live:
+    live, asked = _which_engagements_are_live(deps, workbook, report)
+    for consultant, client in live.live:
         rows = pairs[(consultant, client)]
         start, end, latest = _pair_window(rows)
         for period in billing_periods(
@@ -547,36 +608,28 @@ def _create_expected_items(deps: RunDeps, workbook: EngagementWorkbook, report: 
             report.note(
                 f"waiting for a timesheet: {consultant} at {client}, {period.start} to {period.end}"
             )
+    return asked
 
 
-def _decide_kind(deps: RunDeps, workbook: EngagementWorkbook, email: InboundEmail) -> MessageKind:
-    sender = email.from_address.strip().casefold()
-    if not sender:
-        return MessageKind.UNKNOWN_SENDER
-    if sender == deps.settings.admin_email.casefold():
-        return MessageKind.KEVIN_REPLY
-    for consultant in workbook.consultants:
-        if sender in (address.casefold() for address in consultant.emails):
-            return MessageKind.TIMESHEET
-    for vendor in workbook.vendors:
-        if sender in (address.casefold() for address in vendor.contact_emails):
-            return MessageKind.TIMESHEET
-    # Someone forwarding a timesheet on a consultant's behalf (decision 25).
-    # The sender says nothing about whose timesheet it is, so match_consultant
-    # falls through to the name on the document, which is the point.
-    if sender in (address.casefold() for address in deps.settings.timesheet_forwarders):
-        return MessageKind.TIMESHEET
-    domain = sender.rsplit("@", 1)[-1]
-    for client in workbook.clients:
-        addresses = [address.casefold() for address in client.billing_emails + client.cc_emails]
-        if sender in addresses or domain in (d.casefold() for d in client.email_domains):
-            return MessageKind.CLIENT_REPLY
-    return MessageKind.UNKNOWN_SENDER
+def _kind_of(deps: RunDeps, engagements: Engagements, sender: str) -> MessageKind:
+    """What an email is, taking a fresh copy of the engagements once if the
+    sender is not in the one in hand: a new consultant, or one whose address
+    changed, looks exactly like that (decision 55)."""
+    kind = decide_kind(deps, engagements.workbook, sender)
+    if kind is MessageKind.UNKNOWN_SENDER and engagements.refresh_on_miss(
+        "an email from an address not in my copy"
+    ):
+        kind = decide_kind(deps, engagements.workbook, sender)
+    return kind
 
 
-def _ingest_mailbox(deps: RunDeps, workbook: EngagementWorkbook, report: RunReport) -> None:
-    position = deps.store.get_state(MAILBOX_POSITION_KEY)
-    emails, new_position = deps.inbox.new_messages(position)
+def _ingest_mailbox(
+    deps: RunDeps,
+    engagements: Engagements,
+    emails: list[InboundEmail],
+    new_position: str,
+    report: RunReport,
+) -> None:
     for email in emails:
         files: dict[str, bytes] = {}
         stored_attachments: list[StoredAttachment] = []
@@ -601,7 +654,7 @@ def _ingest_mailbox(deps: RunDeps, workbook: EngagementWorkbook, report: RunRepo
             subject=email.subject,
             body_text=email.body_text,
             received_at=email.received_at,
-            kind=_decide_kind(deps, workbook, email),
+            kind=_kind_of(deps, engagements, email.from_address),
             processed=False,
             attachments=tuple(stored_attachments),
         )
@@ -611,32 +664,63 @@ def _ingest_mailbox(deps: RunDeps, workbook: EngagementWorkbook, report: RunRepo
     deps.store.set_state(MAILBOX_POSITION_KEY, new_position)
 
 
-def _process_messages(deps: RunDeps, workbook: EngagementWorkbook, report: RunReport) -> None:
+def _process_messages(deps: RunDeps, engagements: Engagements, report: RunReport) -> None:
     for message in deps.store.unprocessed_messages():
-        if message.kind is MessageKind.UNKNOWN_SENDER:
-            _open_review(
-                deps,
-                report,
-                None,
-                Finding(
-                    ReviewCode.UNKNOWN_SENDER,
-                    f"This came from an address I don't recognise: {message.from_address}"
-                    f' ("{message.subject}").',
-                ),
-            )
-            deps.inbox.move(message.message_id, NEEDS_REVIEW_FOLDER)
-            report.unknown_senders += 1
-        elif message.kind is MessageKind.TIMESHEET:
-            folder = _process_timesheet(deps, workbook, message, report)
-            deps.inbox.move(message.message_id, folder)
-        elif message.kind is MessageKind.KEVIN_REPLY:
-            reply_steps.handle_kevin_reply(deps, message, report)
-            deps.inbox.move(message.message_id, PROCESSED_FOLDER)
-        else:
-            # Client replies are recorded and listed in the Monday summary
-            # (forwarding them unchanged is later work).
-            deps.inbox.move(message.message_id, PROCESSED_FOLDER)
-        deps.store.mark_processed(message.message_id)
+        try:
+            _process_message(deps, engagements, message, report)
+        except ReaderUnavailable as error:
+            # The email stays unhandled and is read on a later run. The rest
+            # would need Claude too, so they wait with it (decision 58).
+            outages.failed(deps, report, outages.CLAUDE, error, error.lasting)
+            return
+        if message.kind in (MessageKind.TIMESHEET, MessageKind.KEVIN_REPLY):
+            outages.working(deps, report, outages.CLAUDE)
+
+
+def _process_message(
+    deps: RunDeps, engagements: Engagements, message: StoredMessage, report: RunReport
+) -> None:
+    if message.kind is MessageKind.UNKNOWN_SENDER:
+        finding = Finding(
+            ReviewCode.UNKNOWN_SENDER,
+            f"This came from an address I don't recognise: {message.from_address}"
+            f' ("{message.subject}").',
+        )
+        _open_review(deps, report, None, finding)
+        # Kevin is emailed when it could be a timesheet; the rest wait in
+        # the Monday summary, as newsletters always have.
+        set_aside.set_aside(
+            deps,
+            message,
+            finding.code,
+            finding.message,
+            email_kevin=bool(message.attachments),
+        )
+        outages.file_in(deps, message.message_id, NEEDS_REVIEW_FOLDER)
+        report.unknown_senders += 1
+    elif message.kind is MessageKind.TIMESHEET:
+        folder = _process_timesheet(deps, engagements, message, report)
+        outages.file_in(deps, message.message_id, folder)
+    elif message.kind is MessageKind.KEVIN_REPLY:
+        reply_steps.handle_kevin_reply(deps, message, report)
+        outages.file_in(deps, message.message_id, PROCESSED_FOLDER)
+    else:
+        # A client wrote. Kevin gets it as it came, attachments and all; the
+        # agent does nothing with what it says (decision 58).
+        email = emails.client_wrote(
+            deps.settings.admin_email,
+            message.from_address,
+            message.subject,
+            f"{message.received_at:%Y-%m-%d %H:%M}",
+            message.body_text,
+            tuple(EmailAttachment(a.filename, a.sha256) for a in message.attachments),
+        )
+        outgoing_steps.enqueue_email(
+            deps, "client_reply_email", f"client-reply:{message.message_id}", None, email
+        )
+        report.note(f"passed a client's email to Kevin: {message.subject}")
+        outages.file_in(deps, message.message_id, PROCESSED_FOLDER)
+    deps.store.mark_processed(message.message_id)
 
 
 def _reading_content_key(reading: TimesheetReading) -> str:
@@ -673,12 +757,177 @@ def _to_needs_review(deps: RunDeps, item: Item) -> None:
         deps.store.change_status(item.id, ItemStatus.NEEDS_REVIEW, {})
 
 
+@dataclass(frozen=True)
+class _Placed:
+    """Whose timesheet, for which client, which period, and at what rate row."""
+
+    consultant: Consultant | None
+    client_name: str | None
+    period: BillingPeriod | None
+    rate_row: Engagement | None
+    findings: list[Finding]
+
+
+def _place(
+    deps: RunDeps, workbook: EngagementWorkbook, message: StoredMessage, reading: TimesheetReading
+) -> _Placed:
+    findings: list[Finding] = []
+    named = set_aside.sender_is(deps, message.message_id)
+    consultant = _consultant_by_name(workbook, named) if named else None
+    if consultant is None:
+        # Kevin's "this is from ..." decides when it names someone the
+        # engagements have; otherwise the sender and the document do.
+        consultant, consultant_findings = checks.match_consultant(
+            message.from_address, reading, workbook.consultants
+        )
+        findings.extend(consultant_findings)
+
+    client_name: str | None = None
+    period: BillingPeriod | None = None
+    rate_row: Engagement | None = None
+    pinned, ruled_out = set_aside.client_is(deps, message.message_id)
+    if consultant is not None and pinned:
+        # Kevin said which client (decision 57): it decides, as long as the
+        # consultant has an engagement there for it to be billed under.
+        has_one = any(
+            checks.names_match(row.consultant, consultant.name)
+            and checks.names_match(row.client, pinned)
+            for row in workbook.engagements
+        )
+        if has_one:
+            client_name = next(
+                row.client for row in workbook.engagements if checks.names_match(row.client, pinned)
+            )
+        else:
+            findings.append(
+                Finding(
+                    ReviewCode.ENGAGEMENT_UNCLEAR,
+                    f"You said this is for {pinned}, but {consultant.name} has no"
+                    f" engagement there.",
+                )
+            )
+    elif consultant is not None:
+        client_names = {
+            client.name: [client.name, client.legal_name, *client.names_on_timesheets]
+            for client in workbook.clients
+        }
+        client_name, engagement_findings = checks.match_engagement(
+            consultant, reading, workbook.engagements, client_names
+        )
+        findings.extend(engagement_findings)
+        if client_name is not None and ruled_out and checks.names_match(client_name, ruled_out):
+            # Kevin said it is not this one, and nothing else covers the dates.
+            findings.append(
+                Finding(
+                    ReviewCode.ENGAGEMENT_UNCLEAR,
+                    f"You said this is not for {ruled_out}, and {consultant.name} has no"
+                    " other engagement for these dates.",
+                )
+            )
+            client_name = None
+    if consultant is not None and client_name is not None:
+        rows = [
+            row
+            for row in workbook.engagements
+            if checks.names_match(row.consultant, consultant.name)
+            and checks.names_match(row.client, client_name)
+        ]
+        _, _, latest = _pair_window(rows)
+        period, period_findings = checks.fit_billing_period(latest, reading)
+        findings.extend(period_findings)
+        if period is not None:
+            rate_row, rate_findings = checks.rate_row_in_force(rows, period)
+            findings.extend(rate_findings)
+        client = _client_by_name(workbook, client_name)
+        if client is not None and client.delivery is Delivery.EMAIL and not client.billing_emails:
+            findings.append(
+                Finding(
+                    ReviewCode.NO_BILLING_CONTACT,
+                    "The engagement list has no billing email for this client.",
+                )
+            )
+    return _Placed(consultant, client_name, period, rate_row, findings)
+
+
+# Statuses whose amounts are not yet worked out, so the rates can still change.
+_STILL_PRICEABLE = (
+    ItemStatus.WAITING_FOR_TIMESHEET,
+    ItemStatus.RECEIVED,
+    ItemStatus.NEEDS_REVIEW,
+)
+RATES_UNCONFIRMED = "I couldn't check the rates and billing details in QuickBooks"
+
+
+def _unconfirmed_finding(item: Item, failures: list[AccountingFailed]) -> Finding:
+    """QuickBooks could not be asked for the rates of the engagement in hand.
+
+    The timesheet is still read and kept (decision 38); what waits is the
+    invoice, which would otherwise go out on figures nobody confirmed today.
+    Nothing is needed from Kevin unless QuickBooks needs reconnecting: every
+    run asks again, and the item carries on by itself once it answers."""
+    reconnect = any(isinstance(error, AccountingNeedsReconnect) for error in failures)
+    code = ReviewCode.QUICKBOOKS_RECONNECT if reconnect else ReviewCode.QUICKBOOKS_FAILED
+    return Finding(
+        code,
+        f"{RATES_UNCONFIRMED} for {item.consultant} at {item.client}, so I won't"
+        " invoice this yet. I try again on every run and carry on by myself once"
+        " QuickBooks answers."
+        + (" Run `fops qbo-connect` to reconnect it." if reconnect else "")
+        + ' Reply "ignore" to drop this timesheet instead.'
+        + f" QuickBooks said: {str(failures[0])[:200]}",
+    )
+
+
+def _retry_unconfirmed(deps: RunDeps, engagements: Engagements, report: RunReport) -> None:
+    """Ask QuickBooks again about the items whose rates it could not confirm.
+
+    Only those items, and only while their review is open: this is the one
+    place a quiet run may ask QuickBooks anything, and only because a timesheet
+    is waiting on the answer."""
+    waiting = [
+        review
+        for review in deps.store.open_reviews()
+        if review.item_id is not None and review.message.startswith(RATES_UNCONFIRMED)
+    ]
+    if not waiting or report.quickbooks_unavailable:
+        return
+    pairs = _engagement_pairs(engagements.workbook)
+    for review in waiting:
+        assert review.item_id is not None
+        item = deps.store.get_item(review.item_id)
+        rows = next(
+            (
+                found
+                for (consultant, client), found in pairs.items()
+                if checks.names_match(consultant, item.consultant)
+                and checks.names_match(client, item.client)
+            ),
+            [],
+        )
+        rate_row, problems = checks.rate_row_in_force(rows, item.period) if rows else (None, [])
+        if rate_row is None or problems or item.status not in _STILL_PRICEABLE:
+            continue  # nothing to price it against; the review stays for Kevin
+        failures: list[AccountingFailed] = []
+        snapshot = build_snapshot(engagements.workbook, rate_row, deps.accounting, failures)
+        if snapshot is None or failures:
+            continue
+        item = deps.store.replace_snapshot(item.id, snapshot)
+        deps.store.answer_review(
+            review.id, {"kind": "resolved", "why": "QuickBooks answered"}, "answered"
+        )
+        report.note(f"QuickBooks confirmed the rates for {item.consultant} at {item.client}")
+        _ask_about_the_rates(deps, item, report)
+        complete_if_covered(deps, deps.store.get_item(item.id), report)
+
+
 def _process_timesheet(
-    deps: RunDeps, workbook: EngagementWorkbook, message: StoredMessage, report: RunReport
+    deps: RunDeps, engagements: Engagements, message: StoredMessage, report: RunReport
 ) -> str:
     """Handle one timesheet email; returns the mailbox folder it is filed in
     afterwards (a courtesy for anyone looking at the mailbox; the database is
     the record)."""
+    workbook = engagements.workbook
+    key = set_aside.message_key(deps, message.message_id)
     if not message.attachments:
         finding = Finding(
             ReviewCode.NO_ATTACHMENT,
@@ -686,7 +935,7 @@ def _process_timesheet(
             f' ("{message.subject}").',
         )
         _open_review(deps, report, None, finding)
-        _enqueue_review_email(deps, message.message_id, None, [finding], None, None)
+        _enqueue_review_email(deps, key, None, [finding], None, None)
         return NEEDS_REVIEW_FOLDER
     attachment = message.attachments[0]
     if all(deps.store.timesheet_seen(part.sha256) for part in message.attachments):
@@ -727,7 +976,7 @@ def _process_timesheet(
         _open_review(deps, report, None, finding)
         _enqueue_review_email(
             deps,
-            message.message_id,
+            key,
             None,
             [finding],
             None,
@@ -743,44 +992,15 @@ def _process_timesheet(
     report.timesheets_processed += 1
 
     findings: list[Finding] = list(combine_findings)
-    consultant, consultant_findings = checks.match_consultant(
-        message.from_address, reading, workbook.consultants
-    )
-    findings.extend(consultant_findings)
-
-    client_name: str | None = None
-    period: BillingPeriod | None = None
-    rate_row: Engagement | None = None
-    if consultant is not None:
-        client_names = {
-            client.name: [client.name, client.legal_name, *client.names_on_timesheets]
-            for client in workbook.clients
-        }
-        client_name, engagement_findings = checks.match_engagement(
-            consultant, reading, workbook.engagements, client_names
-        )
-        findings.extend(engagement_findings)
-    if consultant is not None and client_name is not None:
-        rows = [
-            row
-            for row in workbook.engagements
-            if checks.names_match(row.consultant, consultant.name)
-            and checks.names_match(row.client, client_name)
-        ]
-        _, _, latest = _pair_window(rows)
-        period, period_findings = checks.fit_billing_period(latest, reading)
-        findings.extend(period_findings)
-        if period is not None:
-            rate_row, rate_findings = checks.rate_row_in_force(rows, period)
-            findings.extend(rate_findings)
-        client = _client_by_name(workbook, client_name)
-        if client is not None and client.delivery is Delivery.EMAIL and not client.billing_emails:
-            findings.append(
-                Finding(
-                    ReviewCode.NO_BILLING_CONTACT,
-                    "The engagement list has no billing email for this client.",
-                )
-            )
+    placed = _place(deps, workbook, message, reading)
+    if any(f.code.value in set_aside.PLACEABLE for f in placed.findings) and (
+        engagements.refresh_on_miss("a timesheet I could not place in my copy")
+    ):
+        workbook = engagements.workbook
+        placed = _place(deps, workbook, message, reading)
+    consultant, client_name = placed.consultant, placed.client_name
+    period, rate_row = placed.period, placed.rate_row
+    findings.extend(placed.findings)
 
     hours_total, hours_findings = checks.check_hours(reading, period)
     findings.extend(hours_findings)
@@ -792,8 +1012,17 @@ def _process_timesheet(
     is_correction = False
     if consultant is not None and client_name is not None and period is not None:
         item = _find_item(deps, workbook, rate_row, consultant.name, client_name, period)
+        unconfirmed: list[AccountingFailed] = []
+        if item is not None and rate_row is not None and item.status in _STILL_PRICEABLE:
+            # Made before this timesheet arrived -- when its period ended, or by
+            # an earlier part of the period -- so its rates are QuickBooks' as
+            # of then. They are taken again now (decision 43).
+            snapshot = build_snapshot(workbook, rate_row, deps.accounting, unconfirmed)
+            if snapshot is not None and not unconfirmed:
+                item = deps.store.replace_snapshot(item.id, snapshot)
+                _ask_about_the_rates(deps, item, report)
         if item is None and rate_row is not None:
-            snapshot = build_snapshot(workbook, rate_row, deps.accounting)
+            snapshot = build_snapshot(workbook, rate_row, deps.accounting, unconfirmed)
             if snapshot is not None:
                 item = deps.store.create_item(
                     consultant.name,
@@ -806,6 +1035,8 @@ def _process_timesheet(
                 _ask_about_the_rates(deps, item, report)
         if item is not None and item.status is ItemStatus.WAITING_FOR_TIMESHEET:
             item = deps.store.change_status(item.id, ItemStatus.RECEIVED, {})
+        if item is not None and unconfirmed:
+            findings.append(_unconfirmed_finding(item, unconfirmed))
         if item is not None:
             span = _span(reading)
             for record in deps.store.timesheets_for_item(item.id):
@@ -868,13 +1099,24 @@ def _process_timesheet(
     details = emails.timesheet_details(
         deps.settings.admin_email, summary, next_step, timesheet_attachment
     )
-    outgoing_steps.enqueue_email(
-        deps, "details_email", f"details:{message.message_id}", item_id, details
-    )
-    if findings:
-        _enqueue_review_email(
-            deps, message.message_id, item_id, findings, summary, timesheet_attachment
+    outgoing_steps.enqueue_email(deps, "details_email", f"details:{key}", item_id, details)
+    unplaced = [f for f in findings if f.code.value in set_aside.PLACEABLE]
+    if item is None and unplaced:
+        # Nothing to hang Kevin's answer on but the email itself, so it is set
+        # aside, and his "try again" or "this is from ..." reads it again.
+        set_aside.set_aside(
+            deps,
+            message,
+            unplaced[0].code,
+            unplaced[0].message,
+            email_kevin=True,
+            summary=summary,
+            timesheet=timesheet_attachment,
+            also=[(f.code.value, f.message) for f in findings if f is not unplaced[0]],
         )
+        return NEEDS_REVIEW_FOLDER
+    if findings:
+        _enqueue_review_email(deps, key, item_id, findings, summary, timesheet_attachment)
         return NEEDS_REVIEW_FOLDER
 
     if item is None:
