@@ -12,6 +12,7 @@ address it shows back into the terminal (docs/decisions.md #51).
 """
 
 import secrets
+import socketserver
 import webbrowser
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -72,6 +73,20 @@ def ask_for_redirect(prompt: str) -> str:
     return input(prompt)
 
 
+class _LoopbackServer(HTTPServer):
+    """An HTTPServer that does not look up its own name before listening.
+
+    HTTPServer.server_bind asks socket.getfqdn for the host's name, between
+    binding and listening. On macOS that reverse lookup can take seconds, and
+    the browser's redirect finds nothing listening meanwhile. A loopback
+    listener has no use for the name."""
+
+    def server_bind(self) -> None:
+        socketserver.TCPServer.server_bind(self)
+        self.server_name = "localhost"
+        self.server_port = self.server_address[1]
+
+
 def wait_for_callback(port: int, expected_state: str) -> Callback:
     """Serve exactly one request on loopback and read the redirect from it."""
     result = Callback()
@@ -98,7 +113,7 @@ def wait_for_callback(port: int, expected_state: str) -> Callback:
         def log_message(self, format: str, *args: object) -> None:
             return  # the CLI prints what matters
 
-    with HTTPServer(("127.0.0.1", port), Handler) as server:
+    with _LoopbackServer(("127.0.0.1", port), Handler) as server:
         server.handle_request()
     return result
 
