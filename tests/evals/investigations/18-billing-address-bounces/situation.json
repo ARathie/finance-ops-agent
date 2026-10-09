@@ -1,0 +1,36 @@
+{
+  "description": "The billing email to ap@acme.example was refused: the mailbox does not exist. Acme's address changed.",
+  "items": [
+    {
+      "key": "priya",
+      "consultant": "Priya Shah",
+      "client": "Acme Corp",
+      "period_start": "2026-08-01",
+      "period_end": "2026-08-31",
+      "status": "ready",
+      "client_code": "AC",
+      "consultant_code": "PS",
+      "billing_emails": [
+        "ap@acme.example"
+      ]
+    }
+  ],
+  "engagement_list": {
+    "clients": [
+      {}
+    ],
+    "consultants": [
+      {
+        "Other names": "P. Shah"
+      }
+    ],
+    "engagements": [
+      {}
+    ]
+  },
+  "review": {
+    "item": "priya",
+    "code": "SEND_FAILED",
+    "message": "I couldn't send the billing email. I'll keep trying; please check the mailbox. The mail server said: 550 5.1.1 <ap@acme.example>: Recipient address rejected: User unknown in virtual mailbox table"
+  }
+}

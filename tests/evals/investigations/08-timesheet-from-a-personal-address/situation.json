@@ -1,0 +1,42 @@
+{
+  "description": "Priya's August timesheet arrives from her personal Gmail address, which the engagement list does not have. The page names her and Acme, and is approved.",
+  "items": [],
+  "emails": [
+    {
+      "key": "home",
+      "sender": "priya.shah.home@gmail.example",
+      "subject": "August timesheet",
+      "body": "Hi, here is my August timesheet. Thanks, Priya",
+      "attachments": [
+        "Priya-Shah-Aug-2026.pdf"
+      ],
+      "kind": "unknown_sender"
+    }
+  ],
+  "engagement_list": {
+    "clients": [
+      {}
+    ],
+    "consultants": [
+      {
+        "Other names": "P. Shah"
+      }
+    ],
+    "engagements": [
+      {}
+    ]
+  },
+  "what_i_read": [
+    "- Consultant: Priya Shah",
+    "- Client: Acme Corp",
+    "- Period: Aug 1–31, 2026",
+    "- Hours: 156.00",
+    "- Approval: approved by Jane Doe on Aug 31"
+  ],
+  "review": {
+    "email": "home",
+    "set_aside": true,
+    "code": "UNKNOWN_SENDER",
+    "message": "This came from an address I don't recognise: priya.shah.home@gmail.example (\"August timesheet\")."
+  }
+}

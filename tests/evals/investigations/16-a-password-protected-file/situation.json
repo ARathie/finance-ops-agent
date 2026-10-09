@@ -1,0 +1,33 @@
+{
+  "description": "Priya's timesheet PDF is password-protected, so it could not be read.",
+  "items": [],
+  "emails": [
+    {
+      "key": "locked",
+      "sender": "priya@shah.example",
+      "subject": "Aug timesheet (password: sent separately)",
+      "body": "Attached. The password is the usual one.",
+      "attachments": [
+        "timesheet-locked.pdf"
+      ]
+    }
+  ],
+  "engagement_list": {
+    "clients": [
+      {}
+    ],
+    "consultants": [
+      {
+        "Other names": "P. Shah"
+      }
+    ],
+    "engagements": [
+      {}
+    ]
+  },
+  "review": {
+    "email": "locked",
+    "code": "CANT_READ_ATTACHMENT",
+    "message": "I couldn't read the attachment timesheet-locked.pdf (\"Aug timesheet (password: sent separately)\"). What stopped me: timesheet-locked.pdf is not a readable PDF."
+  }
+}

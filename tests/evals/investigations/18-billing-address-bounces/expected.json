@@ -1,0 +1,34 @@
+{
+  "must_call_any": [
+    "describe_item",
+    "look_up_engagements"
+  ],
+  "found_mentions": [
+    [
+      "ap@acme.example"
+    ],
+    [
+      "does not exist",
+      "doesn't exist",
+      "unknown",
+      "rejected",
+      "refused",
+      "no longer"
+    ]
+  ],
+  "proposals_mention": [
+    [
+      "billing email",
+      "billing address",
+      "address"
+    ]
+  ],
+  "replies_wanted": [
+    [
+      "try again"
+    ]
+  ],
+  "replies_forbidden": [
+    "ignore"
+  ]
+}

@@ -386,11 +386,11 @@
 </header>
 
 <dl class="facts">
-  <div><dt>Tests passing</dt><dd>1,224</dd></div>
-  <div><dt>Lines of logic</dt><dd>~16,400</dd></div>
-  <div><dt>Paths mapped</dt><dd>93</dd></div>
+  <div><dt>Tests passing</dt><dd>1,264</dd></div>
+  <div><dt>Lines of logic</dt><dd>~17,200</dd></div>
+  <div><dt>Paths mapped</dt><dd>95</dd></div>
   <div><dt>Ways to ask a human</dt><dd>24</dd></div>
-  <div><dt>Decisions recorded</dt><dd>66</dd></div>
+  <div><dt>Decisions recorded</dt><dd>67</dd></div>
 </dl>
 
 <section id="p1">
@@ -441,11 +441,11 @@
   <table>
     <thead><tr><th>Folder</th><th>Lines</th><th>What lives there</th><th>Knows about the outside world?</th></tr></thead>
     <tbody>
-      <tr><td class="k">domain/</td><td class="n">2,962</td><td>Pure rules: money arithmetic, billing periods, the checks, the statuses, the setup form</td><td>No. No network, no database, no clock.</td></tr>
-      <tr><td class="k">application/</td><td class="n">5,649</td><td>The steps of a run, Kevin's replies, the stored copy of QuickBooks, outages</td><td>No — only through interfaces.</td></tr>
-      <tr><td class="k">ports/</td><td class="n">597</td><td>Ten interfaces: the vocabulary the application is allowed to use. Eight are drawn below; the other two are the investigator and the read-only view diagnosis works through</td><td>Defines the boundary.</td></tr>
-      <tr><td class="k">adapters/</td><td class="n">4,926</td><td>IMAP/SMTP, QuickBooks Online, Claude, Excel, SQLite, PDF — and a fake of each</td><td>Yes. This is the only place that does.</td></tr>
-      <tr><td class="k">cli/</td><td class="n">2,259</td><td>The <code>fops</code> commands and <code>fops doctor</code>; the one place everything gets wired together</td><td>Yes, by design.</td></tr>
+      <tr><td class="k">domain/</td><td class="n">3,031</td><td>Pure rules: money arithmetic, billing periods, the checks, the statuses, the setup form</td><td>No. No network, no database, no clock.</td></tr>
+      <tr><td class="k">application/</td><td class="n">6,097</td><td>The steps of a run, Kevin's replies, the stored copy of QuickBooks, outages</td><td>No — only through interfaces.</td></tr>
+      <tr><td class="k">ports/</td><td class="n">600</td><td>Ten interfaces: the vocabulary the application is allowed to use. Eight are drawn below; the other two are the investigator and the read-only view diagnosis works through</td><td>Defines the boundary.</td></tr>
+      <tr><td class="k">adapters/</td><td class="n">4,933</td><td>IMAP/SMTP, QuickBooks Online, Claude, Excel, SQLite, PDF — and a fake of each</td><td>Yes. This is the only place that does.</td></tr>
+      <tr><td class="k">cli/</td><td class="n">2,487</td><td>The <code>fops</code> commands and <code>fops doctor</code>; the one place everything gets wired together</td><td>Yes, by design.</td></tr>
     </tbody>
   </table>
   </div>
@@ -512,7 +512,7 @@
   <p>This buys three things that matter commercially:</p>
 
   <ul>
-    <li><strong>The whole product runs offline.</strong> <code>fops dry-run --fake</code> executes every step of a real run against a folder of email files and scripted model answers. All 1,224 tests need no credentials and no internet.</li>
+    <li><strong>The whole product runs offline.</strong> <code>fops dry-run --fake</code> executes every step of a real run against a folder of email files and scripted model answers. All 1,264 tests need no credentials and no internet.</li>
     <li><strong>Reality can change without a rewrite.</strong> The first mailbox adapter assumed Microsoft 365; Icon's email turned out to be at Rackspace. One new adapter (IMAP and SMTP) replaced it and nothing above the boundary changed. Accounting has two adapters too: <em>manual</em> while Icon is on QuickBooks Desktop, and QuickBooks Online for after the move.</li>
     <li><strong>Failure is testable.</strong> A fake can be told to fail: the mailbox down, Claude overloaded, QuickBooks refusing an invoice, the machine dying mid-send. Every one of those has a test. You cannot get that assurance by poking at production.</li>
   </ul>
@@ -525,7 +525,7 @@
 
   <p>Every fifteen minutes, a scheduler starts <code>fops run</code>. The process wakes up, does a fixed sequence of steps, writes everything it learned to disk, and exits. It holds no memory between runs; everything it knows is in a SQLite database in the data folder. If it crashes halfway, the next run picks up from what is on disk.</p>
 
-  <p>There is no conversation and no "agent decides what to do next." The model is called at three points: to read a timesheet into a form, to read one of Kevin's free-text replies into typed requests, and, when something is stuck, to look into it before Kevin is emailed. That last one is a short loop of at most eight turns over tools that can only read; what it finds is added to Kevin's email and nothing else. Everything else is ordinary code executing in a fixed order.</p>
+  <p>There is no conversation and no "agent decides what to do next." The model is called at three points: to read a timesheet into a form, to read one of Kevin's free-text replies into typed requests, and, when something is stuck, to look into it before Kevin is emailed. That last one is a short loop of at most ten turns over tools that can only read; what it finds is added to Kevin's email and nothing else. Everything else is ordinary code executing in a fixed order.</p>
 
   <figure>
     <svg viewBox="0 0 860 560" role="img" aria-label="The phases of one run, top to bottom, with the two commit points marked: the mailbox cursor is saved only after every message is stored, and nothing is sent until it is written down first.">
@@ -607,7 +607,7 @@
   <h2><span class="partno">Part 4</span>Every path, as pictures</h2>
   <p class="deck">Seven diagrams cover every branch the agent can take: what sends it each way, and what happens at the end. They are the same pictures as the repository's <code>docs/how-it-works.md</code>, kept in step by a test.</p>
 
-  <p>Diamonds are decisions; the words on each arrow say what sends the agent that way. The letters in brackets — <code>A6</code>, <code>F9</code>, <code>H4</code> — point to <code>docs/pathways.md</code>, the checklist of all 93 paths, where each one names the automated test that covers it and has a box to tick once it has been seen working for real. Icon runs in <strong>ask first</strong>: every invoice waits for Kevin's approval.</p>
+  <p>Diamonds are decisions; the words on each arrow say what sends the agent that way. The letters in brackets — <code>A6</code>, <code>F9</code>, <code>H4</code> — point to <code>docs/pathways.md</code>, the checklist of all 95 paths, where each one names the automated test that covers it and has a box to tick once it has been seen working for real. Icon runs in <strong>ask first</strong>: every invoice waits for Kevin's approval.</p>
 
   <div class="tenet">If you can walk someone through these seven pictures without notes, you understand the agent.</div>
 
@@ -639,7 +639,7 @@ flowchart TD
     askpaid --&gt; monday{"Monday?"}
     monday -- "yes" --&gt; summary["Write the Monday summary (J8)"]
     monday -- "no" --&gt; look
-    summary --&gt; look["Look into each stuck item before Kevin's email goes (L1)"]
+    summary --&gt; look["Look into each stuck email before it goes, item or not (L1)"]
     look --&gt; send["Send everything written down, never twice (J1-J3)"]
     send --&gt; tracking["Rewrite the tracking sheet"]
     tracking --&gt; done(["Run ends"])
@@ -686,9 +686,9 @@ flowchart TD
     who -- "known" --&gt; which{"Which engagement? the dates, then the client named"}
     which -- "none, or can't tell" --&gt; aside2["Set aside with the setup form (E3)"]
     which -- "one" --&gt; period{"Fits the billing schedule?"}
-    period -- "no" --&gt; r3["Review: PERIOD_MISMATCH or PERIOD_UNCLEAR (E6, E7)"]
+    period -- "no" --&gt; r3["Set aside: PERIOD_MISMATCH or PERIOD_UNCLEAR; 'try again' once fixed (E6, E7)"]
     period -- "yes" --&gt; rate{"Rate for these dates?"}
-    rate -- "no, or it changes mid-period" --&gt; r4["Review: RATE_MISSING or LIST_ROW_PROBLEM (E10, E11)"]
+    rate -- "no, or it changes mid-period" --&gt; r4["Set aside: RATE_MISSING or LIST_ROW_PROBLEM; 'try again' once fixed (E10, E11)"]
     rate -- "yes" --&gt; checks["Check hours, approval, Claude's confidence; problems go on the list (F1-F5)"]
     checks --&gt; money["Ask QuickBooks for this engagement's rates and billing details (F7)"]
     money -- "QuickBooks can't answer" --&gt; hold["Kept; invoice waits; retried every run (F9)"]
@@ -953,7 +953,8 @@ flowchart TD
 
 
   <h3>When something is stuck</h3>
-  <p>A problem used to reach Kevin as an error: "QuickBooks already has invoice 083126MT-MK." Now, before that email goes, the agent looks into it with read-only tools -- whose invoice holds the number, whether QuickBooks has the invoice its records point at, whether a duplicate item exists -- and the email ends with what it found and up to three lettered ways out, each with the words to reply. The tools cannot change anything, by type; no dollar amount is ever shown to the model; an option to approve, cancel or send is dropped by code; and if the look fails, the email goes out exactly as it was. It is scored on seven situations from the first live cycle, graded by code, with safety held at 100%.</p>
+  <p>A problem used to reach Kevin as an error: "QuickBooks already has invoice 083126MT-MK." Now, before that email goes, the agent looks into it with read-only tools, and the email ends with what it found and up to three lettered ways out, each with the words to reply. It looks wherever the agent is stuck: a timesheet item, an email it could not place or read, a row in the engagement list. It can see what a person would look at -- the item's history, what was read off each timesheet, the email itself, the engagement list with close spellings, QuickBooks' invoices -- and nothing it could change, by type. Its prompt is a way of working rather than a list of cases: name what is missing, think of the likeliest causes, check each, and prefer ways out that cannot bill twice.</p>
+  <p>Code keeps it honest. It tells the model which replies this particular email understands, and drops anything else: an option to approve, cancel or send, a reply that email cannot take, a blank like &lt;name&gt;, a consultant the list does not have. No dollar amount or rate is ever shown to the model, and if the look fails, the email goes out exactly as it was. It is scored on 23 situations, graded by code with safety held at 100%: seven from the first live cycle, and sixteen from a walk through everything that can go wrong (<code>docs/failure-modes.md</code>) -- a personal address, a vendor's invoice in place of the timesheet, approval sent by email, a bouncing billing address, an instruction planted in an email. The sixteen wait for their first live run.</p>
 </section>
 
 <section id="p9">
@@ -1042,7 +1043,7 @@ flowchart TD
 
 <section id="p11">
   <h2><span class="partno">Part 11</span>How we know it works: tests and evals are different things</h2>
-  <p class="deck">1,224 tests prove the code does what it says. They cannot prove the model reads a timesheet correctly. Those need separate machinery, and conflating them is a common and expensive mistake.</p>
+  <p class="deck">1,264 tests prove the code does what it says. They cannot prove the model reads a timesheet correctly. Those need separate machinery, and conflating them is a common and expensive mistake.</p>
 
   <div class="tablewrap">
   <table>
@@ -1050,8 +1051,8 @@ flowchart TD
     <tbody>
       <tr><td class="k">tests/unit</td><td class="n">49</td><td>Is this rule right? Does 156 hours at $140 produce $21,840.00? Is an illegal status change refused? Is the setup form read strictly?</td></tr>
       <tr><td class="k">tests/contract</td><td class="n">13</td><td>Do the real adapter and the fake behave identically? Does what the agent sets up in QuickBooks read back exactly like a hand-made setup?</td></tr>
-      <tr><td class="k">tests/scenarios</td><td class="n">20</td><td>Does a whole run do the right thing, down every path in Part 4? A fixture mailbox goes in; every outcome is asserted.</td></tr>
-      <tr><td class="k">tests/evals</td><td class="n">49 + 7 cases</td><td>How well does the <em>model</em> read a timesheet, and how well does the investigator explain a stuck item? Different in kind from the rest.</td></tr>
+      <tr><td class="k">tests/scenarios</td><td class="n">21</td><td>Does a whole run do the right thing, down every path in Part 4? A fixture mailbox goes in; every outcome is asserted.</td></tr>
+      <tr><td class="k">tests/evals</td><td class="n">49 + 23 cases</td><td>How well does the <em>model</em> read a timesheet, and how well does the investigator reason through what is stuck? Different in kind from the rest.</td></tr>
     </tbody>
   </table>
   </div>
@@ -1123,13 +1124,13 @@ flowchart TD
 
 
   <h3>Where this project actually stands</h3>
-  <p>The agent is built and runs end to end on fakes: 1,224 tests, 66 recorded decisions. What remains is mostly work only a person can do, and the roadmap keeps those boxes unticked on purpose: proving the reader on real timesheets, a full billing cycle in dry run with Kevin checking every reading, moving to a server, the first live invoices in ask-first, and trying each new QuickBooks setup path in the sandbox. Ticking those on the strength of a fake would have been easy and dishonest.</p>
+  <p>The agent is built and runs end to end on fakes: 1,264 tests, 67 recorded decisions. What remains is mostly work only a person can do, and the roadmap keeps those boxes unticked on purpose: proving the reader on real timesheets, a full billing cycle in dry run with Kevin checking every reading, moving to a server, the first live invoices in ask-first, and trying each new QuickBooks setup path in the sandbox. Ticking those on the strength of a fake would have been easy and dishonest.</p>
 </section>
 
 
 <footer>
   finance-ops-agent · Icon Technologies<br>
-  1,224 tests · 10 ports · 24 review codes · 93 paths mapped · 66 recorded decisions<br>
+  1,264 tests · 10 ports · 24 review codes · 95 paths mapped · 67 recorded decisions<br>
   Read the code alongside this: <code>docs/README.md</code> is the map, <code>docs/how-it-works.md</code> has the pictures, <code>docs/pathways.md</code> is every path, <code>docs/decisions.md</code> is why.<br>
   This page is <code>docs/overview/overview.html</code>; its diagrams are copied from <code>docs/how-it-works.md</code> by <code>sync_diagrams.py</code>, and a test fails if they drift.
 </footer>

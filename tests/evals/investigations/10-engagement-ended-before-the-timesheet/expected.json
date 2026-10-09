@@ -1,0 +1,26 @@
+{
+  "must_call_any": [
+    "look_up_engagements"
+  ],
+  "found_mentions": [
+    [
+      "ended",
+      "end date",
+      "july 31",
+      "31 july",
+      "2026-07-31",
+      "finished"
+    ]
+  ],
+  "proposals_mention": [
+    [
+      "end date"
+    ]
+  ],
+  "replies_wanted": [
+    [
+      "try again"
+    ]
+  ],
+  "sure": true
+}

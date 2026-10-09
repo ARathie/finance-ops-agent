@@ -1,0 +1,40 @@
+{
+  "description": "Priya's timesheet is written day-first (01/08/2026 to 31/08/2026), so the reader could not settle the period.",
+  "items": [],
+  "emails": [
+    {
+      "key": "day-first",
+      "sender": "priya@shah.example",
+      "subject": "Timesheet 01/08/2026 - 31/08/2026",
+      "attachments": [
+        "ts-aug.pdf"
+      ]
+    }
+  ],
+  "engagement_list": {
+    "clients": [
+      {}
+    ],
+    "consultants": [
+      {
+        "Other names": "P. Shah"
+      }
+    ],
+    "engagements": [
+      {}
+    ]
+  },
+  "what_i_read": [
+    "- Consultant: Priya Shah",
+    "- Client: Acme Corp",
+    "- Period: unclear (printed 01/08/2026 to 31/08/2026)",
+    "- Hours: 156.00",
+    "- Approval: approved by Jane Doe"
+  ],
+  "review": {
+    "email": "day-first",
+    "set_aside": true,
+    "code": "PERIOD_UNCLEAR",
+    "message": "I can't tell which dates this timesheet covers."
+  }
+}

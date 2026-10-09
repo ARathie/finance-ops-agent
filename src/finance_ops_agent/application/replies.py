@@ -47,7 +47,7 @@ _ANSWERABLE = (
 
 # Notes that say all there is to say: a reply to one is not answered again,
 # so an out-of-office reply can never start a loop (decisions 63 and 66).
-_NOT_ANSWERED = ("unmatched_reply_email", "list_reply_email")
+_NOT_ANSWERED = ("unmatched_reply_email", "list_reply_email", "settled_reply_email")
 
 APPROVAL_CODE = "APPROVAL"
 
@@ -254,6 +254,45 @@ def _tell_kevin_it_matched_nothing(
     )
     outgoing.enqueue_email(
         deps, "unmatched_reply_email", f"unmatched:{message.message_id}", None, note
+    )
+
+
+def _tell_kevin_it_was_settled(
+    deps: RunDeps,
+    message: StoredMessage,
+    record: OutgoingRecord,
+    item: Item | None,
+    report: RunReport,
+) -> None:
+    """Kevin answered a question that is no longer open (decision 67).
+
+    It was answered already, ignored, or closed by itself when its cause was
+    fixed. Nothing he says now is applied -- the answer it needed has been
+    given -- but before, nothing was said either, and an instruction he
+    believed he had given simply did not happen. He hears so, once."""
+    report.note("Kevin answered a question that was already settled; nothing changed")
+    where = (
+        f" {item.consultant} at {item.client} is now {item.status.value.replace('_', ' ')}."
+        if item is not None
+        else ""
+    )
+    note = emails.OutgoingEmail(
+        to=(deps.settings.admin_email,),
+        subject=f"Re: {_stripped_subject(str(record.payload.get('subject', '')))}",
+        in_reply_to=message.message_id,
+        body="\n".join(
+            [
+                "Thanks. That question was already settled -- answered, ignored, or"
+                " closed by itself once its cause was fixed -- so I haven't changed"
+                f" anything from this reply.{where}",
+                "",
+                "If something still needs doing, reply to my latest email about it, or"
+                " tell the operator.",
+            ]
+        ),
+    )
+    outgoing.enqueue_email(
+        deps, "settled_reply_email", f"reply:{message.message_id}", record.item_id, note
     )
 
 
@@ -523,6 +562,18 @@ def _handle_review_reply(
     # go to their own handlers: put to the reader alongside every other open
     # question without an item, an "ignore" would close them all (decision 55).
     if record.payload.get("set_aside"):
+        # A letter picks one of the investigator's options here too (decision
+        # 67): read by code, then handled as if he had written its words.
+        asked = str(record.payload.get("body", ""))
+        mine = [
+            review
+            for review in deps.store.open_reviews()
+            if review.item_id is None and f"- {review.message}" in asked
+        ]
+        picked = picked_option(body, offered_replies(deps, mine))
+        if picked is not None:
+            report.note(f'Kevin picked an option: "{picked}"')
+            body = picked
         set_aside.handle_reply(deps, message, record, body, report)
         return
     if record.payload.get("engagement_refresh"):
@@ -551,7 +602,8 @@ def _handle_review_reply(
         asked = str(record.payload.get("body", ""))
         open_reviews = [review for review in open_reviews if f"- {review.message}" in asked]
     if not open_reviews:
-        return  # nothing left to answer; the item moved on
+        _tell_kevin_it_was_settled(deps, message, record, item, report)
+        return
     questions = [(review.code, review.message) for review in open_reviews]
     offered = offered_replies(deps, open_reviews)
     picked = picked_option(body, offered)

@@ -131,21 +131,39 @@ def _setup_lines(prefill: dict[str, str]) -> list[str]:
     ]
 
 
-def _what_you_can_do(code: str, offer_setup: bool = False) -> list[str]:
+# Where naming the consultant answers the question (decision 67 keeps "this is
+# from ..." to these): the sender or the name on the page was not recognised.
+NAMES_THE_CONSULTANT = (ReviewCode.UNKNOWN_SENDER.value, ReviewCode.CONSULTANT_UNKNOWN.value)
+
+
+def _could_be_new(code: str) -> bool:
+    """Whether the setup form could be the answer: someone or something the
+    list does not have yet, not dates or a schedule that do not fit."""
+    return code in PLACEABLE or code == ReviewCode.UNKNOWN_SENDER.value
+
+
+def what_you_can_do(code: str, offer_setup: bool = False) -> list[str]:
     if code == ReviewCode.UNKNOWN_SENDER.value:
         where = (
             "Add the address to the consultant's vendor in QuickBooks (or their row in"
             " the engagement list)"
         )
-    else:
+    elif code in PLACEABLE:
         where = "Add or fix the consultant or client in QuickBooks (or the engagement list)"
+    else:
+        # The dates, the billing schedule, an end date or a rate: all in the list.
+        where = (
+            "Fix what is named above in QuickBooks or the engagement list -- the"
+            " billing schedule, an end date, a rate"
+        )
     lines = [f'{where}, then reply "try again" and I will handle the email again.']
-    if code != ReviewCode.ENGAGEMENT_UNCLEAR.value:
+    if code in NAMES_THE_CONSULTANT:
         # Naming the consultant only helps where the consultant is the question.
         lines.append(
             'Reply with who it is from, for example "this is from Priya Shah", and I'
             " will handle it as their timesheet."
         )
+    offer_setup = offer_setup and _could_be_new(code)
     if offer_setup:
         lines.append(
             "If this is a new consultant, client or engagement -- or one that was"
@@ -209,8 +227,8 @@ def set_aside(
         [review_message, *(other for _code, other in also or [])],
         summary,
         timesheet,
-        what_you_can_do=_what_you_can_do(code.value, _can_set_up(deps)),
-        then=_setup_lines(prefill) if _can_set_up(deps) else None,
+        what_you_can_do=what_you_can_do(code.value, _can_set_up(deps)),
+        then=_setup_lines(prefill) if _can_set_up(deps) and _could_be_new(code.value) else None,
     )
     outgoing_steps.enqueue_email(
         deps,
@@ -244,7 +262,7 @@ def _ask_again(
     form_values: dict[str, str] | None = None,
 ) -> None:
     lines = [why, "", "What you can do:"]
-    lines += [f"- {line}" for line in _what_you_can_do(entry.code, _can_set_up(deps))]
+    lines += [f"- {line}" for line in what_you_can_do(entry.code, _can_set_up(deps))]
     if _can_set_up(deps):
         lines += ["", *_setup_lines(form_values if form_values is not None else entry.prefill)]
     ask = emails.OutgoingEmail(
@@ -595,9 +613,11 @@ def look_again(deps: RunDeps, engagements: Engagements, report: RunReport) -> bo
                 entry.retry = False
             keep.append(entry)
             continue
-        if entry.code in PLACEABLE and entry.retry:
+        if entry.retry:
             # Read again from the start, against the fresh copy. If it still
             # cannot be placed, it is set aside again with a fresh question.
+            # Whatever kept it from becoming an item -- the consultant, the
+            # client, the dates, the rate -- is fixed in the list (decision 67).
             _requeue(deps, entry, MessageKind.TIMESHEET)
             requeued = True
             continue
@@ -617,7 +637,7 @@ def _where(engagements: Engagements) -> str:
 def _tell_kevin_still_stuck(deps: RunDeps, entry: SetAside, why: str) -> None:
     attempt = deps.store.get_state(ATTEMPT_PREFIX + entry.message_id) or "0"
     lines = [why, "", "What you can do:"]
-    lines += [f"- {line}" for line in _what_you_can_do(entry.code)]
+    lines += [f"- {line}" for line in what_you_can_do(entry.code)]
     email = emails.OutgoingEmail(
         to=(deps.settings.admin_email,),
         subject=f"Still needs your review: the email from {entry.sender}",

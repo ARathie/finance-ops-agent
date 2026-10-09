@@ -46,6 +46,7 @@ class FindingKind(StrEnum):
     ACCOUNTING_UNREACHABLE = "accounting_unreachable"
     INVOICE_NOT_IN_ACCOUNTING = "invoice_not_in_accounting"
     INVOICE_RENUMBERED = "invoice_renumbered"
+    INVOICE_VOIDED_IN_ACCOUNTING = "invoice_voided_in_accounting"
     INVOICE_FOR_ANOTHER_ITEM = "invoice_for_another_item"
     NUMBER_HELD_BY_FORGOTTEN_ITEM = "number_held_by_forgotten_item"
     NUMBER_HELD_BY_ANOTHER_ITEM = "number_held_by_another_item"
@@ -147,6 +148,21 @@ def check_recorded_invoices(looking: Looking) -> list[Finding]:
                         "If it was a test, remove my record of it with"
                         f" `uv run fops forget {item.id} --force`. If it was a real invoice"
                         " someone deleted, make it again in QuickBooks first.",
+                        item.id,
+                        about=record.external_id,
+                    )
+                )
+                continue
+            if held.total_cents == 0 and record.amount_cents > 0 and record.status != "paid":
+                findings.append(
+                    Finding(
+                        FindingKind.INVOICE_VOIDED_IN_ACCOUNTING,
+                        f"Invoice {record.number} for {_describe(item)} is in my records as"
+                        f" {record.status}, but QuickBooks shows it voided (its total is"
+                        " zero). The client owes nothing on it now, and I will never see it"
+                        " paid.",
+                        "If that was on purpose, nothing more is needed. If the client"
+                        " still owes for this work, make the invoice again in QuickBooks.",
                         item.id,
                         about=record.external_id,
                     )
@@ -430,7 +446,8 @@ def describe_item(looking: Looking, item_id: int) -> ItemReport:
     for sent in store.outgoing_records():
         if sent.item_id == item.id:
             subject = sent.payload.get("subject", "")
-            facts.append(f"Email {sent.kind}: {subject} ({sent.status})")
+            said = f"; it failed with: {sent.last_error}" if sent.last_error else ""
+            facts.append(f"Email {sent.kind}: {subject} ({sent.status}{said})")
     for entry in store.audit_entries(item.id):
         facts.append(f"{entry.at:%Y-%m-%d %H:%M} {entry.what}")
 

@@ -110,3 +110,86 @@ def problems_with_answer(investigation: Investigation) -> list[str]:
     if not investigation.proposals:
         found.append("there are no proposals; give at least one way out")
     return found
+
+
+# --- what Kevin can reply to one email (decision 67) ---
+
+
+@dataclass(frozen=True)
+class ReplyForm:
+    """One kind of reply the agent understands, as the investigator is shown it
+    ("use <N> hours") and as code recognises it."""
+
+    shown: str
+    pattern: re.Pattern[str]
+
+    def matches(self, reply: str) -> bool:
+        return self.pattern.fullmatch(reply) is not None
+
+
+TRY_AGAIN = ReplyForm("try again", re.compile(r"try again"))
+USE_NUMBER = ReplyForm(
+    "use <invoice number, spelled out in full>",
+    re.compile(r"use (?!the new one$)(?!\d+(?:\.\d+)? hours$)\S+"),
+)
+USE_HOURS = ReplyForm("use <N> hours", re.compile(r"use \d+(?:\.\d+)? hours"))
+THIS_IS_FOR = ReplyForm("this is for <client>", re.compile(r"this is for .+"))
+CONSULTANT_IS = ReplyForm("the consultant is <name>", re.compile(r"the consultant is .+"))
+PERIOD_IS = ReplyForm("the period is <start> to <end>", re.compile(r"the period is .+"))
+APPROVED_BY = ReplyForm("approved by <name> on <date>", re.compile(r"approved by .+"))
+USE_NEW_ONE = ReplyForm("use the new one", re.compile(r"use the new one"))
+SHOW_ME_FIRST = ReplyForm("show me first", re.compile(r"show me first"))
+IGNORE = ReplyForm("ignore", re.compile(r"ignore"))
+FROM = ReplyForm("this is from <consultant>", re.compile(r"this is from .+"))
+
+# The facts a review about a timesheet can be answered with.
+_TIMESHEET_FACTS = (THIS_IS_FOR, CONSULTANT_IS, PERIOD_IS, USE_HOURS, APPROVED_BY)
+
+
+def reply_text(text: str) -> str:
+    """A reply as compared: lower case, outer quotes and end punctuation off."""
+    return text.strip().strip("\"'").rstrip(".!").strip().casefold()
+
+
+def replies_understood(
+    reviews: list[tuple[str, str]], *, set_aside: bool = False, list_problems: bool = False
+) -> list[ReplyForm]:
+    """What a reply to this one email can say and have the agent act on it.
+
+    Worked out by code from what the email is about, and shown to the
+    investigator, so it never has to guess which of the agent's words apply
+    here -- and checked again before anything it offers reaches Kevin. A
+    reply outside this list is turned down, or does nothing (decisions 59, 61,
+    55 and 66). `reviews` is (code, message) for each question the email asks.
+    """
+    codes = {code for code, _message in reviews}
+    if list_problems:
+        return []  # a reply cannot fix a row: the list is fixed in the list
+    if set_aside:
+        # Decision 55's replies to an email that could not be placed. Naming
+        # the consultant helps only where the consultant is the question.
+        forms = [TRY_AGAIN]
+        if codes & {"UNKNOWN_SENDER", "CONSULTANT_UNKNOWN"}:
+            forms.append(FROM)
+        return [*forms, IGNORE]
+    if not codes or codes & {"NO_ATTACHMENT", "CANT_READ_ATTACHMENT"}:
+        # No timesheet behind it: an answer has nothing to apply to (decision 66).
+        return [IGNORE]
+    forms = list(_TIMESHEET_FACTS)
+    if "CORRECTION" in codes:
+        forms.append(USE_NEW_ONE)
+    if any(retries_on_try_again(code, message) for code, message in reviews):
+        forms.append(TRY_AGAIN)
+    if "QUICKBOOKS_FAILED" in codes and any(
+        "invoice number" in message.casefold() or "numbered" in message.casefold()
+        for _code, message in reviews
+    ):
+        forms.append(USE_NUMBER)
+    return [*forms, SHOW_ME_FIRST, IGNORE]
+
+
+def form_of(reply: str, forms: list[ReplyForm]) -> ReplyForm | None:
+    """Which of these forms a reply is, or None for one the agent would not
+    understand here."""
+    said = reply_text(reply)
+    return next((form for form in forms if form.matches(said)), None)

@@ -1,0 +1,33 @@
+{
+  "description": "QuickBooks refused Priya's August invoice because the Acme customer has been made inactive.",
+  "items": [
+    {
+      "key": "priya",
+      "consultant": "Priya Shah",
+      "client": "Acme Corp",
+      "period_start": "2026-08-01",
+      "period_end": "2026-08-31",
+      "status": "ready",
+      "client_code": "AC",
+      "consultant_code": "PS"
+    }
+  ],
+  "engagement_list": {
+    "clients": [
+      {}
+    ],
+    "consultants": [
+      {
+        "Other names": "P. Shah"
+      }
+    ],
+    "engagements": [
+      {}
+    ]
+  },
+  "review": {
+    "item": "priya",
+    "code": "QUICKBOOKS_FAILED",
+    "message": "I could not make the invoice for Priya Shah at Acme Corp (2026-08-01 to 2026-08-31) in QuickBooks, so nothing went to the client. I will try again next run. QuickBooks said: 6000 A business validation error has occurred while processing your request: Invalid Reference Id : Customer assigned to this transaction has been deleted or made inactive."
+  }
+}

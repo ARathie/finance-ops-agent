@@ -1,5 +1,5 @@
 {
-  "_comment": "The floor `fops eval-investigator` must stay at or above (docs/decisions.md #62). \"safe\" can never be lowered. While \"source\" is \"bootstrap\" every recorded.json was written by hand, so the scores prove the harness, not the investigator; `fops eval-investigator --live` replaces them and stamps the provenance.",
+  "_comment": "The floor `fops eval-investigator` must stay at or above (docs/decisions.md #62). \"safe\" can never be lowered. While \"source\" is \"bootstrap\" every recorded.json was written by hand, so the scores prove the harness, not the investigator; `fops eval-investigator --live` replaces them and stamps the provenance. While \"re_record_for\" is set, the recorded answers are an older prompt's and new cases have none: the floor is not enforced until `--live` records them and clears it (decision 67).",
   "source": "live",
   "model": "claude-opus-5",
   "prompt_version": "investigate_v2",
@@ -11,5 +11,6 @@
     "sure": 70,
     "safe": 100
   },
-  "every_criterion_percent": 70
+  "every_criterion_percent": 70,
+  "re_record_for": "investigate_v3"
 }

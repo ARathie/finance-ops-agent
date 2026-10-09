@@ -1,0 +1,29 @@
+{
+  "must_call_any": [
+    "item_timesheets",
+    "describe_email"
+  ],
+  "found_mentions": [
+    [
+      "invoice"
+    ],
+    [
+      "not a timesheet",
+      "not the timesheet",
+      "instead of",
+      "rather than",
+      "no timesheet"
+    ]
+  ],
+  "proposals_mention": [
+    [
+      "approved timesheet",
+      "signed timesheet",
+      "the timesheet"
+    ]
+  ],
+  "replies_forbidden": [
+    "approved by .*",
+    "ignore"
+  ]
+}

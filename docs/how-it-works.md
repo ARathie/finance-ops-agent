@@ -131,7 +131,7 @@ flowchart TD
     askpaid --> monday{"Monday?"}
     monday -- "yes" --> summary["Write the Monday summary (J8)"]
     monday -- "no" --> look
-    summary --> look["Look into each stuck item before Kevin's email goes (L1)"]
+    summary --> look["Look into each stuck email before it goes, item or not (L1)"]
     look --> send["Send everything written down, never twice (J1-J3)"]
     send --> tracking["Rewrite the tracking sheet"]
     tracking --> done(["Run ends"])
@@ -185,9 +185,9 @@ flowchart TD
     who -- "known" --> which{"Which engagement? the dates, then the client named"}
     which -- "none, or can't tell" --> aside2["Set aside with the setup form (E3)"]
     which -- "one" --> period{"Fits the billing schedule?"}
-    period -- "no" --> r3["Review: PERIOD_MISMATCH or PERIOD_UNCLEAR (E6, E7)"]
+    period -- "no" --> r3["Set aside: PERIOD_MISMATCH or PERIOD_UNCLEAR; 'try again' once fixed (E6, E7)"]
     period -- "yes" --> rate{"Rate for these dates?"}
-    rate -- "no, or it changes mid-period" --> r4["Review: RATE_MISSING or LIST_ROW_PROBLEM (E10, E11)"]
+    rate -- "no, or it changes mid-period" --> r4["Set aside: RATE_MISSING or LIST_ROW_PROBLEM; 'try again' once fixed (E10, E11)"]
     rate -- "yes" --> checks["Check hours, approval, Claude's confidence; problems go on the list (F1-F5)"]
     checks --> money["Ask QuickBooks for this engagement's rates and billing details (F7)"]
     money -- "QuickBooks can't answer" --> hold["Kept; invoice waits; retried every run (F9)"]

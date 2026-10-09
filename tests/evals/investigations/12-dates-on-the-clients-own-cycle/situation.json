@@ -1,0 +1,40 @@
+{
+  "description": "Acme runs its timesheets from the 16th to the 15th, but Priya's engagement is set up as a calendar month, so a 16 Aug - 15 Sep timesheet fits no billing period.",
+  "items": [],
+  "emails": [
+    {
+      "key": "mid-month",
+      "sender": "priya@shah.example",
+      "subject": "Timesheet 8/16 - 9/15",
+      "attachments": [
+        "ts-0816-0915.pdf"
+      ]
+    }
+  ],
+  "engagement_list": {
+    "clients": [
+      {}
+    ],
+    "consultants": [
+      {
+        "Other names": "P. Shah"
+      }
+    ],
+    "engagements": [
+      {}
+    ]
+  },
+  "what_i_read": [
+    "- Consultant: Priya Shah",
+    "- Client: Acme Corp",
+    "- Period: Aug 16 – Sep 15, 2026",
+    "- Hours: 156.00",
+    "- Approval: approved by Jane Doe on Sep 15"
+  ],
+  "review": {
+    "email": "mid-month",
+    "set_aside": true,
+    "code": "PERIOD_MISMATCH",
+    "message": "The timesheet's dates don't match the billing schedule in the engagement list."
+  }
+}

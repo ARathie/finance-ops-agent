@@ -1,0 +1,127 @@
+{
+  "description": "Priya works through BluePeak Staffing. Their email carried only BluePeak's own invoice for her August hours, not the approved timesheet, so no approval shows.",
+  "items": [
+    {
+      "key": "priya",
+      "consultant": "Priya Shah",
+      "client": "Acme Corp",
+      "period_start": "2026-08-01",
+      "period_end": "2026-08-31",
+      "status": "needs_review",
+      "client_code": "AC",
+      "consultant_code": "PS",
+      "timesheets": [
+        {
+          "email": "bluepeak",
+          "reading": {
+            "consultant_name": {
+              "value": "Priya Shah",
+              "quote": "Priya Shah",
+              "confidence": "high"
+            },
+            "client_name": {
+              "value": "Acme Corp",
+              "quote": "Acme Corp",
+              "confidence": "high"
+            },
+            "end_client_name": {
+              "value": null,
+              "quote": null,
+              "confidence": "low"
+            },
+            "period_start": {
+              "value": "2026-08-01",
+              "quote": null,
+              "confidence": "high"
+            },
+            "period_end": {
+              "value": "2026-08-31",
+              "quote": null,
+              "confidence": "high"
+            },
+            "stated_month_start": {
+              "value": null,
+              "quote": null,
+              "confidence": "low"
+            },
+            "noted_in_month_hundredths": {
+              "value": null,
+              "quote": null,
+              "confidence": "low"
+            },
+            "daily_entries": {
+              "value": [],
+              "quote": null,
+              "confidence": "high"
+            },
+            "row_entries": {
+              "value": [],
+              "quote": null,
+              "confidence": "low"
+            },
+            "stated_total_hours_hundredths": {
+              "value": 15600,
+              "quote": "156.00",
+              "confidence": "high"
+            },
+            "approval": {
+              "value": {
+                "kind": "none",
+                "approver": null,
+                "approval_date": null
+              },
+              "quote": null,
+              "confidence": "high"
+            },
+            "unusual_items": [
+              "This document is an invoice from BluePeak Staffing (INV-1042), not a timesheet: it bills hours to Icon and has no approval on it."
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "emails": [
+    {
+      "key": "bluepeak",
+      "sender": "billing@bluepeak.example",
+      "subject": "BluePeak invoice INV-1042 - P. Shah August",
+      "body": "Please find attached our invoice for Priya Shah, August 2026.",
+      "attachments": [
+        "INV-1042.pdf"
+      ]
+    }
+  ],
+  "engagement_list": {
+    "clients": [
+      {}
+    ],
+    "consultants": [
+      {
+        "Type": "vendor",
+        "Vendor company": "BluePeak Staffing",
+        "Email": "billing@bluepeak.example"
+      }
+    ],
+    "vendors": [
+      {
+        "Contact emails": "billing@bluepeak.example"
+      }
+    ],
+    "engagements": [
+      {}
+    ]
+  },
+  "what_i_read": [
+    "- Consultant: Priya Shah",
+    "- Client: Acme Corp",
+    "- Period: Aug 1–31, 2026",
+    "- Hours: 156.00",
+    "- Approval: none found"
+  ],
+  "review": {
+    "item": "priya",
+    "code": "NO_APPROVAL",
+    "message": "I can't see that the client approved these hours."
+  }
+}

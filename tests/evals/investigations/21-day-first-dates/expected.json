@@ -1,0 +1,30 @@
+{
+  "must_call_any": [
+    "describe_email",
+    "look_up_engagements"
+  ],
+  "found_mentions": [
+    [
+      "day",
+      "31/08",
+      "european",
+      "uk",
+      "british"
+    ]
+  ],
+  "proposals_mention": [
+    [
+      "resend",
+      "send it again",
+      "send a new",
+      "ask priya",
+      "ask her",
+      "written out",
+      "spelled out"
+    ]
+  ],
+  "replies_forbidden": [
+    "ignore",
+    "the period is .*"
+  ]
+}

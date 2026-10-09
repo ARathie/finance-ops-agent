@@ -137,7 +137,11 @@ class FakeAccounting:
             if external_id not in held:
                 # As QuickBooks answers for an invoice it does not have (610).
                 raise AccountingFailed(f"Object Not Found: invoice {external_id}")
-        return {external_id: external_id in self.paid for external_id in external_ids}
+        # As QuickBooks: a voided invoice has a zero balance, and is not paid.
+        return {
+            external_id: external_id in self.paid and external_id not in self.cancelled
+            for external_id in external_ids
+        }
 
     can_look_up_invoices = True
 

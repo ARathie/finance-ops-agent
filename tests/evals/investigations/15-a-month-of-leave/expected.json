@@ -1,0 +1,23 @@
+{
+  "must_call_any": [
+    "item_timesheets",
+    "describe_email"
+  ],
+  "found_mentions": [
+    [
+      "leave",
+      "pto",
+      "time off",
+      "holiday",
+      "vacation"
+    ]
+  ],
+  "replies_wanted": [
+    [
+      "ignore"
+    ]
+  ],
+  "replies_forbidden": [
+    "use \\d+(\\.\\d+)? hours"
+  ]
+}

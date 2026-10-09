@@ -530,7 +530,9 @@ class TestNeverTwice:
 
         assert _billing_record(env).status == "failed"
         assert _billing_record(env).attempts == 1
-        assert "SEND_FAILED" in {review.code for review in env.store.open_reviews()}
+        [failed] = [r for r in env.store.open_reviews() if r.code == "SEND_FAILED"]
+        # The server's own words are most of the diagnosis (decision 67).
+        assert "The mail server said: 550 no such user: ap@acme.example" in failed.message
         assert _billing_emails_sent(refusing) == []
 
 
