@@ -1268,7 +1268,11 @@ def _timesheet_summary(
     period: BillingPeriod | None,
     item: Item | None,
 ) -> TimesheetSummary:
-    total, _ = checks.check_hours(reading, period or (item.period if item else None))
+    period = period or (item.period if item else None)
+    # With no engagement yet, the hours shown are still one month's: the month
+    # the page's dates point to, not every day printed on it (decision 68).
+    from_page = checks.likely_month(reading) if period is None else None
+    total, _ = checks.check_hours(reading, period or from_page)
     approval = reading.approval.value
     if approval is None or approval.kind.value == "none":
         approval_text = "no approval found"
@@ -1281,10 +1285,11 @@ def _timesheet_summary(
     return TimesheetSummary(
         consultant=consultant.name if consultant else (reading.consultant_name.value or "unclear"),
         client=client_name or reading.client_name.value or "unclear",
-        period=period,
+        period=period or from_page,
         total_hours=None if total is None else Hours(total),
         approval=approval_text,
         engagement_row=item.snapshot.engagement_row_number if item else None,
+        period_from_page=from_page is not None,
     )
 
 

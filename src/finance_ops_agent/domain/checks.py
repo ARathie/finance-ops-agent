@@ -5,6 +5,7 @@ Kevin). The application runs them in the order from docs/timesheet-checks.md
 and sends one review email listing everything wrong with a timesheet.
 """
 
+import calendar
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -191,21 +192,52 @@ def _anchor_day(reading: TimesheetReading) -> date | None:
     month holding most of the timesheet's days wins: a weekly timesheet always
     spills a few days into a neighbouring month, and those few never outvote
     the month it is for.
+
+    The days are the span the page prints when both ends were read; failing
+    that, every dated day and row on it, laid on the calendar (decision 68).
+    A page whose start or end could not be made out still has its rows, and
+    they say which month it is as plainly as the span does.
     """
     stated = reading.stated_month_start.value
     if stated is not None:
         return stated
-    start, end = reading.period_start.value, reading.period_end.value
-    if start is None or end is None or end < start:
+    days = _days_on_the_page(reading)
+    if not days:
         return None
     days_per_month: dict[tuple[int, int], int] = {}
-    day = start
-    while day <= end:
+    for day in days:
         key = (day.year, day.month)
         days_per_month[key] = days_per_month.get(key, 0) + 1
-        day += timedelta(days=1)
     year, month = max(days_per_month, key=lambda key: (days_per_month[key], key))
     return date(year, month, 15)
+
+
+def _days_on_the_page(reading: TimesheetReading) -> set[date]:
+    start, end = reading.period_start.value, reading.period_end.value
+    if start is not None and end is not None and start <= end:
+        return covered_days([(start, end)])
+    spans = [(entry.day, entry.day) for entry in reading.daily_entries.value or []]
+    spans += [
+        (row.first_day, row.last_day)
+        for row in reading.row_entries.value or []
+        if row.first_day is not None and row.last_day is not None and row.first_day <= row.last_day
+    ]
+    return covered_days(spans)
+
+
+def likely_month(reading: TimesheetReading) -> BillingPeriod | None:
+    """The calendar month the page's own dates point to, before any engagement
+    is known (decision 68).
+
+    Only for showing Kevin what was read: with no engagement there is no
+    billing schedule, so this is never the period an invoice is made for. It
+    lets the hours he is shown be that month's, rather than every day printed.
+    """
+    anchor = _anchor_day(reading)
+    if anchor is None:
+        return None
+    last = calendar.monthrange(anchor.year, anchor.month)[1]
+    return BillingPeriod(date(anchor.year, anchor.month, 1), date(anchor.year, anchor.month, last))
 
 
 def fit_billing_period(

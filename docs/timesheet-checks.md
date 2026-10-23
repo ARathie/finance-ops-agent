@@ -21,13 +21,15 @@ Timesheets arrive in many layouts: a PDF from the client's time system, a spread
 
 For every field the model also records the exact words on the page it relied on and how sure it is (`high`, `medium`, or `low`). The model only reads. It does not add up hours, does not know any rates, does not decide which engagement this is, and does not decide who gets emailed. All of that is done by ordinary code using the engagement list, so it is predictable and testable.
 
+Before any engagement is matched -- a consultant or client the agent cannot place yet -- the emails to Kevin still show one month: the month most of the timesheet's dates fall in, marked "probably", with only that month's days counted in the hours, never every day printed on the page (decision 68). It is for Kevin's eyes only; nothing is billed on it.
+
 If the email has no attachment, or the attachment cannot be opened, the agent asks Kevin rather than trying to read hours out of the email text.
 
 ## Deciding whose timesheet it is
 
 1. **Consultant.** If the sender's address is on a consultant's row in the engagement list, that is the consultant. Otherwise the name on the timesheet is compared with the "Consultant" and "Other names" columns (ignoring case, punctuation, and the order of first and last name). No match, or two matches, means a review.
 2. **Client and engagement.** The agent takes the consultant's active engagements that cover the timesheet's dates. If there is exactly one, that is it. If there are several, the client name on the timesheet (compared with "Client", "Legal name", "Names on timesheets", and "End client") decides. Still unclear means a review.
-3. **Billing period.** The timesheet's dates must fit inside one billing period on that engagement's schedule (see `engagement-list.md`). A timesheet for part of a period is kept while the agent waits for the rest; a monthly engagement with weekly timesheets is invoiced once the whole month is covered. A timesheet that runs across two periods is a review.
+3. **Billing period.** The month being billed is the one the documents name; failing that, the month most of the timesheet's days fall in, counted on the calendar from its printed start and end, or -- where those could not be read -- from every dated day and row on it (decisions 26 and 68). The timesheet's dates must fit inside one billing period on that engagement's schedule (see `engagement-list.md`). A timesheet for part of a period is kept while the agent waits for the rest; a monthly engagement with weekly timesheets is invoiced once the whole month is covered. A timesheet that runs across two periods is a review.
 4. **Rates.** From the engagement row in force on the first day of the period.
 5. **Hours.** If the timesheet shows daily hours, they must add up to the printed total (to the quarter hour). The total is what gets invoiced.
 
