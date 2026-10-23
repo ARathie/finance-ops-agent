@@ -109,10 +109,18 @@ class TimesheetSummary:
     total_hours: Hours | None
     approval: str  # e.g. "Approved by Jane Doe on 2026-09-01", or "no approval found"
     engagement_row: int | None = None
+    # The period is the month the page's own dates point to, not one matched to
+    # an engagement, and the hours are that month's (decision 68).
+    period_from_page: bool = False
 
 
 def _period_text(period: BillingPeriod | None) -> str:
     return "unclear" if period is None else format_period(period)
+
+
+def _summary_period(summary: TimesheetSummary) -> str:
+    text = _period_text(summary.period)
+    return f"probably {text}" if summary.period_from_page else text
 
 
 def _summary_lines(summary: TimesheetSummary) -> list[str]:
@@ -120,12 +128,18 @@ def _summary_lines(summary: TimesheetSummary) -> list[str]:
     lines = [
         f"Consultant: {summary.consultant}",
         f"Client: {summary.client}",
-        f"Period: {_period_text(summary.period)}",
+        f"Period: {_summary_period(summary)}",
         f"Hours: {hours}",
         f"Approval: {summary.approval}",
     ]
     if summary.engagement_row is not None:
         lines.append(f"Engagement list row: {summary.engagement_row}")
+    if summary.period_from_page:
+        lines.append(
+            "(I haven't matched this to an engagement yet, so the period is the month"
+            " most of the dates on the timesheet fall in, and the hours are only the"
+            " days in that month.)"
+        )
     return lines
 
 
@@ -178,7 +192,7 @@ def timesheet_details(
         to=(admin,),
         subject=(
             f"Timesheet received: {summary.consultant} — {summary.client}"
-            f" — {_period_text(summary.period)}{hours}"
+            f" — {_summary_period(summary)}{hours}"
         ),
         body="\n".join(
             [

@@ -143,6 +143,34 @@ class TestForwardedTimesheets:
 
         assert "CONSULTANT_UNKNOWN" in open_codes(env)
 
+    def test_an_unplaced_timesheet_shows_one_months_hours_not_the_whole_page(
+        self, env: ScenarioEnv
+    ) -> None:
+        """Decision 68. A real forward named a consultant the list did not
+        have yet, so no engagement, so no period -- and Kevin was told the
+        hours of every day printed, the neighbouring month's included."""
+        env.forwarders = (self.FORWARDER,)
+        june = [(date(2026, 6, day), 800) for day in range(1, 31)]
+        spill = [(date(2026, 7, day), 800) for day in (1, 2, 3)]  # July's days, printed too
+        env.add_email(
+            self.FORWARDER,
+            subject="FW: timesheet",
+            scripted_reading=reading(
+                date(2026, 6, 1),
+                date(2026, 7, 3),
+                total_hundredths=33 * 800,
+                consultant="Someone Not On The List",
+                dailies=june + spill,
+            ),
+        )
+        env.run()
+
+        assert "CONSULTANT_UNKNOWN" in open_codes(env)
+        review = next(e for e in env.sender.sent_emails() if "Needs your review" in e.subject)
+        assert "Period: probably Jun 1–30, 2026" in review.body
+        assert "Hours: 240.00 hours" in review.body  # thirty June days, not 264
+        assert "only the days in that month" in review.body
+
 
 class TestTheWholeWayThroughToMoney:
     """The path that actually bills: run -> complete_if_covered -> amounts.

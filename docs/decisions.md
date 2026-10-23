@@ -823,3 +823,12 @@ Asked to think through every flow and where it could go wrong (`failure-modes.md
 **None of the new cases has a recorded answer yet, and the old answers are `investigate_v2`'s.** There is no Claude key where this was built. Rather than write answers by hand and call them the model's, the thresholds file says a live run is due (`re_record_for: investigate_v3`): the floor is not enforced until `fops eval-investigator --live` records every case and clears it, and both CI and the command say so on every run. Re-scored under the new grader, the `investigate_v2` answers fail exactly where expected: cases 05 and 06 offered "use the new one".
 
 Still open, in `failure-modes.md`: a month that never gets its last week (it waits without a question), Kevin replying from another address, giving the period of a timesheet with no item by reply, a restored backup resending, and two copies of the agent on one mailbox.
+
+## 68. The month comes from every date on the page, and Kevin is never shown a whole page's hours as one month's
+
+Two things went wrong on a real forwarded timesheet. The consultant was not on the list yet, so no engagement, so no billing period -- and the hours in the email to Kevin were every day printed on the page, the neighbouring month's included (180 where the month held about 116). And the reader was unsure of the printed start and end, which made the dates a dead end even though every row on the page was dated.
+
+- **The month is worked out on the calendar from every date the reader found.** As before (decision 26), a month the documents name settles it, and otherwise the month holding most of the timesheet's days wins. Those days are the printed span when both ends were read; now, when either could not be, they are every dated day and row on the page instead. `PERIOD_UNCLEAR` is left for a page with no dates on it at all. A low-confidence reading of the dates is still a `NOT_SURE` question for Kevin: code finding the month does not make the reader sure (rule 2).
+- **Before an engagement is matched, the hours shown are one month's.** The emails show the period as "probably <month>", count only that month's days, and say so in a line. It is only for Kevin's eyes: without an engagement there is no billing schedule, so nothing is ever invoiced on it.
+
+Not done here: the reader does not yet copy weekday names printed beside dates, which would let code catch a misread date (a "Mon" on a Tuesday). That needs a new prompt version and a live eval run.

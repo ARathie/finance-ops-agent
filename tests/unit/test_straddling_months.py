@@ -13,7 +13,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from finance_ops_agent.domain.checks import check_hours, fit_billing_period
+from finance_ops_agent.domain.checks import check_hours, fit_billing_period, likely_month
 from finance_ops_agent.domain.engagements import Engagement
 from finance_ops_agent.domain.money import Money
 from finance_ops_agent.domain.periods import BillingPeriod, BillingSchedule
@@ -123,9 +123,23 @@ class TestWhichMonth:
         got, findings = fit_billing_period(engagement(), sheet)
         assert got is not None and findings == []
 
-    def test_dates_that_say_nothing_are_still_a_review(self) -> None:
+    def test_rows_say_the_month_when_the_start_and_end_cannot_be_read(self) -> None:
+        # Decision 68: the dated rows are laid on the calendar, and July holds
+        # most of their days, as it would if the span had been read.
         blank = reading(JULY_ROWS).model_copy(
             update={"period_start": ReadField[date](), "period_end": ReadField[date]()}
+        )
+        got, findings = fit_billing_period(engagement(), blank)
+        assert got == BillingPeriod(date(2026, 7, 1), date(2026, 7, 31))
+        assert findings == []
+
+    def test_a_page_with_no_dates_at_all_is_still_a_review(self) -> None:
+        blank = reading(JULY_ROWS).model_copy(
+            update={
+                "period_start": ReadField[date](),
+                "period_end": ReadField[date](),
+                "row_entries": ReadField[list[RowEntry]](value=[]),
+            }
         )
         got, findings = fit_billing_period(engagement(), blank)
         assert got is None
@@ -282,3 +296,49 @@ def test_none_of_the_three_real_months_looks_unusual_at_five_per_cent() -> None:
         )
         _, findings = check_hours(sheet, period)
         assert findings == [], f"{start} was questioned"
+
+
+class TestTheMonthBeforeAnyEngagement:
+    """Decision 68: with no engagement placed yet, the hours Kevin is shown
+    are still one month's -- the month the page's dates point to."""
+
+    def test_the_month_most_days_fall_in(self) -> None:
+        assert likely_month(reading(JULY_ROWS)) == BillingPeriod(
+            date(2026, 7, 1), date(2026, 7, 31)
+        )
+
+    def test_daily_entries_alone_say_the_month(self) -> None:
+        # A June sheet whose first week starts on Sunday May 31: one May day,
+        # thirty June days, and nothing read for its start or end.
+        days = [
+            DailyEntry(day=date(2026, 5, 31) + timedelta(days=n), hours_hundredths=800)
+            for n in range(31)
+        ]
+        sheet = reading(JULY_ROWS).model_copy(
+            update={
+                "period_start": ReadField[date](),
+                "period_end": ReadField[date](),
+                "row_entries": ReadField[list[RowEntry]](value=[]),
+                "daily_entries": ReadField[list[DailyEntry]](value=days, confidence=HIGH),
+            }
+        )
+        june = likely_month(sheet)
+        assert june == BillingPeriod(date(2026, 6, 1), date(2026, 6, 30))
+        # And only June's days are counted: the May 31 day is not.
+        total, _ = check_hours(sheet, june)
+        assert total == 30 * 800
+
+    def test_a_named_month_wins(self) -> None:
+        assert likely_month(reading(JULY_ROWS, month=date(2026, 6, 1))) == BillingPeriod(
+            date(2026, 6, 1), date(2026, 6, 30)
+        )
+
+    def test_no_dates_no_month(self) -> None:
+        blank = reading(JULY_ROWS).model_copy(
+            update={
+                "period_start": ReadField[date](),
+                "period_end": ReadField[date](),
+                "row_entries": ReadField[list[RowEntry]](value=[]),
+            }
+        )
+        assert likely_month(blank) is None
