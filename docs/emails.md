@@ -13,6 +13,7 @@ Sent every time a timesheet is read, before any checking is finished (Objective 
 - **Subject:** `Timesheet received: Priya Shah — Acme Corp — Aug 1–31, 2026 — 156.00 hours`
 - **Body:** consultant, client (and end client), period, total hours, daily hours if shown, approval (what and by whom), what the agent will do next (invoice, or which review reasons it found), and the engagement row it matched.
 - **Attachments:** the original timesheet file -- the one showing approval, when the email carried more than one document.
+- **A salaried employee who wrote their hours in the email** (decision 69): no attachment; the body quotes their words ("From the email itself (there is no timesheet): …") and says approval is not needed.
 
 ### 2. Needs your review
 
@@ -44,7 +45,9 @@ Ask first mode only. Sent when a timesheet passes every check.
 - **Attachments:** the invoice PDF -- the real one, made in QuickBooks under its real number before this email is written (decision 33) -- and the timesheet. **The timesheet, not another file on the same email.** A consultant working through their own firm sends the approved timesheet and the firm's invoice to Icon together, and that invoice shows the firm's own rate -- what Icon pays. The file the agent attaches is the one showing the client's approval, whichever order the email listed them in.
 - **Kevin replies** `approve` to send, or `cancel` (with a reason if he likes) to stop. Plain words work too ("looks good, send it", "don't send this one"): the agent reads them, and approves only when approval is the one thing asked for. A reply that asks for a change ("approve but make it 150 hours") sends nothing: the invoice already exists, so the agent replies that it can only send it as it is or cancel it. Only replies from Kevin's address in the same thread count.
 
-In automatic mode this email is not sent for engagements marked "send automatically"; Kevin sees the billing email itself instead, because he is always on CC.
+- **Hours a salaried employee wrote in the email** (decision 69): the email says so near the top, quoting their words, and that there is no timesheet and no client approval was looked for. The hours line reads "Hours", not "Approved hours". The only attachment is the invoice.
+
+In automatic mode this email is not sent for engagements marked "send automatically"; Kevin sees the billing email itself instead, because he is always on CC. Hours a salaried employee wrote in an email always come to Kevin this way first.
 
 ### 4. Payment instruction
 
@@ -55,6 +58,14 @@ Sent when the invoice has been sent (or, in dry run mode, when the item is ready
 - **Attachments:** none.
 
 The agent does not follow up on this email and does not track whether the payment was made.
+
+### 4b. Salary reminder
+
+Sent instead of the payment instruction for a **salaried employee** (decision 69), at the same moment.
+
+- **Subject:** `Pay salary: Dana Cruz — Oct 2026`
+- **Body:** that they are an Icon employee on a salary and this is the reminder to pay it for the month; the client and period; the hours billed to the client (not used for pay); the invoice it relates to. No rate, no amount, no due date: the agent never knows the salary.
+- **Attachments:** none.
 
 ### 5. Monday summary
 
@@ -92,6 +103,7 @@ One per invoice (Objective 4).
   > Icon Technologies
 
 - **Attachments:** the invoice PDF, and the consultant's original timesheet file exactly as it was received.
+- For hours a salaried employee wrote in an email (decision 69) there is no timesheet: the only attachment is the invoice, and the first sentence reads "(168.00 hours)." with no mention of an approved timesheet. Their email to Icon is never sent to a client.
 - If the client's row says `portal`, the agent does not send this email. It emails Kevin the invoice and timesheet instead, and Kevin uploads them.
 - When an invoice replaces an earlier one (after a corrected timesheet), the first line says so: "This invoice replaces invoice 1043, which has been cancelled."
 

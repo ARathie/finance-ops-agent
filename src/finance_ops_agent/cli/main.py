@@ -690,6 +690,7 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
                 bill_rate_cents=snapshot.bill_rate_cents,
                 pay_rate_cents=snapshot.pay_rate_cents,
                 payee=snapshot.payee,
+                salaried=snapshot.salaried,
             )
         return [wanted[key] for key in sorted(wanted)]
 
@@ -716,6 +717,8 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
                 payment_terms_days=client_row.payment_terms_days,
             )
         for expected in wanted_engagements():
+            if expected.salaried:
+                continue  # no vendor to compare: Kevin pays them himself (decision 69)
             try:
                 rates = accounting.engagement_rates(expected.consultant, expected.clients)
             except Exception:

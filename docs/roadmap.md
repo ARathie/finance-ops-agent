@@ -13,7 +13,7 @@ Work is done in small pull requests in this order. Each PR ticks its boxes here 
 
 PRs 1–7 and 10 are done. PR 8 built a Microsoft 365 adapter on a wrong assumption: Icon's email is hosted at Rackspace Email and is spoken to with IMAP and SMTP (decision 21), so PR 11 replaces it. PR 9's live QuickBooks box moved to PR 16. Production must never depend on someone's personal computer (decision 22): the Mac is for the first real-life test only (PR 13), and PR 14 moves the agent to a server.
 
-Order: 11 → 12 → 13 → 14 → 15 → 16 → 17. PRs 11 and 12 can be worked at the same time. The project has succeeded at PR 15: Icon invoicing through the agent for real.
+Order: 11 → 12 → 13 → 14 → 15 → 16 → 17. PR 19 (a salaried employee) stands on its own beside them. PRs 11 and 12 can be worked at the same time. The project has succeeded at PR 15: Icon invoicing through the agent for real.
 
 ## PR 1 — Documentation
 
@@ -245,6 +245,19 @@ Done when:
 - [ ] **Needs a person:** in the **sandbox** company in ask first, a timesheet for a second client is put on the first, Kevin replies "wrong client", the draft is voided in QuickBooks (renamed `-VOID`), he sets up the right client through the form, and a new approval email arrives for it with the right client, rates and invoice code. Nothing was emailed to either client.
 - [ ] **Needs a person:** Kevin reads a real setup question and confirmation email and says whether the form and the summary are clear enough to fill in and check without help.
 - [ ] **Needs a person:** Kevin receives one of the new emails for real -- for example a test timesheet sent from an address not in QuickBooks -- reads it, replies "try again" after adding the address to the vendor in QuickBooks, and the timesheet is then handled. He says whether the wording made it clear what to do.
+
+## PR 19 — A salaried employee
+
+Per decision 69. An Icon employee on a fixed salary has no vendor and no pay rate. They may report their hours in the email itself rather than send a timesheet, and Kevin gets a reminder to pay their salary instead of a payment instruction.
+
+Done when:
+
+- [x] A product with no vendor and no cost (QuickBooks), or Type `employee` with Paid by `salary` and a blank Pay rate (the list), is a salaried employee; the address their emails come from is an `Email:` line on the product; a pay rate beside a salary, a cost with no vendor, a vendor on one product and none on another, an `Email:` line beside a vendor, and the list and QuickBooks disagreeing about the salary are each a problem or a review, never a guess; `fops doctor`'s pay rates and setup checks know about them, and `quickbooks-setup.md` says what to click (tested, no network).
+- [x] An email from a salaried employee with no attachment is read for the hours in its own words (`read_hours_email`, prompt `hours_email_v1`, quotes checked against the email); the month becomes its dates in code; approval is not asked, every other check is; the same words again are a duplicate, different hours a correction; anyone else's is `NO_ATTACHMENT` and is never read for hours; a timesheet from them goes the usual way (tested, no network).
+- [x] The client gets the invoice alone, worded without "approved timesheet"; Kevin's approval email quotes the employee's words; automatic mode never sends it unasked; Kevin gets **Pay salary: …** with no rate, amount or due date instead of a payment instruction; the tracking sheet says "salary" (tested, no network).
+- [ ] **Needs a person:** Kevin sets up the salaried employee's product in the **sandbox** company -- under the client's category, the sales price, no vendor, no cost, and `Start:` and `Email:` lines -- and `fops doctor` passes **quickbooks pay rates** and **quickbooks setup** with the employee counted as salaried. If QuickBooks will not save the purchase description without a cost, write down what it does instead.
+- [ ] **Needs a person:** with `ANTHROPIC_API_KEY`, the employee's real hours email (or one written like it) goes through `fops dry-run` and the *Timesheet received* email shows the right month and hours, quoting their words. A few real wordings become eval cases for `hours_email_v1`.
+- [ ] **Needs a person:** in ask first, Kevin approves one such invoice; the client gets the invoice alone with Kevin on CC, and Kevin gets **Pay salary: <name> — <month>**. Kevin says whether the client is happy with an invoice with no timesheet behind it (`open-questions.md`).
 
 ## Later, if wanted
 

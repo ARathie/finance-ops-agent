@@ -30,12 +30,12 @@ MONEY_FORMAT = "0.00"
 CHOICES = {
     "Delivery": ("email", "portal"),
     "Type": ("employee", "contractor", "vendor"),
-    "Paid by": ("bank transfer", "payroll", "check", "other"),
+    "Paid by": ("bank transfer", "payroll", "check", "other", "salary"),
     "Billing schedule": ("monthly", "twice a month", "every two weeks", "weekly"),
     "Active": ("yes", "no"),
     "Send automatically": ("yes", "no"),
 }
-# Vendors are never on Icon's payroll (domain/engagements.py forbids it).
+# Vendors are never on Icon's payroll or a salary (domain/engagements.py forbids it).
 VENDOR_PAID_BY = ("bank transfer", "check", "other")
 
 SHEETS: dict[str, tuple[list[str], list[object]]] = {
@@ -162,6 +162,11 @@ READ_ME = [
     ("Rates", "Bill rate is what the client pays Icon. Pay rate is what Icon pays"),
     ("", "the consultant or their vendor. They are different numbers and the"),
     ("", "agent takes both from this file and nowhere else."),
+    ("", None),
+    ("Salaried employees", "An Icon employee on a fixed salary: Type 'employee', Paid by"),
+    ("", "'salary', Pay timing blank, and Pay rate blank on their Engagements"),
+    ("", "rows. The client is still billed at the Bill rate; you get a reminder"),
+    ("", "to pay the month's salary instead of an amount owed."),
     ("", None),
     ("Changing a rate", "Add a new Engagements row with the new rates and the date they"),
     ("", "start in 'Rates from'. Leave the old row alone: it is the record of"),

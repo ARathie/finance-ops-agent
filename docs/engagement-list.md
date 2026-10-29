@@ -43,8 +43,8 @@ One row per person doing work.
 | Email | Addresses this person sends timesheets from; separate with `;` | priya@example.com; pshah@acme.example |
 | Type | `employee` (Icon W-2), `contractor` (independent), or `vendor` (through another company) | contractor |
 | Vendor company | Required when Type is `vendor`; must match a row on the Vendors sheet | |
-| Paid by | `bank transfer`, `payroll`, `check`, or `other` | bank transfer |
-| Pay timing (days) | Days after the end of the billing period the payment is due | 15 |
+| Paid by | `bank transfer`, `payroll`, `check`, `other`, or `salary` (an `employee` on a fixed salary: see below) | bank transfer |
+| Pay timing (days) | Days after the end of the billing period the payment is due; leave blank for `salary` | 15 |
 | Active | `yes` or `no` | yes |
 
 ## Sheet: Vendors
@@ -74,10 +74,18 @@ One row per consultant working for one client. When a rate changes, add a new ro
 | Billing schedule | `monthly`, `twice a month`, `every two weeks`, or `weekly`; **leave it blank for monthly** | |
 | First period start | For `every two weeks` and `weekly` only: the first day of any one period, so the agent can work out the rest | 2026-02-02 |
 | Bill rate | Dollars per hour Icon charges the client | 140.00 |
-| Pay rate | Dollars per hour Icon pays the consultant or vendor | 100.00 |
+| Pay rate | Dollars per hour Icon pays the consultant or vendor; **blank for a salaried employee** | 100.00 |
 | Rates from | The date these rates apply from; use the start date for the first row | 2026-02-01 |
 | Send automatically | `yes` lets the agent send clean invoices without asking when it is in automatic mode; `no` always asks | no |
 | Active | `yes` or `no`; **in QuickBooks Online mode the product's own active/inactive decides this**, and this column only stops doctor mentioning an engagement that has finished | yes |
+
+## A salaried employee
+
+An Icon employee on a fixed salary (decision 69) has Type `employee` and Paid by `salary` on the Consultants sheet, and **no Pay rate** on their Engagements rows -- only the Bill rate the client is charged. The client is invoiced as for anyone else. Instead of a payment instruction, Kevin gets a reminder to pay their salary for the month, with no amount: the agent never knows the salary.
+
+They may report their hours in the email itself ("168 hours were worked in October") rather than send a timesheet; those are trusted as written. A timesheet, if they send one, is read and checked like everyone else's. A Pay rate on their row, `salary` with any Type but `employee`, or `salary` on the Vendors sheet is a problem the agent emails Kevin about.
+
+In QuickBooks the same person is a product with a sales price and nothing on its purchase side, with an `Email:` line for their address (`quickbooks-setup.md`, sections 3 and 7).
 
 ## How an invoice is numbered
 

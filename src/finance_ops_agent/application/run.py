@@ -36,6 +36,7 @@ from finance_ops_agent.domain.engagements import (
     Engagement,
     EngagementWorkbook,
     ListRowProblem,
+    PaidBy,
     Vendor,
 )
 from finance_ops_agent.domain.invoice_numbers import codes_for_client
@@ -322,12 +323,27 @@ def build_snapshot(
             consultant.paid_by,
             (consultant.pay_timing_days),
         )
+    salaried = consultant.salaried and rate_row.pay_rate is None
     bill_rate_cents = rate_row.bill_rate.cents
-    pay_rate_cents = rate_row.pay_rate.cents
+    pay_rate_cents = 0 if rate_row.pay_rate is None else rate_row.pay_rate.cents
     said: list[str] = []
     engagement_ref = ""
     rates = _rates_from_accounting(accounting, rate_row, client, failures)
     who = f"{rate_row.consultant} at {rate_row.client}"
+    if rates is not None and salaried and (rates.pay_rate_cents or rates.payee):
+        # The list says a salary and QuickBooks says an hourly cost or a
+        # vendor. QuickBooks' answer is used, as for any other disagreement,
+        # and Kevin is told before anything is paid (decision 69).
+        hourly = (
+            f"${Money(rates.pay_rate_cents)} an hour" if rates.pay_rate_cents else "by the hour"
+        )
+        said.append(
+            f"QuickBooks pays {rates.payee or rate_row.consultant} {hourly} for {who} and the"
+            " engagement list says they are paid a salary. I am using QuickBooks' answer."
+            " Make them agree: for a salaried employee, the product has no vendor and no"
+            " cost."
+        )
+        salaried, paid_by = False, PaidBy.OTHER
     if rates is not None:
         engagement_ref = rates.ref
         if rates.bill_rate_cents != bill_rate_cents:
@@ -344,7 +360,7 @@ def build_snapshot(
             )
         bill_rate_cents = rates.bill_rate_cents
     if rates is not None and rates.pay_rate_cents is not None:
-        if rates.pay_rate_cents != pay_rate_cents:
+        if rates.pay_rate_cents != pay_rate_cents and rate_row.pay_rate is not None:
             said.append(
                 f"QuickBooks pays {who}"
                 f" ${Money(rates.pay_rate_cents)} an hour and the engagement list says"
@@ -353,10 +369,11 @@ def build_snapshot(
             )
         pay_rate_cents = rates.pay_rate_cents
     if rates is not None and rates.payee and rates.payee != payee:
-        said.append(
-            f"QuickBooks pays {rates.payee} for {who} and the engagement list says"
-            f" {payee}. I am using QuickBooks' answer. Make them agree."
-        )
+        if not consultant.salaried:
+            said.append(
+                f"QuickBooks pays {rates.payee} for {who} and the engagement list says"
+                f" {payee}. I am using QuickBooks' answer. Make them agree."
+            )
         payee = rates.payee
     # Where invoices go, how long the client has, and how long Icon has to pay:
     # QuickBooks' customer and vendor records where they say, the engagement
@@ -416,6 +433,7 @@ def build_snapshot(
         send_automatically=rate_row.send_automatically,
         rate_disagreement=" ".join(said),
         engagement_ref=engagement_ref,
+        salaried=salaried,
     )
 
 
@@ -1038,25 +1056,6 @@ def _process_timesheet(
     the record)."""
     workbook = engagements.workbook
     key = set_aside.message_key(deps, message.message_id)
-    if not message.attachments:
-        finding = Finding(
-            ReviewCode.NO_ATTACHMENT,
-            "This looks like a timesheet email but has no attachment I can use"
-            f' ("{message.subject}").',
-        )
-        _open_review(deps, report, None, finding)
-        _enqueue_review_email(
-            deps, key, None, [finding], None, None, about_email=message.message_id
-        )
-        return NEEDS_REVIEW_FOLDER
-    attachment = message.attachments[0]
-    if all(deps.store.timesheet_seen(part.sha256) for part in message.attachments):
-        report.duplicates_filed += 1
-        report.note(f"duplicate filed quietly: {attachment.filename} from {message.from_address}")
-        summary_steps.note_duplicate_filed(
-            deps, f"{attachment.filename} from {message.from_address} (the same file again)"
-        )
-        return IGNORED_FOLDER
     hints = ReadingHints(
         email_subject=message.subject,
         consultant_names=[consultant.name for consultant in workbook.consultants],
@@ -1069,6 +1068,58 @@ def _process_timesheet(
     read_attachments: list[StoredAttachment] = []
     unreadable: list[str] = []
     why_not: list[str] = []
+    # A salaried employee may report their hours in the email itself, with no
+    # timesheet at all (decision 69). Only theirs: anyone else's hours still
+    # need the client's approved timesheet.
+    from_text = not message.attachments and _may_report_in_text(deps, workbook, message)
+    if not message.attachments and not from_text:
+        return _no_attachment(deps, report, key, message)
+    if from_text:
+        # Kept as the record's file. The subject and the day it arrived are
+        # part of it: "168 hours this month" can be the same words every month,
+        # and only a resend of the same email is a duplicate here. Different
+        # emails with the same month and hours are caught as duplicates later,
+        # by what they say.
+        text = (
+            f"Subject: {message.subject}\nReceived: {message.received_at.isoformat()}\n\n"
+            f"{message.body_text}"
+        ).encode()
+        attachment = StoredAttachment(
+            filename="the email's own words",
+            mime_type="text/plain",
+            sha256=hashlib.sha256(text).hexdigest(),
+            size_bytes=len(text),
+        )
+        if deps.store.timesheet_seen(attachment.sha256):
+            report.duplicates_filed += 1
+            report.note(
+                f"duplicate filed quietly: the same hours email from {message.from_address}"
+            )
+            summary_steps.note_duplicate_filed(
+                deps, f"hours emailed by {message.from_address} (the same words again)"
+            )
+            return IGNORED_FOLDER
+        try:
+            read = deps.reader.read_hours_email(
+                message.subject, message.body_text, message.received_at.date(), hints
+            )
+        except CantReadAttachmentError as error:
+            report.note(f"no hours in the email itself: {error}")
+            return _no_attachment(deps, report, key, message, said=str(error))
+        deps.store.save_file(text)
+        readings.append(checks.month_as_dates(read))
+        read_attachments.append(attachment)
+    else:
+        attachment = message.attachments[0]
+    if not from_text and all(
+        deps.store.timesheet_seen(part.sha256) for part in message.attachments
+    ):
+        report.duplicates_filed += 1
+        report.note(f"duplicate filed quietly: {attachment.filename} from {message.from_address}")
+        summary_steps.note_duplicate_filed(
+            deps, f"{attachment.filename} from {message.from_address} (the same file again)"
+        )
+        return IGNORED_FOLDER
     for part in message.attachments:
         try:
             readings.append(
@@ -1123,12 +1174,19 @@ def _process_timesheet(
         placed = _place(deps, workbook, message, reading)
     consultant, client_name = placed.consultant, placed.client_name
     period, rate_row = placed.period, placed.rate_row
+    if from_text and consultant is not None and not consultant.salaried:
+        # Hours in an email are trusted only from a salaried employee; for
+        # anyone else this is a timesheet email with nothing attached.
+        return _no_attachment(deps, report, key, message)
     findings.extend(placed.findings)
 
     hours_total, hours_findings = checks.check_hours(reading, period)
     findings.extend(hours_findings)
-    findings.extend(checks.check_approval(reading))
-    findings.extend(checks.check_confidence(reading))
+    if not from_text:
+        # A salaried employee's own report is trusted as it stands; Kevin sees
+        # their words before the invoice goes (decision 69).
+        findings.extend(checks.check_approval(reading))
+    findings.extend(checks.check_confidence(reading, approval=not from_text))
 
     item: Item | None = None
     is_duplicate = False
@@ -1196,9 +1254,15 @@ def _process_timesheet(
                 sha256=attachment.sha256,
                 reading=reading.model_dump(mode="json"),
                 model=deps.reader.model_name,
-                prompt_version=deps.reader.prompt_version,
+                prompt_version=(
+                    deps.reader.hours_email_prompt_version
+                    if from_text
+                    else deps.reader.prompt_version
+                ),
                 is_duplicate=is_duplicate,
                 is_correction=is_correction,
+                from_email_text=from_text,
+                message_id=message.message_id if from_text else "",
             )
         )
     if is_duplicate:
@@ -1218,8 +1282,12 @@ def _process_timesheet(
     if item is not None and findings:
         _to_needs_review(deps, item)
 
-    summary = _timesheet_summary(reading, consultant, client_name, period, item)
-    timesheet_attachment = EmailAttachment(attachment.filename, attachment.sha256)
+    summary = _timesheet_summary(reading, consultant, client_name, period, item, from_text)
+    # Hours written in the email have no file: Kevin reads them in the email's
+    # body instead, and nothing goes to the client but the invoice.
+    timesheet_attachment = (
+        None if from_text else EmailAttachment(attachment.filename, attachment.sha256)
+    )
 
     # Details for Kevin's records, every time a timesheet is read (Objective 2).
     next_step = (
@@ -1267,6 +1335,7 @@ def _timesheet_summary(
     client_name: str | None,
     period: BillingPeriod | None,
     item: Item | None,
+    from_text: bool = False,
 ) -> TimesheetSummary:
     period = period or (item.period if item else None)
     # With no engagement yet, the hours shown are still one month's: the month
@@ -1274,7 +1343,9 @@ def _timesheet_summary(
     from_page = checks.likely_month(reading) if period is None else None
     total, _ = checks.check_hours(reading, period or from_page)
     approval = reading.approval.value
-    if approval is None or approval.kind.value == "none":
+    if from_text:
+        approval_text = "not needed: a salaried employee's own report of their hours"
+    elif approval is None or approval.kind.value == "none":
         approval_text = "no approval found"
     else:
         by = f" by {approval.approver}" if approval.approver else ""
@@ -1290,7 +1361,42 @@ def _timesheet_summary(
         approval=approval_text,
         engagement_row=item.snapshot.engagement_row_number if item else None,
         period_from_page=from_page is not None,
+        reported_in_email=checks.words_reported(reading) if from_text else "",
     )
+
+
+def _may_report_in_text(
+    deps: RunDeps, workbook: EngagementWorkbook, message: StoredMessage
+) -> bool:
+    """Could this email be a salaried employee reporting hours in its text?
+
+    From one of their addresses, or from someone forwarding on a consultant's
+    behalf, or named so by Kevin's "this is from ..." (decision 69). Whether it
+    really is theirs is settled after reading, by the usual matching."""
+    salaried = [consultant for consultant in workbook.consultants if consultant.salaried]
+    if not salaried:
+        return False
+    named = set_aside.sender_is(deps, message.message_id)
+    if named:
+        return any(checks.names_match(consultant.name, named) for consultant in salaried)
+    sender = message.from_address.strip().casefold()
+    if any(sender in (email.casefold() for email in consultant.emails) for consultant in salaried):
+        return True
+    return sender in (address.casefold() for address in deps.settings.timesheet_forwarders)
+
+
+def _no_attachment(
+    deps: RunDeps, report: RunReport, key: str, message: StoredMessage, said: str = ""
+) -> str:
+    finding = Finding(
+        ReviewCode.NO_ATTACHMENT,
+        "This looks like a timesheet email but has no attachment I can use"
+        f' ("{message.subject}").'
+        + (f" I couldn't find the hours in the email itself either: {said[:200]}." if said else ""),
+    )
+    _open_review(deps, report, None, finding)
+    _enqueue_review_email(deps, key, None, [finding], None, None, about_email=message.message_id)
+    return NEEDS_REVIEW_FOLDER
 
 
 def _enqueue_review_email(

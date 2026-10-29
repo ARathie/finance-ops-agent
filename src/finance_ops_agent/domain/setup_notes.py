@@ -19,7 +19,9 @@ from finance_ops_agent.domain.engagements import Delivery
 from finance_ops_agent.domain.periods import BillingSchedule
 
 CUSTOMER_LABELS = ("invoice code", "delivery", "cc")
-PRODUCT_LABELS = ("start", "schedule", "first period", "send automatically")
+# "Email" is only for a salaried employee's product, which has no vendor to
+# hold the address their emails come from (decision 69).
+PRODUCT_LABELS = ("start", "schedule", "first period", "send automatically", "email")
 
 _LINE = re.compile(r"^\s*([A-Za-z][A-Za-z ]*?)\s*:\s*(.*?)\s*$")
 _DATE_FORMATS = ("%Y-%m-%d", "%m/%d/%Y")
@@ -107,6 +109,7 @@ class ProductSetup:
     schedule: BillingSchedule = BillingSchedule.MONTHLY
     first_period: date | None = None
     send_automatically: bool = False
+    emails: tuple[str, ...] = ()
     problems: list[str] = field(default_factory=list)
 
 
@@ -149,10 +152,19 @@ def product_setup(description: str) -> ProductSetup:
             problems.append(
                 f'"Send automatically: {values["send automatically"]}" should be yes or no'
             )
+    emails = _addresses(values.get("email", ""))
+    for address in emails:
+        if "@" not in address:
+            problems.append(
+                f'"Email: {values["email"]}" has something that is not an email address'
+            )
+            emails = ()
+            break
     return ProductSetup(
         start=start,
         schedule=schedule,
         first_period=first_period,
         send_automatically=automatic,
+        emails=emails,
         problems=problems,
     )

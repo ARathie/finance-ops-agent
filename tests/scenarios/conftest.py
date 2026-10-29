@@ -167,6 +167,9 @@ class ScenarioEnv:
     forwarders: tuple[str, ...] = ()
     engagements_from: str = "list"
     replies: dict[str, ReplyReading] = field(default_factory=dict)
+    # Hours a salaried employee writes in the email itself, keyed by its text
+    # (decision 69).
+    email_readings: dict[str, TimesheetReading] = field(default_factory=dict)
     investigator: Investigator | None = None
     reader_fails_with: Exception | None = None  # Claude unreachable (decision 58)
     _deps: RunDeps | None = field(default=None, repr=False)
@@ -181,6 +184,7 @@ class ScenarioEnv:
         body: str = "Please see attached.",
         attachments: list[tuple[str, bytes, TimesheetReading | None]] | None = None,
         in_reply_to: str | None = None,
+        sent: str = "Tue, 08 Sep 2026 09:00:00 +0000",
     ) -> str:
         """`attachments` carries several files in the order the email lists
         them, which is what decides nothing and must be shown to decide
@@ -193,7 +197,7 @@ class ScenarioEnv:
         message["To"] = AGENT_ADDRESS
         message["Subject"] = subject
         message["Message-ID"] = message_id or f"<{name}@example>"
-        message["Date"] = "Tue, 08 Sep 2026 09:00:00 +0000"
+        message["Date"] = sent
         if in_reply_to:
             message["In-Reply-To"] = in_reply_to
         message.set_content(body)
@@ -230,7 +234,7 @@ class ScenarioEnv:
         )
 
     def _reader(self) -> FakeReader:
-        reader = FakeReader(self.readings, self.replies)
+        reader = FakeReader(self.readings, self.replies, self.email_readings)
         reader.fail_with = self.reader_fails_with
         return reader
 

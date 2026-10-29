@@ -197,3 +197,97 @@ def test_a_dead_connection_is_raised_so_the_run_can_say_so(company: FakeAccounti
     company.fail_with = AccountingNeedsReconnect("reconnect")
     with pytest.raises(AccountingFailed):
         workbook_from_accounting(company)
+
+
+class TestASalariedEmployee:
+    """Decision 69: a product with nothing on its purchase side is an Icon
+    employee on a salary, whose address is an `Email:` line on the product."""
+
+    def test_no_vendor_and_no_cost_is_a_salaried_employee(self, company: FakeAccounting) -> None:
+        company.live = [
+            product(
+                consultant="Dana Cruz",
+                notes="Start: 2026-08-01\nEmail: dana@example.com",
+                vendor="",
+                pay=None,
+            )
+        ]
+        built = workbook_from_accounting(company)
+
+        assert built.problems == []
+        (consultant,) = built.consultants
+        assert consultant.salaried
+        assert consultant.type is ConsultantType.EMPLOYEE
+        assert consultant.emails == ("dana@example.com",)
+        (engagement,) = built.engagements
+        assert engagement.pay_rate is None
+        assert engagement.bill_rate == Money(14_000)
+        assert built.vendors == []
+
+    def test_a_cost_left_blank_but_held_as_zero_is_still_no_cost(
+        self, company: FakeAccounting
+    ) -> None:
+        """Ticking the purchase box to write `Start:` may store the blank cost as 0."""
+        company.live = [product(consultant="Dana Cruz", vendor="", pay=0)]
+        built = workbook_from_accounting(company)
+
+        assert built.problems == []
+        (consultant,) = built.consultants
+        assert consultant.salaried
+
+    def test_without_an_email_line_it_is_a_to_do(self, company: FakeAccounting) -> None:
+        company.live = [product(consultant="Dana Cruz", vendor="", pay=None)]
+        built = workbook_from_accounting(company)
+
+        assert built.problems == []
+        assert vendors_without_email(built) == ["Dana Cruz"]
+
+    def test_a_cost_with_no_vendor_is_a_question(self, company: FakeAccounting) -> None:
+        company.live = [product(consultant="Dana Cruz", vendor="")]
+        built = workbook_from_accounting(company)
+
+        assert built.engagements == []
+        assert any(
+            "a cost on its purchase side but no preferred vendor" in p.message
+            for p in built.problems
+        )
+
+    def test_an_email_line_beside_a_vendor_is_refused(self, company: FakeAccounting) -> None:
+        company.live = [product(notes="Start: 2026-08-01\nEmail: priya@example.com")]
+        built = workbook_from_accounting(company)
+
+        assert built.engagements == []
+        assert any('"Email:" line is only for a salaried' in p.message for p in built.problems)
+
+    def test_an_email_line_that_is_not_an_address_is_refused(self, company: FakeAccounting) -> None:
+        company.live = [
+            product(
+                consultant="Dana Cruz", notes="Start: 2026-08-01\nEmail: Dana", vendor="", pay=None
+            )
+        ]
+        built = workbook_from_accounting(company)
+
+        assert built.engagements == []
+        assert any("not an email address" in p.message for p in built.problems)
+
+    def test_a_vendor_on_one_product_and_not_another_is_a_question(
+        self, company: FakeAccounting
+    ) -> None:
+        company.customers["Beta LLC"] = AccountingParty(
+            ref="59",
+            name="Beta LLC",
+            company="",
+            email="ap@beta.example",
+            payment_terms_days=30,
+            notes="Invoice code: BE",
+        )
+        company.live = [
+            product(),
+            product(client="Beta LLC", vendor="", pay=None, ref="43"),
+        ]
+        built = workbook_from_accounting(company)
+
+        assert len(built.engagements) == 1
+        assert any(
+            "a vendor on one product and none on another" in p.message for p in built.problems
+        )

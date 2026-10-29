@@ -1,5 +1,7 @@
-"""A fake timesheet reader, scripted per attachment filename, and scripted
-replies keyed by the reply text."""
+"""A fake timesheet reader, scripted per attachment filename, hours emails
+scripted by their text, and scripted replies keyed by the reply text."""
+
+from datetime import date
 
 from finance_ops_agent.domain.reading import (
     ReadingHints,
@@ -15,14 +17,19 @@ from finance_ops_agent.ports.reader import CantReadAttachmentError
 class FakeReader:
     model_name = "fake"
     prompt_version = "0"
+    hours_email_prompt_version = "hours-0"
 
     def __init__(
         self,
         readings: dict[str, TimesheetReading],
         replies: dict[str, ReplyReading] | None = None,
+        email_readings: dict[str, TimesheetReading] | None = None,
     ) -> None:
         self.readings = readings
         self.replies = replies or {}
+        # Keyed by the email's text, stripped: what a salaried employee wrote.
+        self.email_readings = email_readings or {}
+        self.hours_emails_read: list[str] = []
         self.last_reply_context: ReplyContext | None = None
         # Set to make Claude unreachable, as the real one sometimes is.
         self.fail_with: Exception | None = None
@@ -40,6 +47,21 @@ class FakeReader:
             return self.readings[filename]
         except KeyError as error:
             raise CantReadAttachmentError(f"no scripted reading for {filename}") from error
+
+    def read_hours_email(
+        self,
+        subject: str,
+        body: str,
+        received: date,
+        hints: ReadingHints | None = None,
+    ) -> TimesheetReading:
+        if self.fail_with is not None:
+            raise self.fail_with
+        self.hours_emails_read.append(body.strip())
+        try:
+            return self.email_readings[body.strip()]
+        except KeyError as error:
+            raise CantReadAttachmentError("no hours scripted for this email") from error
 
     def read_reply(
         self,

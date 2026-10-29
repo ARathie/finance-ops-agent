@@ -24,6 +24,8 @@ Plain definitions of the words used across these docs. If a word here conflicts 
 - **Review item** — a note from the agent that something is unclear and needs Kevin. See `timesheet-checks.md`.
 - **Tracking sheet** — the Excel file the agent keeps up to date with one row per timesheet item, for Kevin's records.
 - **Payment instruction** — the email telling Kevin what a consultant or vendor is owed for a period and when it is due. Kevin makes the payment himself.
+- **Salaried employee** — an Icon employee paid a fixed salary rather than by the hour. The client is still invoiced for their hours at the bill rate, but there is no pay rate. In QuickBooks their product has no vendor and no cost. They may report their hours in the email itself instead of sending a timesheet.
+- **Salary reminder** — what a salaried employee gets instead of a payment instruction: an email telling Kevin to pay their salary for the month. It has no amount; the agent never knows the salary.
 - **Dry run / Ask first / Automatic** — the three modes the agent can run in. See `how-it-works.md`.
 - **QuickBooks Online (QBO)** — the online version of QuickBooks the business plans to move to. Once connected, the agent creates invoices there directly and can see when they are paid.
 - **Manual QuickBooks entry** — until QuickBooks Online is connected, the agent makes the invoice PDF and Kevin types the invoice into QuickBooks Desktop himself, as today.

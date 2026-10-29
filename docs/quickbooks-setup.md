@@ -186,6 +186,51 @@ ok   quickbooks pay rates: nothing to compare yet: none of 4 engagement(s) has a
 rate or a vendor on the purchase side of its product
 ```
 
+### A salaried employee
+
+An Icon employee on a fixed monthly salary, rather than paid by the hour
+through a vendor, has a product like everyone else -- under the client's
+category, with the **sales price** the client is billed -- and **nothing on its
+purchase side**: no vendor and no cost (decision 69). That is how the agent
+knows they are salaried. The client is invoiced as usual; instead of a payment
+instruction you get a reminder to pay their salary for the month, with no
+amount on it. The agent never knows the salary.
+
+| Field | What to put |
+|---|---|
+| **Name**, **Category**, **Sales price/rate** | As for anyone else |
+| **I purchase this product/service from a vendor** | Ticked only so the "Description on purchase forms" box shows, for the `Start:` and `Email:` lines (section 7) |
+| **Vendor** | Blank |
+| **Cost** | Blank (or 0) |
+
+If the engagement list is still in use, their row says Type `employee`, Paid
+by `salary`, and Pay rate blank. A cost or a vendor on the product of someone
+the list calls salaried is a disagreement: the pay rates check fails, and a
+timesheet for them waits for you.
+
+```
+FAIL quickbooks pay rates: QuickBooks and the engagement list do not agree about
+what Icon pays. Dana Cruz at Acme Corp: the engagement list says they are paid a
+salary, and QuickBooks has a cost or a vendor on the product's purchase side.
+For a salaried employee, clear both.
+```
+
+When they agree, the check says so:
+
+```
+ok   quickbooks pay rates: all 4 engagement(s) with a purchase side agree with
+the engagement list; 1 salaried employee engagement(s) with nothing on the
+purchase side, as it should be
+```
+
+**Keeping the salary itself in QuickBooks, without the payroll plan.** If you
+want the amount written down somewhere QuickBooks will remind you of, make a
+**recurring transaction** (Settings → Recurring transactions → New, a Check or
+Expense to the employee) of type **Reminder**, monthly. It holds the figure
+and reminds you inside QuickBooks; nothing is paid by itself. Recurring
+transactions are in QuickBooks Online Essentials and above. The agent does not
+read it.
+
 ---
 
 ## 4. Ending an engagement
@@ -347,6 +392,19 @@ Start: 2026-02-01
 The first day of the engagement, so the agent knows which month to expect a
 timesheet for first. Required. `2/1/2026` works too.
 
+**For a salaried employee, who has no vendor** (section 3), the address their
+emails come from goes on the product instead, in the same box as `Start:`:
+
+```
+Email: dana@example.com
+```
+
+Several addresses are separated by commas. An email from that address with no
+attachment is read for the hours written in it ("168 hours were worked in
+October") and trusted as written; one with a timesheet goes the usual way.
+The line is refused on a product that has a vendor, so an address is only ever
+in one place.
+
 **On each vendor, the email** (the ordinary email box, not Notes): the address
 that consultant's timesheets come from. A timesheet from that address is
 theirs. Several addresses go in the one box separated by commas. If one vendor
@@ -367,9 +425,10 @@ holds:
 | `Schedule: weekly` (or `twice a month`, `every two weeks`) | product purchase description | monthly |
 | `First period: 2026-02-02` | product purchase description | only needed with weekly or every two weeks |
 | `Send automatically: yes` | product purchase description | no: every invoice asks you first |
+| `Email: dana@example.com` | product purchase description, salaried employee only | none: needed for their emails to be recognised |
 
 How Icon pays (bank transfer) is the same for everyone and is not written
-anywhere.
+anywhere -- except a salaried employee, whom you pay yourself (section 3).
 
 The agent reads all of this from QuickBooks instead of the spreadsheet once the
 setting `FOPS_ENGAGEMENTS=quickbooks` is on. Doctor checks it either way, so it
@@ -379,14 +438,21 @@ can be filled in and proved first. When everything is in place:
 ok   quickbooks setup: QuickBooks alone describes all 4 engagement(s) for 2 client(s)
 ```
 
-While timesheets are still being forwarded, a vendor with no email is a to-do,
-not a failure:
+While timesheets are still being forwarded, a vendor with no email (or a
+salaried employee's product with no `Email:` line) is a to-do, not a failure:
 
 ```
 ok   quickbooks setup: QuickBooks alone describes all 4 engagement(s) for 2
 client(s); still to do before timesheets stop being forwarded: an email on the
 vendor for Manoj Koottappilly, Sridhar Doraiswamy
 ```
+
+A salaried employee's line is named separately: `an "Email:" line on the
+product (a salaried employee has no vendor) for Dana Cruz`.
+
+A product with a cost but no vendor, a salaried employee with a vendor on one
+of their products and none on another, or an `Email:` line beside a vendor,
+fails and names the product.
 
 A missing or unreadable line fails and names the record:
 

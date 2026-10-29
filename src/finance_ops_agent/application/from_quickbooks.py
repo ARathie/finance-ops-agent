@@ -8,6 +8,8 @@ Everything the agent needs about an engagement now has a place in QuickBooks:
   and an `Invoice code:` line in its Notes box;
 - who Icon pays is the vendor on the product's purchase side, and that vendor's
   email is the address the consultant's timesheets come from;
+- a product with no vendor and no cost is a salaried Icon employee (decision
+  69): nothing is owed by the hour, and their address is an `Email:` line;
 - the engagement's own lines -- `Start:` and, rarely, a schedule -- are in the
   product's "Description on purchase forms".
 
@@ -35,7 +37,7 @@ from finance_ops_agent.domain.engagements import (
     Vendor,
 )
 from finance_ops_agent.domain.money import Money
-from finance_ops_agent.domain.setup_notes import customer_setup, product_setup
+from finance_ops_agent.domain.setup_notes import ProductSetup, customer_setup, product_setup
 from finance_ops_agent.ports.accounting import (
     AccountingEngagement,
     AccountingFailed,
@@ -126,11 +128,25 @@ def workbook_from_accounting(accounting: AccountingSystem) -> EngagementWorkbook
         if isinstance(found, list):
             problems.extend(found)
             continue
-        row, vendor = found
+        row, vendor, emails = found
+        earlier = consultants.get(row.consultant)
+        if earlier is not None and earlier.salaried != (vendor is None):
+            # One product says a salary and another a vendor: which is how this
+            # person is paid is not guessed (decision 69).
+            problems.append(
+                _problem(
+                    f"{who}: {row.consultant} has a vendor on one product and none on"
+                    " another, so I cannot tell whether they are paid by the hour or a"
+                    " salary. Give every one of their products a vendor and a cost, or"
+                    " none of them."
+                )
+            )
+            continue
         engagements.append(replace(row, row_number=len(engagements) + 1))
-        consultants[row.consultant] = _merged_consultant(
-            consultants.get(row.consultant), row.consultant, vendor
-        )
+        if vendor is None:
+            consultants[row.consultant] = _salaried_employee(earlier, row.consultant, emails)
+            continue
+        consultants[row.consultant] = _merged_consultant(earlier, row.consultant, vendor)
         # The vendor row keeps no addresses: they are on the consultant, so a
         # sender names a person rather than a firm that may supply several.
         vendors.setdefault(vendor.company, replace(vendor, contact_emails=()))
@@ -207,16 +223,39 @@ def _shared_invoice_codes(clients: dict[str, Client]) -> list[tuple[str, str]]:
 
 def _engagement(
     engagement: AccountingEngagement, who: str, paid: _Party | None
-) -> tuple[Engagement, Vendor] | list[ListRowProblem]:
+) -> tuple[Engagement, Vendor | None, tuple[str, ...]] | list[ListRowProblem]:
+    """The engagement and who Icon pays for it -- or, for a salaried employee,
+    no vendor and the addresses on the product's `Email:` line."""
     setup = product_setup(engagement.notes)
     problems = [f"{who}: {said} (in its Description on purchase forms)" for said in setup.problems]
     if engagement.bill_rate_cents is None:
         problems.append(f"{who}: no sales price, which is what the client is billed")
+    # QuickBooks may hold a cost left blank as zero once the purchase box is
+    # ticked to write the `Start:` line; no hourly cost is the same answer.
+    if paid is None and not engagement.pay_rate_cents:
+        # Nothing on the purchase side at all: an Icon employee on a salary,
+        # paid by Kevin each month rather than by the hour (decision 69).
+        if problems:
+            return [_problem(said) for said in problems]
+        assert setup.start is not None and engagement.bill_rate_cents is not None
+        return _row(engagement, setup, None), None, setup.emails
+    if setup.emails:
+        problems.append(
+            f'{who}: an "Email:" line is only for a salaried employee\'s product, which has'
+            " no vendor; this one is paid through its vendor, whose email is the address"
+            " timesheets come from. Remove the line."
+        )
+    if paid is None:
+        problems.append(
+            f"{who}: a cost on its purchase side but no preferred vendor, so I do not know"
+            " who Icon pays. Add the vendor, or, for an employee on a salary, clear the"
+            " cost too."
+        )
     if engagement.pay_rate_cents is None:
         problems.append(f"{who}: no cost on its purchase side, which is what Icon pays")
     record = paid.record if paid is not None else None
     if paid is None:
-        problems.append(f"{who}: no preferred vendor, so I do not know who Icon pays")
+        pass  # said above
     elif record is None:
         problems.append(f"{who}: its vendor could not be read ({paid.failure or 'not found'})")
     elif record.payment_terms_days is None:
@@ -238,7 +277,14 @@ def _engagement(
         active=True,
         row_number=0,
     )
-    row = Engagement(
+    return _row(engagement, setup, Money(engagement.pay_rate_cents)), vendor, ()
+
+
+def _row(
+    engagement: AccountingEngagement, setup: ProductSetup, pay_rate: Money | None
+) -> Engagement:
+    assert setup.start is not None and engagement.bill_rate_cents is not None
+    return Engagement(
         consultant=engagement.consultant,
         client=engagement.client,
         end_client="",
@@ -248,13 +294,36 @@ def _engagement(
         billing_schedule=setup.schedule,
         first_period_start=setup.first_period,
         bill_rate=Money(engagement.bill_rate_cents),
-        pay_rate=Money(engagement.pay_rate_cents),
+        pay_rate=pay_rate,
         rates_from=setup.start,
         send_automatically=setup.send_automatically,
         active=True,
         row_number=0,
     )
-    return row, vendor
+
+
+def _salaried_employee(
+    existing: Consultant | None, name: str, emails: tuple[str, ...]
+) -> Consultant:
+    """An Icon employee on a salary, at however many clients (decision 69).
+
+    Their address comes off the product's `Email:` line, since there is no
+    vendor to hold it; Kevin pays them himself, so there is no payee and no
+    pay timing."""
+    if existing is not None:
+        emails = tuple(dict.fromkeys(existing.emails + emails))
+    return Consultant(
+        name=name,
+        initials="",
+        other_names=(),
+        emails=emails,
+        type=ConsultantType.EMPLOYEE,
+        vendor_company="",
+        paid_by=PaidBy.SALARY,
+        pay_timing_days=0,
+        active=True,
+        row_number=0,
+    )
 
 
 def _merged_consultant(existing: Consultant | None, name: str, vendor: Vendor) -> Consultant:
@@ -283,7 +352,8 @@ def _merged_consultant(existing: Consultant | None, name: str, vendor: Vendor) -
 
 def vendors_without_email(workbook: EngagementWorkbook) -> list[str]:
     """Consultants no timesheet can be recognised from yet: their vendor has no
-    email in QuickBooks. A to-do, not a failure, while timesheets are forwarded."""
+    email in QuickBooks, or, for a salaried employee, their product has no
+    `Email:` line. A to-do, not a failure, while timesheets are forwarded."""
     return sorted(consultant.name for consultant in workbook.consultants if not consultant.emails)
 
 

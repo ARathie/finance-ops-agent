@@ -10,7 +10,7 @@ This is the whole process in plain words. It is written for Kevin as much as for
 4. The agent emails Kevin the details it found, for his records.
 5. If anything is unclear, the agent emails Kevin "needs your review" and waits.
 6. If everything checks out, the agent prepares the invoice (approved hours × bill rate) and emails it to the client's billing contact with the timesheet attached and Kevin on CC. Depending on the mode, it asks Kevin first.
-7. The agent emails Kevin what the consultant (or vendor company) is owed (approved hours × pay rate) and when it is due. Kevin pays as he does today.
+7. The agent emails Kevin what the consultant (or vendor company) is owed (approved hours × pay rate) and when it is due. Kevin pays as he does today. For a salaried employee there is no pay rate: Kevin gets a reminder to pay their salary instead.
 8. The agent updates its tracking sheet. Once QuickBooks Online is connected, it checks daily whether the client has paid.
 9. Every Monday the agent emails Kevin a summary.
 
@@ -19,6 +19,8 @@ This is the whole process in plain words. It is written for Kevin as much as for
 ### 1. A timesheet arrives
 
 Consultants keep sending timesheets exactly as they do now, just to the agent's address (for example `jay@icon-technologies.com`) instead of, or as well as, Kevin's. Attachments can be PDFs, spreadsheets, screenshots, or exports from the client's time system. The email itself might be short ("August timesheet attached") or a forwarded approval from the client's manager.
+
+A **salaried employee** -- an Icon employee on a fixed salary, with no vendor -- may not send a timesheet at all: an email saying "168 hours were worked in October" is enough. The agent reads the hours from the email's own words and trusts them as written (decision 69); if they do send a timesheet, it goes the same way as everyone else's.
 
 The agent checks its mailbox every 15 minutes. Emails from addresses it does not know (not a consultant, vendor, client, or Icon address in the engagement list) are set aside in a *Needs Review* folder and mentioned in the Monday summary, but never processed.
 
@@ -75,7 +77,9 @@ Kevin chooses the mode with one setting. The agent starts in dry run and moves t
 
 ### 7. What the consultant is owed
 
-Using the same approved hours, the agent works out approved hours × pay rate and emails Kevin a payment instruction: who to pay (the consultant, or their vendor company), the period, the hours, the pay rate, the amount, when it is due (from the consultant's pay timing), and how they are paid (bank transfer, payroll, or check). Kevin makes the payment as he does today. The agent does not track whether the payment was made and does not send reminders.
+For a **salaried employee** there is nothing to work out: there is no pay rate, and the agent never knows the salary. At the same moment, Kevin gets a reminder to pay their salary for the month, with no amount on it (decision 69).
+
+For everyone else, using the same approved hours, the agent works out approved hours × pay rate and emails Kevin a payment instruction: who to pay (the consultant, or their vendor company), the period, the hours, the pay rate, the amount, when it is due (from the consultant's pay timing), and how they are paid (bank transfer, payroll, or check). Kevin makes the payment as he does today. The agent does not track whether the payment was made and does not send reminders.
 
 ### 8. Keeping records
 
@@ -172,7 +176,11 @@ seen, nobody or no engagement to put it on).
 ```mermaid
 flowchart TD
     t(["A timesheet email"]) --> att{"Attachment?"}
-    att -- "no" --> r1["Review: NO_ATTACHMENT (D1)"]
+    att -- "no" --> salaried{"From a salaried employee?"}
+    salaried -- "no" --> r1["Review: NO_ATTACHMENT (D1)"]
+    salaried -- "yes" --> words["Claude reads the hours in the email itself; no approval asked (M1)"]
+    words -- "no hours in it" --> r1
+    words --> who
     att -- "yes" --> dup{"This exact file seen before?"}
     dup -- "yes" --> quiet["Filed quietly as a duplicate (D3)"]
     dup -- "no" --> read["Claude reads every attachment into the form"]
@@ -244,8 +252,11 @@ flowchart TD
     make --> approve["Kevin gets Approve? with the real invoice (H1)"]
     approve --> answer{"Kevin's reply, first words, read by code"}
     answer -- "approve" --> bill["Billing email to the client, Kevin on CC (H2)"]
-    bill --> pay["Payment instruction to Kevin"]
+    bill --> salary{"Salaried employee?"}
+    salary -- "no" --> pay["Payment instruction to Kevin"]
+    salary -- "yes" --> remind["Reminder to Kevin to pay the salary; no amount (M4)"]
     pay --> paidcheck["Daily paid check: client paid (J6)"]
+    remind --> paidcheck
     answer -- "cancel" --> cancel["Invoice voided; record cancelled (H3)"]
     answer -- "wrong client" --> wrong["Invoice voided; first client waits for its own timesheet; timesheet set aside with the setup form (H4)"]
     wrong --> six["Picture 6, then back to picture 3 for the right client"]

@@ -451,8 +451,51 @@ def check_approval(reading: TimesheetReading) -> list[Finding]:
     return []
 
 
-def check_confidence(reading: TimesheetReading) -> list[Finding]:
-    """Low confidence on who, when, how many hours, or approval is a review."""
+def month_as_dates(reading: TimesheetReading) -> TimesheetReading:
+    """A report that names only its month covers that whole month.
+
+    "168 hours were worked in October" has no dates, and the reader is told not
+    to invent them; code turns the month it read into the month's first and
+    last day, carrying that reading's own quote and confidence, so every check
+    after this one sees ordinary dates (decision 69). Dates the email wrote out
+    are left as they are."""
+    month = reading.stated_month_start.value
+    if (
+        month is None
+        or reading.period_start.value is not None
+        or (reading.period_end.value is not None)
+    ):
+        return reading
+    last = calendar.monthrange(month.year, month.month)[1]
+    field = reading.stated_month_start
+    return reading.model_copy(
+        update={
+            "period_start": ReadField[date](
+                value=date(month.year, month.month, 1),
+                quote=field.quote,
+                confidence=field.confidence,
+            ),
+            "period_end": ReadField[date](
+                value=date(month.year, month.month, last),
+                quote=field.quote,
+                confidence=field.confidence,
+            ),
+        }
+    )
+
+
+def words_reported(reading: TimesheetReading) -> str:
+    """What a salaried employee wrote, as Kevin is shown it: the words the hours
+    came from, and the month's (decision 69)."""
+    quotes = [reading.stated_total_hours_hundredths.quote, reading.stated_month_start.quote]
+    return " / ".join(quote for quote in dict.fromkeys(quotes) if quote) or "(no words quoted)"
+
+
+def check_confidence(reading: TimesheetReading, approval: bool = True) -> list[Finding]:
+    """Low confidence on who, when, how many hours, or approval is a review.
+
+    `approval=False` for hours a salaried employee wrote in the email, where no
+    approval is looked for (decision 69)."""
     hours_confidence = (
         reading.stated_total_hours_hundredths.confidence
         if reading.stated_total_hours_hundredths.value is not None
@@ -465,7 +508,7 @@ def check_confidence(reading: TimesheetReading) -> list[Finding]:
             ("the dates", reading.period_start.confidence),
             ("the dates", reading.period_end.confidence),
             ("the hours", hours_confidence),
-            ("the approval", reading.approval.confidence),
+            ("the approval", reading.approval.confidence if approval else Confidence.HIGH),
         )
         if confidence is Confidence.LOW
     ]

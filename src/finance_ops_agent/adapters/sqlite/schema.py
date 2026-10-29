@@ -75,6 +75,9 @@ class TimesheetRow(Base):
     prompt_version: Mapped[str]
     is_duplicate: Mapped[bool]
     is_correction: Mapped[bool]
+    # Hours a salaried employee wrote in the email, with no file (decision 69).
+    from_email_text: Mapped[bool] = mapped_column(default=False)
+    message_id: Mapped[str | None]
 
 
 class ReviewItemRow(Base):

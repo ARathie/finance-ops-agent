@@ -46,6 +46,10 @@ class EngagementSnapshot(BaseModel):
     # The accounting system's id for this engagement, so the item can be found
     # again when a name is tidied (docs/decisions.md #39).
     engagement_ref: str = ""
+    # An Icon employee on a fixed salary: no pay rate, nothing owed is worked
+    # out from the hours, and Kevin gets a reminder to pay the month's salary
+    # instead of a payment instruction (docs/decisions.md #69).
+    salaried: bool = False
 
 
 @dataclass(frozen=True)
@@ -86,6 +90,12 @@ class TimesheetRecord:
     prompt_version: str
     is_duplicate: bool
     is_correction: bool
+    # Hours a salaried employee wrote in the email itself, with no timesheet
+    # file: `sha256` is then the email's text, which never goes to a client
+    # (docs/decisions.md #69). `message_id` says which email it was, since no
+    # attachment does.
+    from_email_text: bool = False
+    message_id: str = ""
 
 
 @dataclass(frozen=True)

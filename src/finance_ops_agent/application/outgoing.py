@@ -18,6 +18,7 @@ from finance_ops_agent.application.answers import chosen_invoice_number, wants_t
 from finance_ops_agent.application.context import Mode, RunDeps, RunReport
 from finance_ops_agent.application.diagnosis import explain_invoice_number, looking_at
 from finance_ops_agent.domain import emails
+from finance_ops_agent.domain.checks import words_reported
 from finance_ops_agent.domain.emails import EmailAttachment, OutgoingEmail
 from finance_ops_agent.domain.guardrails import GuardrailCheck, check_guardrails
 from finance_ops_agent.domain.invoice_numbers import invoice_number, voided_number
@@ -27,6 +28,7 @@ from finance_ops_agent.domain.items import (
     Item,
     OutgoingRecord,
     PaymentInstructionRecord,
+    TimesheetRecord,
 )
 from finance_ops_agent.domain.money import Money
 from finance_ops_agent.domain.reading import TimesheetReading
@@ -80,13 +82,28 @@ def enqueue_email(
     return deps.store.record_outgoing(kind, key, item_id, payload)
 
 
-def _active_timesheet_attachment(deps: RunDeps, item: Item) -> EmailAttachment | None:
-    records = [
+def _active_records(deps: RunDeps, item: Item) -> list[TimesheetRecord]:
+    return [
         record
         for record in deps.store.timesheets_for_item(item.id)
         if not record.is_duplicate and not record.is_correction
     ]
-    if not records:
+
+
+def hours_in_email(deps: RunDeps, item: Item) -> str:
+    """What a salaried employee wrote, when their email was the report and
+    there is no timesheet file (decision 69); "" for a timesheet."""
+    records = _active_records(deps, item)
+    if not records or not records[-1].from_email_text:
+        return ""
+    return words_reported(TimesheetReading.model_validate(records[-1].reading))
+
+
+def _active_timesheet_attachment(deps: RunDeps, item: Item) -> EmailAttachment | None:
+    records = _active_records(deps, item)
+    if not records or records[-1].from_email_text:
+        # Hours written in an employee's email are not a timesheet, and their
+        # email to Icon is not something to forward to a client (decision 69).
         return None
     sha = records[-1].sha256
     filename = deps.store.file_name_for(sha) or f"timesheet-{sha[:8]}"
@@ -125,6 +142,7 @@ def guardrails_for(deps: RunDeps, item: Item) -> GuardrailCheck:
         if not record.is_duplicate and not record.is_correction
     ]
     return check_guardrails(
+        hours_from_email=bool(hours_in_email(deps, item)),
         send_automatically=item.snapshot.send_automatically,
         open_review_count=sum(
             1 for review in deps.store.open_reviews() if review.item_id == item.id
@@ -443,7 +461,13 @@ def approve_item(deps: RunDeps, item: Item, report: RunReport) -> None:
     if prepared is None:
         return
     invoice, created = prepared.invoice, prepared.created
-    billing = emails.billing_email(deps.settings.admin_email, item, invoice, prepared.attachments)
+    billing = emails.billing_email(
+        deps.settings.admin_email,
+        item,
+        invoice,
+        prepared.attachments,
+        with_timesheet=not hours_in_email(deps, item),
+    )
     if item.snapshot.client_delivery == "portal":
         # Kevin uploads it to the client's portal himself; the package goes to him.
         billing = emails.dry_run_preview(
@@ -462,6 +486,13 @@ def approve_item(deps: RunDeps, item: Item, report: RunReport) -> None:
 
 
 def _enqueue_payment(deps: RunDeps, item: Item, invoice_number: str | None) -> None:
+    if item.snapshot.salaried:
+        # Nothing is owed by the hour: Kevin pays the month's salary himself,
+        # and is reminded to, once (decision 69). Not recorded as a payment
+        # instruction, because it has no amount and no due date.
+        reminder = emails.salary_reminder(deps.settings.admin_email, item, invoice_number)
+        enqueue_email(deps, "payment_email", f"salary:{item.id}", item.id, reminder)
+        return
     assert item.amount_owed is not None
     due = item.period.end + timedelta(days=item.snapshot.pay_timing_days)
     key = f"payment:{item.id}:{item.amount_owed.cents}"
@@ -496,7 +527,10 @@ def plan_outgoing(deps: RunDeps, report: RunReport) -> None:
                 )
                 if attachment is not None
             )
-            billing = emails.billing_email(deps.settings.admin_email, item, invoice, attachments)
+            reported = hours_in_email(deps, item)
+            billing = emails.billing_email(
+                deps.settings.admin_email, item, invoice, attachments, with_timesheet=not reported
+            )
             preview = emails.dry_run_preview(
                 deps.settings.admin_email, item, invoice, billing, attachments
             )
@@ -534,9 +568,12 @@ def plan_outgoing(deps: RunDeps, report: RunReport) -> None:
             if prepared is None:
                 continue  # Kevin has been told why; nothing to ask about yet
             invoice, attachments = prepared.invoice, prepared.attachments
-            billing = emails.billing_email(deps.settings.admin_email, item, invoice, attachments)
+            reported = hours_in_email(deps, item)
+            billing = emails.billing_email(
+                deps.settings.admin_email, item, invoice, attachments, with_timesheet=not reported
+            )
             request = emails.approve_invoice(
-                deps.settings.admin_email, item, invoice, billing, attachments
+                deps.settings.admin_email, item, invoice, billing, attachments, reported
             )
             key = (
                 f"approve:{item.id}:{prepared.created.external_id}:{item.approved_hours.hundredths}"

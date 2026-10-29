@@ -62,7 +62,7 @@ Tables (key columns only; the domain objects mirror them):
 | `messages` | every email seen | Message-ID (unique), raw sha256, In-Reply-To, References, from, to, subject, received_at, kind, processed_at |
 | `attachments` | every attachment stored | message id, filename, mime type, sha256, size |
 | `items` | one per consultant + billing period | consultant, client, period_start, period_end (unique together), status, engagement row snapshot (bill/pay rate cents, terms, contacts, row number), approved hours (hundredths), invoice amount (cents), amount owed (cents) |
-| `timesheets` | each timesheet file processed | item id, attachment sha256, reading (JSON), model, prompt version, is_duplicate, is_correction |
+| `timesheets` | each timesheet file processed | item id, attachment sha256, reading (JSON), model, prompt version, is_duplicate, is_correction, from_email_text and message id (hours a salaried employee wrote in the email itself, whose text is the stored file; decision 69) |
 | `review_items` | each review reason raised | item id or message id, code, message, status (open/answered/ignored), answer (JSON), answered_at |
 | `invoices` | one per item (plus replacements) | item id, number, external id, amount cents, issue date, due date, pdf sha256, status (created/sent/paid/cancelled), replaces |
 | `payment_instructions` | one per item (plus replacements) | item id, payee, amount cents, due date, method, emailed_at |

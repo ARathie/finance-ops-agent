@@ -311,3 +311,54 @@ class TestOtherBadCells:
             )
         )
         assert len(problems_on(parsed.problems, "Engagements", 2)) == 3
+
+
+class TestSalariedEmployees:
+    """Decision 69: "Paid by: salary" for an Icon employee, with no pay rate."""
+
+    def salaried(self, **overrides: str) -> RawRow:
+        cells = {"Type": "employee", "Paid by": "salary", "Pay timing (days)": ""}
+        cells.update(overrides)
+        return consultant_row(2, **cells)
+
+    def test_a_salaried_employee_has_no_pay_rate(self) -> None:
+        parsed = parse_workbook(
+            workbook(
+                consultants=[self.salaried()],
+                engagements=[engagement_row(2, **{"Pay rate": ""})],
+            )
+        )
+        assert parsed.problems == []
+        (consultant,) = parsed.consultants
+        assert consultant.salaried
+        (engagement,) = parsed.engagements
+        assert engagement.pay_rate is None
+        assert engagement.bill_rate == Money(14_000)
+
+    def test_a_pay_rate_for_a_salaried_employee_is_two_answers(self) -> None:
+        parsed = parse_workbook(workbook(consultants=[self.salaried()]))
+        messages = problems_on(parsed.problems, "Engagements", 2)
+        assert any('paid a salary, so leave "Pay rate" blank' in m for m in messages)
+        assert parsed.engagements == []
+
+    def test_anyone_else_still_needs_a_pay_rate(self) -> None:
+        parsed = parse_workbook(workbook(engagements=[engagement_row(4, **{"Pay rate": ""})]))
+        assert problems_on(parsed.problems, "Engagements", 4) == ['"Pay rate" is empty']
+        assert parsed.engagements == []
+
+    def test_only_an_employee_is_paid_a_salary(self) -> None:
+        parsed = parse_workbook(
+            workbook(consultants=[self.salaried(Type="contractor")], engagements=[])
+        )
+        messages = problems_on(parsed.problems, "Consultants", 2)
+        assert any("only an Icon employee is" in m for m in messages)
+
+    def test_a_vendor_company_is_never_paid_a_salary(self) -> None:
+        parsed = parse_workbook(workbook(vendors=[vendor_row(2, **{"Paid by": "salary"})]))
+        assert problems_on(parsed.problems, "Vendors", 2)
+
+    def test_pay_timing_is_still_required_for_everyone_else(self) -> None:
+        parsed = parse_workbook(
+            workbook(consultants=[consultant_row(2, **{"Pay timing (days)": ""})])
+        )
+        assert problems_on(parsed.problems, "Consultants", 2)

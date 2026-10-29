@@ -56,6 +56,10 @@ def tracking_rows(deps: RunDeps) -> list[TrackingRow]:
         if instructions:
             instruction = instructions[-1]
             owed_to = f"{instruction.payee} ({instruction.method}), due {instruction.due_date}"
+        salaried = item.snapshot.salaried
+        if salaried:
+            # Nothing owed by the hour; Kevin pays the salary (decision 69).
+            owed_to = f"{item.consultant} (salary, paid by you)"
         open_codes = sorted(
             {review.code for review in deps.store.open_reviews() if review.item_id == item.id}
         )
@@ -77,8 +81,12 @@ def tracking_rows(deps: RunDeps) -> list[TrackingRow]:
                 approved_hours="" if item.approved_hours is None else str(item.approved_hours),
                 bill_rate=str(Money(item.snapshot.bill_rate_cents)),
                 invoice_amount=("" if item.invoice_amount is None else str(item.invoice_amount)),
-                pay_rate=str(Money(item.snapshot.pay_rate_cents)),
-                amount_owed="" if item.amount_owed is None else str(item.amount_owed),
+                pay_rate="salary" if salaried else str(Money(item.snapshot.pay_rate_cents)),
+                amount_owed=(
+                    "salary"
+                    if salaried
+                    else ("" if item.amount_owed is None else str(item.amount_owed))
+                ),
                 owed_to=owed_to,
                 status=item.status.value,
                 timesheet_received=received,
