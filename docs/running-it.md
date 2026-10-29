@@ -64,6 +64,8 @@ uv run fops doctor
 6. For the whole cycle, Kevin compares each "timesheet received" and "would invoice" email to what he did by hand, answers reviews by replying, and keeps the tally in `first-cycle.md`.
 7. When stage 2 is up, `launchctl bootout` the job so only one agent is running.
 
+Going straight to stage 2 (decision 71) skips all of this: steps 1 to 3 and 5 to 6 are the same on the server, with `docker compose exec fops` in front of each `fops` command.
+
 ### The launchd job
 
 Two jobs: the run every 15 minutes, and a backup once a night.
@@ -118,44 +120,110 @@ Four things about the Mac that are easy to get wrong, and the reason stage 1 is 
 
 ## Stage 2 — production on a server
 
+This is where the agent runs for real, and where the first cycle can run too (decision 71): set `FOPS_MODE=dry_run` and it is the same test as stage 1 without the Mac. Kevin installs nothing. He reads and answers the agent's emails on his laptop or phone, exactly as he would with the Mac.
+
 ### What it needs
 
 - **A small always-on Linux server.** 1 vCPU, 1 GB of memory, and 20 GB of disk is plenty. Ubuntu LTS. Rented from a cloud provider (DigitalOcean, Hetzner, AWS Lightsail, and Azure all work; which one is an open question). Anything that runs Docker and keeps its disk works. Not a laptop, not a desktop, not anyone's personal machine.
 - **Docker**, with Compose.
-- **Somewhere off the server for backups:** an object-storage bucket (Backblaze B2, AWS S3, DigitalOcean Spaces, or the like) that the business controls, with `rclone` on the server configured to reach it.
-- **A heartbeat check:** a free healthchecks.io check (or similar) that expects a ping every 15 minutes with a 45-minute grace period and emails Ash and Kevin when it does not get one. Its URL goes in `FOPS_HEARTBEAT_URL`.
+- **Somewhere off the server for backups:** an object-storage bucket (Backblaze B2, AWS S3, DigitalOcean Spaces, or the like) that the business controls. The image carries `rclone`; you give it the bucket's keys once (below).
+- **A heartbeat check:** a free healthchecks.io check (or similar) with a 15-minute period and a 45-minute grace period that emails Ash and Kevin when the pings stop. Its ping URL goes in `FOPS_HEARTBEAT_URL`.
 - **Outbound network only.** The agent makes outgoing connections to Rackspace (IMAP and SMTP), Anthropic, QuickBooks, the heartbeat service, and the backup bucket. It listens on no port. The firewall allows SSH in and nothing else, and SSH is by key only. Turn on unattended security updates.
+
+### The server, once
+
+On a fresh Ubuntu LTS server, as a user that can `sudo`:
+
+```
+sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2 unattended-upgrades git rclone
+sudo dpkg-reconfigure -plow unattended-upgrades     # answer Yes
+sudo usermod -aG docker "$USER"                     # then log out and back in
+sudo ufw allow OpenSSH && sudo ufw enable           # SSH in, nothing else
+```
+
+In `/etc/ssh/sshd_config` make sure `PasswordAuthentication no` is set, then `sudo systemctl restart ssh`. Note the server's public IP address: it goes into the Intuit app profile ("where your app is hosted").
 
 ### Install
 
 ```
-# on the server, as a user in the docker group
 git clone https://github.com/ARathie/finance-ops-agent.git && cd finance-ops-agent
-cp .env.example .env && chmod 600 .env       # fill in every setting; FOPS_DATA_DIR=/data
-mkdir -p engagements && cp <the workbook> engagements/engagements.xlsx
+cp .env.example .env && chmod 600 .env       # fill in every setting (FOPS_DATA_DIR is set by Compose)
+mkdir -p engagements rclone
+cp <the workbook> engagements/engagements.xlsx  # manual mode only; see below
+rclone config --config rclone/rclone.conf    # one remote for the bucket, e.g. named b2
+sudo chown -R 10001 rclone                   # the container's user reads it; nobody else
 docker compose pull                          # the image CI built for the latest release tag
 docker compose up -d
 docker compose exec fops fops doctor         # every line must pass
 docker compose logs -f                       # watch the first runs
 ```
 
-`docker-compose.yml` (in the repo) defines one service, `fops`, running `fops serve` with `restart: unless-stopped`, `env_file: .env`, a named volume mounted at `/data`, the engagement list mounted read-only from `./engagements`, and the rclone configuration mounted read-only.
+If `docker compose pull` says the image is private or not found, either make the package public on GitHub (the repository's **Packages** → `finance-ops-agent` → Package settings → Change visibility), or log in once with `docker login ghcr.io` and a token that can read packages. `docker compose build` builds the same image from the code on the server instead.
+
+`docker-compose.yml` (in the repo) defines one service, `fops`, running `fops serve` with `restart: unless-stopped`, `env_file: .env`, a named volume `fops-data` mounted at `/data` (the database, stored timesheets, invoice PDFs, QuickBooks tokens, `fops.log`, and the last week of backups), the engagement list mounted read-only from `./engagements`, and the rclone configuration mounted read-only from `./rclone`. Compose fixes `FOPS_DATA_DIR=/data` and `FOPS_ENGAGEMENT_LIST=/engagements/engagements.xlsx` whatever `.env` says. It gives the agent 60 seconds to stop before killing it, and keeps Docker's own log to five 10 MB files.
+
+The settings that are only about the server, in `.env`:
+
+| Setting | What it is | Default |
+|---|---|---|
+| `FOPS_RUN_EVERY_MINUTES` | Minutes between runs | 15 |
+| `FOPS_BACKUP_AT` | The nightly backup, in Icon's time (`FOPS_TIMEZONE`) | 02:30 |
+| `FOPS_HEARTBEAT_URL` | The check service's ping URL; must be https. Blank: nobody is told if it stops | blank |
+| `FOPS_BACKUP_TARGET` | The rclone remote and bucket, e.g. `b2:icon-fops-backups`. Blank: backups stay on the server only | blank |
+
+`fops doctor` has a line for each of the last two: the heartbeat (it does not ping it, so running the doctor from anywhere else never makes a dead agent look alive), and the backup target (it lists the bucket, so a wrong key or name fails there and then).
+
+### QuickBooks from the server
+
+`docker compose exec fops fops qbo-connect` works over SSH: it prints the sign-in address, you open it on your own computer, and paste back the address the browser lands on (decision 51). The tokens are written to the data volume and backed up with everything else.
+
+### What `fops serve` does
+
+- **A run straight away, then one every `FOPS_RUN_EVERY_MINUTES`.** A run that takes longer than that is followed by one more at once, never by a queue of them. Each run takes the run lock, so a `docker compose exec fops fops run` by hand while it is going waits its turn rather than running alongside.
+- **A backup once a day at `FOPS_BACKUP_AT`**, or as soon as it starts if today's was missed. The zip is written to `/data/backups` (the last seven are kept there), then copied to `FOPS_BACKUP_TARGET`, where daily backups are kept 90 days and the first of each month forever (financial records). A backup that fails is tried again an hour later.
+- **A heartbeat ping after each run and backup that finished cleanly.** A failed run is logged (`"what": "run failed"`) and the service carries on; no ping is sent, so a run that keeps failing is noticed by the check service just as a stopped server is.
+- **A clean stop.** `docker compose stop`, `docker compose up -d` after an update, and a server reboot all send SIGTERM. Between runs it stops at once. Mid-run it finishes the step in hand -- one email being handled, one email being sent -- and stops; nothing is left half-sent, and the next run carries on (decision 71).
+- **Logs** go to `/data/fops.log` (rotated at midnight, 30 days kept) and to `docker compose logs`.
 
 ### The engagement list on a server
 
-Kevin edits the workbook on his own computer. Getting it to the server is an open question with a default: a shared folder (OneDrive, Dropbox, or Google Drive) that the server pulls from with `rclone` before every run, into the mounted path. The fallback is a copy by hand with `scp` after each change. Either way the agent re-reads the list every run and emails Kevin if a row is wrong, so a broken edit is caught within 15 minutes.
+With QuickBooks Online connected (`FOPS_ACCOUNTING=quickbooks`) there is nothing to copy: the engagements come from QuickBooks alone (decision 70) and `./engagements` stays empty.
+
+In manual mode Kevin edits the workbook on his own computer and it has to reach `engagements/engagements.xlsx` on the server. Until a shared folder is set up (open question: OneDrive, Dropbox, or Google Drive, pulled with `rclone` before every run), copy it by hand after each change, from his computer: `scp engagements.xlsx <user>@<server>:finance-ops-agent/engagements/`. The agent re-reads the list every run and emails Kevin if a row is wrong, so a broken edit is caught within 15 minutes.
 
 ### Updates
 
-A release is a git tag. CI builds the image and publishes it. On the server: `docker compose pull && docker compose up -d && docker compose exec fops fops doctor`. Database migrations run when the container starts.
+A release is a git tag (`git tag v0.2.0 && git push origin v0.2.0`). CI builds the image, checks it, and publishes it to GitHub Container Registry as both `0.2.0` and `latest`. On the server:
+
+```
+git pull                                     # docker-compose.yml and .env.example may have changed
+docker compose pull && docker compose up -d
+docker compose exec fops fops doctor
+```
+
+Database migrations run when the container starts. To pin a version rather than follow `latest`, add `FOPS_VERSION=0.2.0` to `.env`: Compose reads that file for the image tag too.
 
 ### Secrets
 
-`.env` lives on the server, readable by root and the docker user only, never in the image and never in git. QuickBooks tokens live in the data volume. To rotate the mailbox password: change it at Rackspace, change `.env`, `docker compose up -d`.
+`.env` lives on the server, readable by its owner only (`chmod 600`), never in the image and never in git; `.dockerignore` keeps it out of every build and CI checks the image for one. The bucket's keys are in `rclone/rclone.conf`, readable by the container's user only. QuickBooks tokens live in the data volume. To rotate the mailbox password: change it at Rackspace, change `.env`, `docker compose up -d`.
 
 ### Knowing it is alive
 
-The heartbeat is the first signal. If the agent has not checked in for 45 minutes (the server is down, the container crashed, Rackspace is unreachable, the disk is full) Ash and Kevin get an email from the check service. Nothing else can be relied on for this, because a dead agent cannot email anyone. The "something needs attention" emails cover the softer problems: QuickBooks needs reconnecting, a row in the engagement list is wrong, sends keep failing.
+The heartbeat is the first signal. If the agent has not checked in for 45 minutes (the server is down, the container crashed, Rackspace is unreachable, the disk is full, every run is failing) Ash and Kevin get an email from the check service, and another when it starts again. Nothing else can be relied on for this, because a dead agent cannot email anyone. The "something needs attention" emails cover the softer problems: QuickBooks needs reconnecting, a row in the engagement list is wrong, sends keep failing.
+
+To prove it once: `docker compose stop`, wait an hour, see the alert arrive; `docker compose start`, see it clear.
+
+### Restoring a server backup
+
+On a scratch machine set up as under **Install** (the clone, a `.env` with `FOPS_MODE=dry_run`, and the bucket's `rclone/rclone.conf`), but without `docker compose up`:
+
+```
+rclone copy --config rclone/rclone.conf b2:icon-fops-backups/fops-backup-2026-11-03.zip .
+docker compose run --rm -v "$PWD":/backup:ro fops fops restore /backup/fops-backup-2026-11-03.zip
+docker compose run --rm fops fops status
+```
+
+`fops status` there should list the same items as `docker compose exec fops fops status` on the server. Never `up` the scratch copy: two agents on one mailbox could both send (`failure-modes.md` R3).
 
 ### Without Docker
 

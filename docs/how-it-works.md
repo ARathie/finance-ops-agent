@@ -141,6 +141,8 @@ flowchart TD
     look --> send["Send everything written down, never twice (J1-J3)"]
     send --> tracking["Rewrite the tracking sheet"]
     tracking --> done(["Run ends"])
+    emails -. "server asked to stop" .-> halt(["Stop after the step in hand; the next run carries on (A8)"])
+    send -. "server asked to stop" .-> halt
 ```
 
 ### 2. What an email is
@@ -315,4 +317,5 @@ flowchart TD
     f7 -- "no" --> f8["Waits; picked up on a later run; nobody bothered (A6, D5)"]
     f7 -- "yes" --> f9["Kevin told once; told again when it works (A6, D5)"]
     which -- "filing an email in a folder" --> f10["Logged; the email is still handled once (A7)"]
+    which -- "the agent itself: server down, every run failing" --> f11["No heartbeat; the check service emails Ash and Kevin after 45 minutes (A9)"]
 ```

@@ -84,6 +84,7 @@ def run_once(deps: RunDeps, report: RunReport | None = None) -> RunReport:
     # still pending, so it can gain what the investigator found (decision 61).
     # No engagement list: a quiet run asks QuickBooks nothing (decision 54),
     # and the investigator only looks when something is already stuck.
+    deps.stop_if_asked()
     investigation.investigate_pending_reviews(deps, report, workbook)
     tracking_sha = _write_tracking(deps)
     summary_steps.enqueue_monday_summary(deps, report, tracking_sha)
@@ -778,6 +779,7 @@ def _ingest_mailbox(
 
 def _process_messages(deps: RunDeps, engagements: Engagements, report: RunReport) -> None:
     for message in deps.store.unprocessed_messages():
+        deps.stop_if_asked()
         try:
             _process_message(deps, engagements, message, report)
         except ReaderUnavailable as error:

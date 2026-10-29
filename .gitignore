@@ -17,6 +17,8 @@ htmlcov/
 .env.*
 !.env.example
 secrets/
+# rclone's configuration holds the backup bucket's keys (docker-compose.yml)
+rclone/
 
 # Runtime data: database, stored attachments, tokens, tracking sheet
 data/
@@ -27,6 +29,7 @@ data/
 *.db-shm
 
 # The real engagement list and real timesheets never go in git
+engagements/
 engagements.xlsx
 tracking.xlsx
 evals/private/

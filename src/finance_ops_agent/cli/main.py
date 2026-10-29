@@ -103,6 +103,12 @@ def build_parser() -> argparse.ArgumentParser:
             " (nothing is handled twice: a message already stored is skipped by its Message-ID)",
         )
 
+    commands.add_parser(
+        "serve",
+        help="keep running: a run every FOPS_RUN_EVERY_MINUTES, a backup nightly,"
+        " a heartbeat after each (the server's command)",
+    )
+
     connect = commands.add_parser(
         "qbo-connect", help="the one-time QuickBooks sign-in (run with Kevin present)"
     )
@@ -403,8 +409,15 @@ def _mail_account(mail: "MailSettings") -> "MailAccount":
     )
 
 
-def _real_deps(mode_override: "Mode | None" = None, since: "date | None" = None) -> RunDeps:
-    """Wire the real adapters from the environment (docs/technical-design.md)."""
+def _real_deps(
+    mode_override: "Mode | None" = None,
+    since: "date | None" = None,
+    store: SqliteStore | None = None,
+) -> RunDeps:
+    """Wire the real adapters from the environment (docs/technical-design.md).
+
+    `fops serve` passes the one store it keeps open; a single run opens its own.
+    """
     from finance_ops_agent.adapters.claude.investigator import ClaudeInvestigator
     from finance_ops_agent.adapters.claude.reader import ClaudeReader
     from finance_ops_agent.adapters.clock import SystemClock
@@ -416,7 +429,7 @@ def _real_deps(mode_override: "Mode | None" = None, since: "date | None" = None)
     config = Config.from_env()
     mail = MailSettings.from_env()
     account = _mail_account(mail)
-    store = _open_store(config.data_dir)
+    store = store or _open_store(config.data_dir)
     renderer = TextPdfRenderer()
     clock = SystemClock(config.timezone)
     # The first run reads from today unless MAIL_START_DATE says otherwise, so a
@@ -505,7 +518,13 @@ def _command_run(args: argparse.Namespace) -> int:
 def _command_doctor(args: argparse.Namespace) -> int:
     from finance_ops_agent.cli import doctor as checks
     from finance_ops_agent.cli.doctor import Check, CheckResult
-    from finance_ops_agent.config import ENV_FILE, Config, MailSettings, MissingSettingError
+    from finance_ops_agent.config import (
+        ENV_FILE,
+        Config,
+        MailSettings,
+        MissingSettingError,
+        ServiceSettings,
+    )
     from finance_ops_agent.domain.engagements import parse_workbook
     from finance_ops_agent.ports.inbox import IGNORED_FOLDER, NEEDS_REVIEW_FOLDER, PROCESSED_FOLDER
 
@@ -541,6 +560,20 @@ def _command_doctor(args: argparse.Namespace) -> int:
     results.append(
         checks.check_timesheet_forwarders(config.timesheet_forwarders, config.mode.value)
     )
+
+    try:
+        service = ServiceSettings.from_env()
+    except MissingSettingError as error:
+        results.append(Check("service settings", CheckResult.FAIL, str(error)))
+    else:
+        from finance_ops_agent.adapters.service.backup_target import RcloneTarget
+
+        results.append(checks.check_heartbeat(service.heartbeat_url))
+        results.append(
+            checks.check_backup_target(
+                service.backup_target, RcloneTarget(service.backup_target or ".").names
+            )
+        )
 
     def load_list() -> tuple[int, list[str]]:
         parsed = parse_workbook(_engagement_list(config, _open_store(config.data_dir)).load())
@@ -1331,6 +1364,10 @@ def main(argv: list[str] | None = None) -> int:
         return _command_doctor(args)
     if args.command == "run":
         return _command_run(args)
+    if args.command == "serve":
+        from finance_ops_agent.cli.serve import command_serve
+
+        return command_serve(args)
     if args.command == "qbo-connect":
         return _command_qbo_connect(args)
     if args.command == "qbo-show":

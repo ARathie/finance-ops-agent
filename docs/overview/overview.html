@@ -643,6 +643,8 @@ flowchart TD
     look --&gt; send["Send everything written down, never twice (J1-J3)"]
     send --&gt; tracking["Rewrite the tracking sheet"]
     tracking --&gt; done(["Run ends"])
+    emails -. "server asked to stop" .-&gt; halt(["Stop after the step in hand; the next run carries on (A8)"])
+    send -. "server asked to stop" .-&gt; halt
 </pre></div>
 
   <h3>2 · What an email is</h3>
@@ -808,6 +810,7 @@ flowchart TD
     f7 -- "no" --&gt; f8["Waits; picked up on a later run; nobody bothered (A6, D5)"]
     f7 -- "yes" --&gt; f9["Kevin told once; told again when it works (A6, D5)"]
     which -- "filing an email in a folder" --&gt; f10["Logged; the email is still handled once (A7)"]
+    which -- "the agent itself: server down, every run failing" --&gt; f11["No heartbeat; the check service emails Ash and Kevin after 45 minutes (A9)"]
 </pre></div>
 
 </section>
@@ -1097,11 +1100,13 @@ flowchart TD
   <p class="deck">An agent that works on a developer's laptop and cannot be operated by the person who depends on it is not finished.</p>
 
   <ul>
-    <li><strong>Where it runs.</strong> Production is a container on a small always-on server. A Mac with a launchd timer is the temporary setup for the first real billing cycle and nothing more: production must never depend on someone's personal computer being on.</li>
+    <li><strong>Where it runs.</strong> Production is a container on a small always-on server, running <code>fops serve</code>: a run every fifteen minutes, a backup every night, one process. The first real billing cycle runs there too, in dry run. Kevin installs nothing; he reads and answers email on whatever he likes. Production must never depend on someone's personal computer being on.</li>
+    <li><strong>Stopping is a request, not a kill.</strong> A server shutting down asks the agent to stop; it finishes the step in hand (one email handled, one email sent) and stops there, exactly as if it had crashed at a point it was built to survive. Nothing is left half-sent.</li>
+    <li><strong>Someone is told when it stops.</strong> A dead agent cannot email anyone, so after every run that finished cleanly it pings an outside check service, and that service emails Ash and Kevin when the pings stop for 45 minutes. A run that keeps failing goes quiet the same way.</li>
     <li><strong>One run at a time.</strong> A lock held by the process itself, of the kind the operating system releases when a process dies however it dies, so there is no stuck lock to clean up by hand.</li>
     <li><strong>Outages tell Kevin, once, when they matter.</strong> The mailbox or Claude unreachable: the run carries on with what it can do, nothing is lost, and Kevin hears only if it lasts an hour (or at once for a refused password or key), then again when it is over.</li>
     <li><strong>Logs a person can read.</strong> One JSON object per line: item ids, review codes, statuses, counts. Deliberately <em>not</em> in them: email bodies, attachment contents, rates, amounts.</li>
-    <li><strong>Backup <em>and</em> a tested restore.</strong> Restore is a real command with real tests, because a backup nobody has restored is not a backup.</li>
+    <li><strong>Backup <em>and</em> a tested restore.</strong> Every night, copied off the server to a bucket the business controls: daily copies for 90 days, the first of each month for good. Restore is a real command with real tests, because a backup nobody has restored is not a backup.</li>
     <li><strong>Warnings before incidents.</strong> QuickBooks' connection expires after about 100 days; from day 80, every run says how long is left and what command fixes it.</li>
     <li><strong>A self-check command.</strong> <code>fops doctor</code> checks every credential and setting and sends nothing to a client, including that the agent logs in to its own mailbox and never Kevin's. Its QuickBooks checks and <code>docs/quickbooks-setup.md</code> are one specification written twice: the checks say what the agent expects, the document tells Kevin what to click.</li>
   </ul>
@@ -1137,13 +1142,13 @@ flowchart TD
 
 
   <h3>Where this project actually stands</h3>
-  <p>The agent is built and runs end to end on fakes: 1,341 tests, 70 recorded decisions. What remains is mostly work only a person can do, and the roadmap keeps those boxes unticked on purpose: proving the reader on real timesheets, a full billing cycle in dry run with Kevin checking every reading, moving to a server, the first live invoices in ask-first, and trying each new QuickBooks setup path in the sandbox. Ticking those on the strength of a fake would have been easy and dishonest.</p>
+  <p>The agent is built and runs end to end on fakes: 1,415 tests, 71 recorded decisions. What remains is mostly work only a person can do, and the roadmap keeps those boxes unticked on purpose: proving the reader on real timesheets, a full billing cycle in dry run with Kevin checking every reading, renting the server and switching it on, the first live invoices in ask-first, and trying each new QuickBooks setup path in the sandbox. Ticking those on the strength of a fake would have been easy and dishonest.</p>
 </section>
 
 
 <footer>
   finance-ops-agent · Icon Technologies<br>
-  1,341 tests · 10 ports · 24 review codes · 104 paths mapped · 70 recorded decisions<br>
+  1,415 tests · 10 ports · 24 review codes · 106 paths mapped · 71 recorded decisions<br>
   Read the code alongside this: <code>docs/README.md</code> is the map, <code>docs/how-it-works.md</code> has the pictures, <code>docs/pathways.md</code> is every path, <code>docs/decisions.md</code> is why.<br>
   This page is <code>docs/overview/overview.html</code>; its diagrams are copied from <code>docs/how-it-works.md</code> by <code>sync_diagrams.py</code>, and a test fails if they drift.
 </footer>
