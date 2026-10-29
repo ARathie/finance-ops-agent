@@ -1,0 +1,36 @@
+{
+ "description": "Active employee records, read when a product has nothing on its purchase side (decision 70): a salaried employee's email. Shaped by hand from Intuit's Employee entity reference; replace with a recording once the sandbox has one.",
+ "exchanges": [
+  {
+   "key": "GET https://sandbox-quickbooks.api.intuit.com/v3/company/9130350000000/query?query=SELECT%20%2A%20FROM%20Employee%20WHERE%20Active%20%3D%20true%20MAXRESULTS%201000",
+   "response": {
+    "status": 200,
+    "json": {
+     "QueryResponse": {
+      "Employee": [
+       {
+        "Id": "71",
+        "DisplayName": "Dana Cruz",
+        "GivenName": "Dana",
+        "FamilyName": "Cruz",
+        "PrimaryEmailAddr": {
+         "Address": "dana@example.com"
+        },
+        "Active": true
+       },
+       {
+        "Id": "72",
+        "GivenName": "Sam",
+        "FamilyName": "Okafor",
+        "Active": true
+       }
+      ]
+     }
+    },
+    "headers": {
+     "intuit_tid": "1-68c9a0f1-2b7d4e8a9c1f3b5e"
+    }
+   }
+  }
+ ]
+}

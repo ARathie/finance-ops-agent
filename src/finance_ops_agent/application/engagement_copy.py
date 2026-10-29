@@ -42,6 +42,7 @@ from finance_ops_agent.domain.money import Money
 from finance_ops_agent.domain.reading import ReplyAnswerKind
 from finance_ops_agent.domain.review import ReviewCode
 from finance_ops_agent.ports.accounting import AccountingFailed, AccountingNeedsReconnect
+from finance_ops_agent.ports.store import Store
 
 COPY_KEY = "engagement_copy"
 COPY_TAKEN_KEY = "engagement_copy_taken"
@@ -49,6 +50,25 @@ REFRESH_REQUESTED_KEY = "engagement_copy_refresh_requested"
 # Set when Kevin has been told QuickBooks cannot be asked, cleared when it
 # answers again: told once per outage, and an "ignore" holds until it is over.
 REFRESH_FLAGGED_KEY = "engagement_copy_refresh_flagged"
+# A salaried employee's start date, by product id: QuickBooks has no field for
+# it on a product with nothing on its purchase side (decision 70).
+SALARIED_STARTS_KEY = "salaried_starts"
+
+
+def salaried_starts(store: Store) -> dict[str, str]:
+    """What the agent remembers of salaried employees' start dates."""
+    text = store.get_state(SALARIED_STARTS_KEY)
+    loaded = json.loads(text) if text else {}
+    return {str(ref): str(start) for ref, start in loaded.items()}
+
+
+def remember_salaried_start(store: Store, product_ref: str, start: date) -> None:
+    """Kept by the agent, since QuickBooks has nowhere for it (decision 70)."""
+    starts = salaried_starts(store)
+    starts[product_ref] = start.isoformat()
+    store.set_state(SALARIED_STARTS_KEY, json.dumps(starts, sort_keys=True))
+
+
 REFRESH_FAILED = "I couldn't refresh my copy of the engagements from QuickBooks"
 
 
@@ -123,6 +143,10 @@ class Engagements:
         self._asked_this_run = False
         self.refreshed = False  # a fresh copy was taken during this run
         self.complete = True
+        # QuickBooks could not be asked and there is no copy of it yet: there
+        # are no engagements to work from, which is not the same as Icon
+        # having none. The run leaves the mail for a later one (decision 70).
+        self.unavailable = False
         self.workbook = self._load()
 
     @property
@@ -144,7 +168,12 @@ class Engagements:
         self.complete = False
         if copy is not None:
             return copy
-        return parse_workbook(deps.engagement_list.load())
+        # Never the spreadsheet: it is not kept up to date any more, and
+        # timesheets placed on it would be placed wrongly (decision 70).
+        self.unavailable = True
+        return EngagementWorkbook(
+            clients=[], consultants=[], vendors=[], engagements=[], problems=[]
+        )
 
     def refresh_on_miss(self, why: str) -> bool:
         """Take a fresh copy because something did not match the one in hand.
@@ -176,22 +205,30 @@ class Engagements:
         deps = self._deps
         self._asked_this_run = True
         logs.log("taking a fresh copy of the engagements from quickbooks", why=why)
+        starts = salaried_starts(deps.store)
+        known = dict(starts)
         try:
-            fresh = workbook_from_accounting(deps.accounting)
+            fresh = workbook_from_accounting(deps.accounting, deps.clock.today(), starts)
         except AccountingFailed as error:
             logs.log("could not build the engagements from quickbooks", said=str(error)[:200])
             if isinstance(error, AccountingNeedsReconnect):
                 self._report.quickbooks_unavailable = True
             _flag_refresh_failed(deps, self._report, error)
             self._report.note(
-                "QuickBooks could not be asked for the engagements, so this run used"
+                "QuickBooks could not be asked for the engagements, so this run"
                 + (
-                    " my last copy of them"
+                    " used my last copy of them"
                     if deps.store.get_state(COPY_KEY)
-                    else " the engagement list"
+                    else " has none and leaves the mail until QuickBooks answers"
                 )
             )
             return None
+        if starts != known:
+            # Assumed this time, and the same from now on: "last month" must
+            # not move forward every month (decision 70).
+            deps.store.set_state(SALARIED_STARTS_KEY, json.dumps(starts, sort_keys=True))
+            for ref in sorted(set(starts) - set(known)):
+                logs.log("assumed a salaried engagement's start", product=ref, start=starts[ref])
         deps.store.set_state(COPY_KEY, workbook_to_json(fresh))
         deps.store.set_state(COPY_TAKEN_KEY, deps.clock.today().isoformat())
         deps.store.set_state(REFRESH_REQUESTED_KEY, "")
@@ -236,17 +273,21 @@ def _flag_refresh_failed(deps: RunDeps, report: RunReport, error: AccountingFail
     if _refresh_reviews(deps) or deps.store.get_state(REFRESH_FLAGGED_KEY):
         return
     copy_taken = deps.store.get_state(COPY_TAKEN_KEY)
-    working_from = (
-        f"the copy I took on {copy_taken}"
-        if copy_taken and deps.store.get_state(COPY_KEY)
-        else "the engagement list spreadsheet"
-    )
     reconnect = isinstance(error, AccountingNeedsReconnect)
-    message = (
-        f"{REFRESH_FAILED}, so I am working from {working_from}. A consultant or"
-        " client added or changed in QuickBooks since then will not be recognised"
-        f" until I can. QuickBooks said: {str(error)[:200]}"
-    )
+    if copy_taken and deps.store.get_state(COPY_KEY):
+        message = (
+            f"{REFRESH_FAILED}, so I am working from the copy I took on {copy_taken}."
+            " A consultant or client added or changed in QuickBooks since then will"
+            f" not be recognised until I can. QuickBooks said: {str(error)[:200]}"
+        )
+    else:
+        # No copy yet, and the spreadsheet is not used (decision 70): the mail
+        # waits, unread, until QuickBooks answers.
+        message = (
+            f"{REFRESH_FAILED}, and I have no copy of it yet, so I am leaving the mail"
+            " unread until I can: nothing is lost, and it is handled once QuickBooks"
+            f" answers. QuickBooks said: {str(error)[:200]}"
+        )
     code = ReviewCode.QUICKBOOKS_RECONNECT if reconnect else ReviewCode.QUICKBOOKS_FAILED
     if not deps.store.open_review(None, code.value, message):
         return

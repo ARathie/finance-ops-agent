@@ -19,9 +19,7 @@ from finance_ops_agent.domain.engagements import Delivery
 from finance_ops_agent.domain.periods import BillingSchedule
 
 CUSTOMER_LABELS = ("invoice code", "delivery", "cc")
-# "Email" is only for a salaried employee's product, which has no vendor to
-# hold the address their emails come from (decision 69).
-PRODUCT_LABELS = ("start", "schedule", "first period", "send automatically", "email")
+PRODUCT_LABELS = ("start", "schedule", "first period", "send automatically")
 
 _LINE = re.compile(r"^\s*([A-Za-z][A-Za-z ]*?)\s*:\s*(.*?)\s*$")
 _DATE_FORMATS = ("%Y-%m-%d", "%m/%d/%Y")
@@ -109,15 +107,18 @@ class ProductSetup:
     schedule: BillingSchedule = BillingSchedule.MONTHLY
     first_period: date | None = None
     send_automatically: bool = False
-    emails: tuple[str, ...] = ()
     problems: list[str] = field(default_factory=list)
 
 
-def product_setup(description: str) -> ProductSetup:
+def product_setup(description: str, start_required: bool = True) -> ProductSetup:
+    """`start_required=False` for a salaried employee's product, which has no
+    purchase description to write it in (decision 70): a missing start is
+    then the caller's to settle, not a problem."""
     values, problems = labelled_lines(description, PRODUCT_LABELS)
     start = None
     if "start" not in values:
-        problems.append('no "Start:" line, so I do not know which month to expect first')
+        if start_required:
+            problems.append('no "Start:" line, so I do not know which month to expect first')
     else:
         start = read_date(values["start"])
         if start is None:
@@ -152,19 +153,10 @@ def product_setup(description: str) -> ProductSetup:
             problems.append(
                 f'"Send automatically: {values["send automatically"]}" should be yes or no'
             )
-    emails = _addresses(values.get("email", ""))
-    for address in emails:
-        if "@" not in address:
-            problems.append(
-                f'"Email: {values["email"]}" has something that is not an email address'
-            )
-            emails = ()
-            break
     return ProductSetup(
         start=start,
         schedule=schedule,
         first_period=first_period,
         send_automatically=automatic,
-        emails=emails,
         problems=problems,
     )

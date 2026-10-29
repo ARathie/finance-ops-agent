@@ -124,6 +124,19 @@ def _engagement_work(deps: RunDeps, report: RunReport) -> EngagementWorkbook:
         outages.failed(deps, report, outages.MAILBOX, error, error.lasting)
         mailbox_up, fetched, new_position = False, [], position or ""
     engagements = Engagements(deps, report)
+    if engagements.unavailable:
+        # No copy of QuickBooks yet and QuickBooks cannot be asked: every
+        # sender would look unknown. The mail is stored, Kevin's replies are
+        # handled -- "ignore" and "try again" must still work -- and the rest
+        # waits, to be looked at afresh once there are engagements (decision 70).
+        if mailbox_up:
+            try:
+                _ingest_mailbox(deps, engagements, fetched, new_position, report)
+            except MailboxFailed as error:
+                outages.failed(deps, report, outages.MAILBOX, error, error.lasting)
+        _hold_for_engagements(deps, engagements, report)
+        return engagements.workbook
+    _decide_held_again(deps, engagements)
     _report_list_problems(deps, engagements, report)
     if deps.store.get_state(LAST_EXPECTED_CHECK_KEY) != today:
         asked = _create_expected_items(deps, engagements.workbook, report)
@@ -147,6 +160,41 @@ def _engagement_work(deps: RunDeps, report: RunReport) -> EngagementWorkbook:
     # The list as the run ended with it, for the investigator to look things
     # up in (decision 67). Already in hand: no second read, no QuickBooks call.
     return engagements.workbook
+
+
+# Emails stored while there were no engagements to tell what they are: their
+# kind is decided again once there are (decision 70).
+HELD_FOR_ENGAGEMENTS_KEY = "held_for_engagements"
+
+
+def _hold_for_engagements(deps: RunDeps, engagements: Engagements, report: RunReport) -> None:
+    held = set(json.loads(deps.store.get_state(HELD_FOR_ENGAGEMENTS_KEY) or "[]"))
+    for message in deps.store.unprocessed_messages():
+        if message.kind is MessageKind.KEVIN_REPLY:
+            try:
+                _process_message(deps, engagements, message, report)
+            except ReaderUnavailable as error:
+                # Read on a later run, as in _process_messages.
+                outages.failed(deps, report, outages.CLAUDE, error, error.lasting)
+                break
+        else:
+            held.add(message.message_id)
+    deps.store.set_state(HELD_FOR_ENGAGEMENTS_KEY, json.dumps(sorted(held)))
+    if held:
+        report.note(f"{len(held)} email(s) wait until QuickBooks can say who they are from")
+
+
+def _decide_held_again(deps: RunDeps, engagements: Engagements) -> None:
+    held = json.loads(deps.store.get_state(HELD_FOR_ENGAGEMENTS_KEY) or "[]")
+    if not held:
+        return
+    for message_id in held:
+        message = deps.store.get_message(message_id)
+        if message is not None and not message.processed:
+            deps.store.requeue_message(
+                message_id, _kind_of(deps, engagements, message.from_address)
+            )
+    deps.store.set_state(HELD_FOR_ENGAGEMENTS_KEY, "[]")
 
 
 def _write_tracking(deps: RunDeps) -> str | None:

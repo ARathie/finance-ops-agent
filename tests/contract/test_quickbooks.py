@@ -1761,3 +1761,17 @@ class TestLookingUpInvoices:
         accounting.invoices_numbered("083126AC-PS")
 
         assert {method for method, _ in replay.calls} == {"GET"}
+
+
+class TestEmployees:
+    """Decision 70: a salaried employee's email is on their employee record."""
+
+    def test_each_active_employee_with_their_email(self, tmp_path: Path) -> None:
+        accounting, _, _ = build(replay_from("employees"), tmp_path)
+
+        dana, sam = accounting.employees()
+
+        assert (dana.ref, dana.name, dana.email) == ("71", "Dana Cruz", "dana@example.com")
+        # No display name: the given and family names stand in, and no email
+        # is not an error -- the run treats it as a to-do.
+        assert (sam.name, sam.company, sam.email) == ("Sam Okafor", "Sam Okafor", "")

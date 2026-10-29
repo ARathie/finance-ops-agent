@@ -2,7 +2,7 @@
 
 The engagement list is the spreadsheet Kevin keeps with every client, consultant, vendor company, and engagement. The agent reads it at the start of every run. It is the **only** place the agent takes rates, billing contacts, and payment terms from. Nothing in an email or on a timesheet can override it.
 
-**On its way out.** With `FOPS_ENGAGEMENTS=quickbooks` the agent builds all of this from QuickBooks instead: products, customers, vendors, and a few `Label: value` lines (decision 53, `quickbooks-setup.md` section 7). This workbook is then read only if QuickBooks cannot be asked.
+**No longer used with QuickBooks.** With QuickBooks Online connected the agent builds all of this from QuickBooks instead -- products, customers, vendors, employees, and a few `Label: value` lines (decisions 53 and 70, `quickbooks-setup.md` section 7) -- and never reads this workbook, not even when QuickBooks cannot be asked. It is read only in manual mode.
 
 **Where it lives.** Until `fops engagements import` is run it is this file. After that the agent keeps its own copy and does not open the file again (decision 40); `fops engagements` says which, and `fops engagements forget` puts it back on the file. The columns below are the same either way.
 
@@ -85,7 +85,7 @@ An Icon employee on a fixed salary (decision 69) has Type `employee` and Paid by
 
 They may report their hours in the email itself ("168 hours were worked in October") rather than send a timesheet; those are trusted as written. A timesheet, if they send one, is read and checked like everyone else's. A Pay rate on their row, `salary` with any Type but `employee`, or `salary` on the Vendors sheet is a problem the agent emails Kevin about.
 
-In QuickBooks the same person is a product with a sales price and nothing on its purchase side, with an `Email:` line for their address (`quickbooks-setup.md`, sections 3 and 7).
+In QuickBooks the same person is a product with a sales price and "I purchase this from a vendor" unticked, and an employee record with their email (`quickbooks-setup.md`, section 3; decision 70).
 
 ## How an invoice is numbered
 

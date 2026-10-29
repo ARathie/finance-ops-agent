@@ -517,6 +517,10 @@ def _set_up(deps: RunDeps, engagements: Engagements, entry: SetAside, report: Ru
         report.note(f"could not set up {who} in QuickBooks: {said}")
         return False
     deps.store.update_outgoing(key, status="done")
+    if plan.salaried and done.product_ref:
+        # QuickBooks has nowhere to hold it on a product with no vendor, so
+        # the agent keeps the date Kevin gave (decision 70).
+        engagement_copy.remember_salaried_start(deps.store, done.product_ref, plan.start)
     lines = [f"Done. In QuickBooks I set up {who}:", ""]
     lines += [f"- made {thing}" for thing in done.created]
     lines += [f"- used the existing {thing}" for thing in done.reused]

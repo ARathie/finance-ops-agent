@@ -232,7 +232,13 @@ class Config:
             raise MissingSettingError(
                 f"FOPS_ACCOUNTING should be manual or quickbooks, not {accounting!r}"
             )
-        engagements_from = os.environ.get("FOPS_ENGAGEMENTS", "list").strip() or "list"
+        # With QuickBooks Online connected, it is the only source: the
+        # spreadsheet is no longer kept up to date (decision 70). Manual mode
+        # has nothing else to read.
+        default_source = "quickbooks" if accounting == "quickbooks" else "list"
+        engagements_from = (
+            os.environ.get("FOPS_ENGAGEMENTS", default_source).strip() or default_source
+        )
         if engagements_from not in ("list", "quickbooks"):
             raise MissingSettingError(
                 f"FOPS_ENGAGEMENTS should be list or quickbooks, not {engagements_from!r}"
@@ -248,7 +254,12 @@ class Config:
             # (docs/open-questions.md).
             timezone=_required("FOPS_TIMEZONE"),
             data_dir=Path(os.environ.get("FOPS_DATA_DIR", "data")),
-            engagement_list=Path(_required("FOPS_ENGAGEMENT_LIST")),
+            # Only read in list mode; in QuickBooks mode it need not exist.
+            engagement_list=Path(
+                _required("FOPS_ENGAGEMENT_LIST")
+                if engagements_from == "list"
+                else os.environ.get("FOPS_ENGAGEMENT_LIST", "engagements.xlsx")
+            ),
             admin_email=_required("FOPS_ADMIN_EMAIL"),
             agent_mailbox=_required("FOPS_AGENT_MAILBOX"),
             model=os.environ.get("FOPS_MODEL", "claude-opus-5"),

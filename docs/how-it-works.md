@@ -22,6 +22,8 @@ Consultants keep sending timesheets exactly as they do now, just to the agent's 
 
 A **salaried employee** -- an Icon employee on a fixed salary, with no vendor -- may not send a timesheet at all: an email saying "168 hours were worked in October" is enough. The agent reads the hours from the email's own words and trusts them as written (decision 69); if they do send a timesheet, it goes the same way as everyone else's.
 
+Their address comes from their employee record in QuickBooks, and the box "I purchase this from a vendor" left unticked on their product is what tells the agent they are salaried (decision 70).
+
 The agent checks its mailbox every 15 minutes. Emails from addresses it does not know (not a consultant, vendor, client, or Icon address in the engagement list) are set aside in a *Needs Review* folder and mentioned in the Monday summary, but never processed.
 
 ### 2. Reading the timesheet
@@ -117,7 +119,7 @@ flowchart TD
     list -- "QuickBooks" --> today{"Copy of QuickBooks taken today?"}
     today -- "yes" --> copy["Use the copy: no QuickBooks calls"]
     today -- "no, or Kevin said try again" --> fresh["Take a fresh copy from QuickBooks"]
-    fresh -- "QuickBooks can't be asked" --> stale["Use the last copy, email Kevin once (B3)"]
+    fresh -- "QuickBooks can't be asked" --> stale["Use the last copy, email Kevin once; with no copy yet, only Kevin's replies are handled and the rest waits (B3)"]
     sheet --> problems["Bad rows or records become reviews (B1, B2)"]
     copy --> problems
     fresh --> problems
@@ -289,7 +291,10 @@ flowchart TD
     c -- "confirm without the right number" --> nochange2["Nothing made; told so (I4)"]
     c -- "confirm and the number" --> drymode{"Dry run?"}
     drymode -- "yes" --> wouldset["Dry run - would set up; nothing made (I9)"]
-    drymode -- "no" --> create["Find or make: term, customer, category, vendor, product with both rates (I3)"]
+    drymode -- "no" --> kind{"Salaried employee or vendor consultant?"}
+    kind -- "vendor consultant" --> create["Find or make: term, customer, category, vendor, product with both rates (I3)"]
+    kind -- "salaried employee" --> createemp["Find or make: customer, category, employee record, product with no purchase side; start date kept by the agent (M9)"]
+    createemp --> madeit
     create -- "QuickBooks refuses" --> refused["Couldn't finish setting up; retried every run (I8)"]
     create -- "done" --> madeit["Set up in QuickBooks: what was made and reused"]
     madeit --> handle

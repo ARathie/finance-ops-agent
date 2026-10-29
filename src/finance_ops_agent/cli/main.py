@@ -551,16 +551,16 @@ def _command_doctor(args: argparse.Namespace) -> int:
 
     from finance_ops_agent.adapters.stored.engagement_list import imported
 
-    listed = checks.check_engagement_list(
-        load_list, config.engagement_list, stored=imported(_open_store(config.data_dir))
-    )
-    if config.engagements_from == "quickbooks" and listed.result is CheckResult.FAIL:
-        # Only the stand-in for a run QuickBooks cannot answer (decision 53).
+    if config.engagements_from == "quickbooks":
+        # Never read, not even when QuickBooks cannot be asked (decision 70).
         listed = Check(
-            listed.name,
+            "engagement list",
             CheckResult.SKIP,
-            "not used: the engagements come from QuickBooks, and the list only stands"
-            f" in if QuickBooks cannot be asked ({listed.detail})",
+            "not used: the engagements come from QuickBooks alone",
+        )
+    else:
+        listed = checks.check_engagement_list(
+            load_list, config.engagement_list, stored=imported(_open_store(config.data_dir))
         )
     results.append(listed)
 
@@ -624,6 +624,7 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
     from finance_ops_agent.adapters.quickbooks.client import QuickBooksClient
     from finance_ops_agent.adapters.quickbooks.online import QuickBooksOnline
     from finance_ops_agent.adapters.quickbooks.tokens import TokenStore
+    from finance_ops_agent.application.engagement_copy import salaried_starts
     from finance_ops_agent.application.from_quickbooks import workbook_from_accounting
     from finance_ops_agent.cli.doctor import (
         Check,
@@ -652,7 +653,21 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
     client = QuickBooksClient(store, settings.client_id, settings.client_secret)
     accounting = QuickBooksOnline(client, date.today())  # noqa: DTZ011
 
+    built: list[EngagementWorkbook] = []
+
+    def from_quickbooks() -> EngagementWorkbook:
+        """Built once, with the start dates the agent remembers; doctor only
+        reads, so a start it would assume is not kept (decision 70)."""
+        if not built:
+            starts = salaried_starts(_open_store(config.data_dir))
+            built.append(workbook_from_accounting(accounting, date.today(), starts))  # noqa: DTZ011
+        return built[0]
+
     def parsed_list() -> EngagementWorkbook:
+        if config.engagements_from == "quickbooks":
+            # QuickBooks is the only source: the checks below ask it about
+            # what it describes itself, never about a spreadsheet (decision 70).
+            return from_quickbooks()
         return parse_workbook(_engagement_list(config, _open_store(config.data_dir)).load())
 
     def wanted_customers() -> list[str]:
@@ -754,11 +769,7 @@ def _quickbooks_checks(config: "Config") -> list["Check"]:
     results.append(check_quickbooks_products(accounting, wanted_engagements))
     results.append(check_quickbooks_pay(accounting, wanted_engagements))
     results.append(check_quickbooks_contacts(accounting, wanted_contacts))
-    results.append(
-        check_quickbooks_setup(
-            lambda: workbook_from_accounting(accounting), config.timesheet_forwarders
-        )
-    )
+    results.append(check_quickbooks_setup(from_quickbooks, config.timesheet_forwarders))
     return results
 
 
@@ -1073,6 +1084,7 @@ def _command_diagnose(args: argparse.Namespace) -> int:
     from finance_ops_agent.adapters.clock import SystemClock
     from finance_ops_agent.adapters.email.inbox import ImapInbox
     from finance_ops_agent.application.diagnosis import Looking
+    from finance_ops_agent.application.engagement_copy import salaried_starts
     from finance_ops_agent.application.from_quickbooks import workbook_from_accounting
     from finance_ops_agent.application.run import MAILBOX_POSITION_KEY
     from finance_ops_agent.cli.diagnose import run_diagnosis
@@ -1102,7 +1114,11 @@ def _command_diagnose(args: argparse.Namespace) -> int:
     def workbook() -> EngagementWorkbook | None:
         try:
             if config.engagements_from == "quickbooks":
-                return workbook_from_accounting(accounting)
+                return workbook_from_accounting(
+                    accounting,
+                    date.today(),
+                    salaried_starts(store),  # noqa: DTZ011
+                )
             return parse_workbook(_engagement_list(config, store).load())
         except (AccountingFailed, OSError, ValueError) as error:
             print(f"(could not read the engagements, so items were not checked: {error})")

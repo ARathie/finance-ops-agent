@@ -663,8 +663,8 @@ def check_claude_api(model: str, describe: Callable[[str], str] | None = None) -
 
 
 def _where_the_address_goes(built: EngagementWorkbook, names: list[str]) -> str:
-    """A vendor's email for most; an `Email:` line on the product for a salaried
-    employee, who has no vendor (decision 69)."""
+    """A vendor's email for most; an employee record with their email for a
+    salaried employee, who has no vendor (decision 70)."""
     salaried = {consultant.name for consultant in built.consultants if consultant.salaried}
     on_vendor = [name for name in names if name not in salaried]
     on_product = [name for name in names if name in salaried]
@@ -673,8 +673,8 @@ def _where_the_address_goes(built: EngagementWorkbook, names: list[str]) -> str:
         said.append("an email on the vendor for " + ", ".join(on_vendor))
     if on_product:
         said.append(
-            'an "Email:" line on the product (a salaried employee has no vendor) for '
-            + ", ".join(on_product)
+            "an employee record in QuickBooks, with their email, named as their product"
+            " (a salaried employee has no vendor) for " + ", ".join(on_product)
         )
     return "; ".join(said)
 

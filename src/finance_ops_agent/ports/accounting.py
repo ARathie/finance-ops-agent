@@ -164,6 +164,9 @@ class SetupDone:
 
     created: list[str]
     reused: list[str]
+    # The engagement's product, so what QuickBooks has no field for -- a
+    # salaried employee's start date (decision 70) -- can be remembered by it.
+    product_ref: str = ""
 
 
 class AccountingSystem(Protocol):
@@ -203,6 +206,12 @@ class AccountingSystem(Protocol):
     def payee(self, ref: str) -> AccountingParty | None:
         """Who Icon pays for an engagement -- the vendor on its product's
         purchase side -- by the id `EngagementRates.payee_ref` carries."""
+        ...
+
+    def employees(self) -> list[AccountingParty]:
+        """Every active employee record, with its email: where a salaried
+        employee's address is kept, since they have no vendor (decision 70).
+        Manual mode has none."""
         ...
 
     def cancel_invoice(self, external_id: str, renamed_to: str | None = None) -> None:

@@ -171,3 +171,18 @@ def test_an_unknown_engagements_source_is_refused(monkeypatch: pytest.MonkeyPatc
     set_env(monkeypatch, FOPS_ENGAGEMENTS="spreadsheet")
     with pytest.raises(MissingSettingError, match="list or quickbooks"):
         Config.from_env()
+
+
+def test_with_quickbooks_connected_it_is_the_only_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Decision 70: the spreadsheet is not kept up to date, so QuickBooks is
+    where the engagements come from unless someone asks otherwise, and the
+    spreadsheet's path is not needed at all."""
+    set_env(monkeypatch, FOPS_ACCOUNTING="quickbooks", FOPS_ENGAGEMENT_LIST=None)
+    config = Config.from_env()
+    assert config.engagements_from == "quickbooks"
+
+
+def test_manual_mode_still_needs_the_spreadsheet(monkeypatch: pytest.MonkeyPatch) -> None:
+    set_env(monkeypatch, FOPS_ENGAGEMENT_LIST=None)
+    with pytest.raises(MissingSettingError, match="FOPS_ENGAGEMENT_LIST"):
+        Config.from_env()

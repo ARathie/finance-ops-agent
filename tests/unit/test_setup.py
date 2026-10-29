@@ -31,9 +31,20 @@ def reply(**fields: str) -> str:
 class TestTheForm:
     def test_it_shows_every_label_with_what_is_known_and_hints_for_the_rest(self) -> None:
         lines = setup.form({setup.CONSULTANT_EMAIL: "sam@example.com"})
-        assert lines[1] == "Consultant email: sam@example.com"
-        assert [line.split(":")[0] for line in lines] == list(setup.LABELS)
+        assert lines[0].startswith("Consultant type:")
+        assert "Consultant email: sam@example.com" in lines
+        labelled = [line.split(":")[0] for line in lines if ": " in line or line.endswith(":")]
+        assert set(setup.LABELS) <= set(labelled)
         assert any("new client only" in line for line in lines)
+
+    def test_what_only_a_vendor_consultant_answers_comes_last(self) -> None:
+        """Decision 70: the type first; then what everyone answers; then what a
+        salaried employee leaves out."""
+        lines = setup.form({})
+        split = lines.index("Vendor consultant only (leave these out for a salaried employee):")
+        after = [line.split(":")[0] for line in lines[split + 1 :]]
+        assert after == list(setup.VENDOR_ONLY)
+        assert "salaried employee, or vendor consultant" in lines[0]
 
     def test_a_form_sent_straight_back_reads_as_what_was_typed(self) -> None:
         """Kevin copies the lines with their hints in brackets: the hint is not
@@ -147,5 +158,66 @@ class TestReadingIt:
 
     def test_it_survives_being_kept(self) -> None:
         plan, _, _ = setup.read_setup(reply(), workbook())
+        assert plan is not None
+        assert setup.EngagementSetup.from_dict(plan.to_dict()) == plan
+
+
+class TestASalariedEmployee:
+    """Decision 70: no vendor, no pay rate, no payment terms of Icon's."""
+
+    def salaried(self, **fields: str) -> str:
+        values = {
+            setup.CONSULTANT_TYPE: "salaried employee",
+            setup.CONSULTANT: "Dana Lee",
+            setup.CONSULTANT_EMAIL: "dana.lee@example.com",
+            setup.CLIENT: "Acme Corp",
+            setup.BILL_RATE: "140.00",
+            setup.START: "2026-09-01",
+        }
+        values.update(fields)
+        return "\n".join(f"{label}: {value}" for label, value in values.items())
+
+    def test_it_needs_no_pay_rate_firm_or_terms(self) -> None:
+        assert setup.looks_like_a_setup(self.salaried())
+        plan, problems, _ = setup.read_setup(self.salaried(), workbook())
+
+        assert problems == []
+        assert plan is not None and plan.salaried
+        assert plan.pay_rate == Money(0)
+        assert (plan.firm, plan.pay_within_days) == ("", 0)
+        summary = " ".join(plan.summary_lines())
+        assert "employee record" in summary
+        assert "No vendor and no pay rate" in summary
+        assert "Pay rate" not in summary
+
+    def test_a_pay_rate_for_a_salaried_employee_is_two_answers(self) -> None:
+        plan, problems, _ = setup.read_setup(self.salaried(**{setup.PAY_RATE: "90"}), workbook())
+
+        assert plan is None
+        assert any("is a salaried employee" in p for p in problems)
+
+    def test_the_type_must_be_said(self) -> None:
+        text = self.salaried(**{setup.CONSULTANT_TYPE: ""})
+        plan, problems, _ = setup.read_setup(text, workbook())
+
+        assert plan is None
+        assert any('"Consultant type" is blank' in p for p in problems)
+
+    def test_a_type_it_does_not_know_is_not_guessed(self) -> None:
+        text = self.salaried(**{setup.CONSULTANT_TYPE: "intern"})
+        plan, problems, _ = setup.read_setup(text, workbook())
+
+        assert plan is None
+        assert any('not "intern"' in p for p in problems)
+
+    def test_a_vendor_consultant_still_needs_their_pay_rate(self) -> None:
+        text = self.salaried(**{setup.CONSULTANT_TYPE: "vendor consultant"})
+        plan, problems, _ = setup.read_setup(text, workbook())
+
+        assert plan is None
+        assert any('"Pay rate"' in p for p in problems)
+
+    def test_it_survives_being_kept(self) -> None:
+        plan, _, _ = setup.read_setup(self.salaried(), workbook())
         assert plan is not None
         assert setup.EngagementSetup.from_dict(plan.to_dict()) == plan

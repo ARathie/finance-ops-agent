@@ -852,3 +852,39 @@ One of Icon's consultants is an Icon employee on a fixed monthly salary, not pai
 **Where the salary could live.** Not in the agent, and the business does not want QuickBooks' payroll plan. If Kevin wants QuickBooks to hold the figure, a **recurring transaction** of type *Reminder* (a monthly check or expense to the employee, in QuickBooks Online Essentials and above) keeps the amount and reminds him in QuickBooks itself. The agent does not read it: a salary amount would be a rate taken from somewhere new (rule 1), and nothing it does needs one.
 
 Not done: the setup form (decision 56) still always makes a vendor and a cost, so a salaried employee is set up by hand in QuickBooks (`pathways.md` G13). Whether a client accepts an invoice with no timesheet behind it is Kevin's to say (`open-questions.md`).
+
+## 70. QuickBooks alone, with an employee record for a salaried employee and a setup form that asks which kind
+
+Five things the business settled after decision 69, each of which changes it or an earlier decision.
+
+**The spreadsheet is not read when QuickBooks is connected.** Icon no longer keeps it up to date, so reading it can only place a timesheet wrongly. `FOPS_ENGAGEMENTS` now defaults to `quickbooks` whenever `FOPS_ACCOUNTING=quickbooks`, and `FOPS_ENGAGEMENT_LIST` is needed only in manual mode. This retires decision 53's fallback. Before, QuickBooks that could not be asked on a first run, with no copy of it yet, sent the run to the spreadsheet. Now:
+- every email is stored and only Kevin's replies are handled, since "try again" and "ignore" must still work;
+- the rest wait, and are told apart afresh once there is a copy;
+- nothing is set aside as a stranger's just because QuickBooks was down;
+- Kevin's email about the outage says the mail is waiting rather than that the spreadsheet is in use.
+
+`fops doctor` skips the engagement-list check in QuickBooks mode. Its comparison checks read the engagements QuickBooks itself describes, so they still prove every engagement can be priced and every client found, without a spreadsheet. The spreadsheet code stays for manual mode; deleting it is roadmap PR 18 step 2.
+
+**A salaried employee's address is on their QuickBooks employee record**, not an `Email:` line on the product (decision 69's choice, reversed at the business's request). The record is matched to the product by name: its display name, or given and family name. QuickBooks keeps an employee list without the payroll plan. Matching rules:
+- No record, or one with no email, is the same to-do as a vendor with no email: forwarded emails still work.
+- Two records answering to the name is a question, never a pick.
+- The employee list is asked for only when some product has nothing on its purchase side.
+
+`FOPS_TIMESHEET_FORWARDERS` keeps the operator's own addresses for forwarding (decision 25). Those live in `.env`, never in the repository.
+
+**"I purchase this from a vendor" unticked is what says salaried.** Nothing on the purchase side, which in QuickBooks' API is no preferred vendor and no cost, or a zero one. Unticked, the product has no "Description on purchase forms" either, so there is nowhere to write `Start:`. The agent keeps the start date itself, by the product's id:
+- the date from the setup form, when the agent made the product;
+- otherwise, the first time it sees the product, **the first day of last month**, the month whose hours are due now.
+
+That assumed date is remembered, so it does not move forward every month. A `Start:` line still counts if Kevin ticked the box to write one. Doctor uses the same rule but only reads, so it never remembers a date the run has not.
+
+**The setup form asks which kind of consultant first.** It reads "Consultant type: salaried employee, or vendor consultant", then what everyone answers (name, email, client, bill rate, start date), then what only a vendor consultant answers (firm, pay timing, pay rate).
+
+For a salaried employee the agent makes:
+- an employee record with their email (an existing one with another address is refused, one with none is given this one);
+- a product with a sales side only (no cost, vendor, purchase description or expense account);
+- and it remembers the start date.
+
+On the form, a pay rate or firm beside "salaried employee" is two answers to what Icon pays, and is refused. An unknown type, or a blank one, is a question. A form from before the question, with a pay rate on it, is still read as a vendor consultant's.
+
+**An invoice with nothing behind it is fine, for now.** Icon's clients work out what to pay in their own systems and pay Kevin directly; the invoice is Kevin's record. Whether it is emailed to a client at all is the client's own setting: its billing email in QuickBooks.

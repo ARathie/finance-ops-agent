@@ -252,3 +252,53 @@ class TestATimesheetForANewClient:
         assert "Client: Globex" in body
         assert "Consultant: Priya Shah" in body
         assert "Consultant email: tester@example.com" not in body  # a forwarder, not her
+
+
+class TestASalariedEmployee:
+    """Decision 70: the form asks which kind of consultant first; a salaried
+    employee gets an employee record and a product with no purchase side, and
+    the start date Kevin gives is kept by the agent."""
+
+    LEE = "dana.lee@example.com"
+
+    def salaried_form(self) -> str:
+        values = {
+            setup.CONSULTANT_TYPE: "salaried employee",
+            setup.CONSULTANT: "Dana Lee",
+            setup.CONSULTANT_EMAIL: self.LEE,
+            setup.CLIENT: "Acme Corp",
+            setup.BILL_RATE: "150.00",
+            setup.START: "2026-08-01",
+        }
+        return "\n".join(f"{label}: {value}" for label, value in values.items())
+
+    def test_the_form_asks_which_kind_first(self, stranger: ScenarioEnv) -> None:
+        _, body = latest(stranger, "Needs your review")
+        assert "Consultant type:" in body
+        assert "Vendor consultant only" in body
+
+    def test_set_up_and_then_her_hours_are_handled(self, qbo: ScenarioEnv) -> None:  # noqa: F811
+        qbo.mode = Mode.ASK_FIRST
+        qbo.add_email(self.LEE, scripted_reading=reading(AUG_START, AUG_END, consultant="Dana Lee"))
+        qbo.run()
+        reply_to(qbo, "Needs your review", self.salaried_form())
+        qbo.run()
+
+        subject, body = latest(qbo, "Set up in QuickBooks?")
+        assert subject == "Set up in QuickBooks? Dana Lee at Acme Corp"
+        assert "an Icon employee on a salary" in body
+        assert "Pay rate" not in body
+
+        reply_to(qbo, "Set up in QuickBooks?", f"confirm {the_code(qbo)}")
+        qbo.run()
+
+        (made,) = qbo.accounting.set_up
+        assert made.salaried
+        _, done = latest(qbo, "Set up in QuickBooks:")
+        assert "made employee Dana Lee" in done
+        # Kept by the agent: QuickBooks has nowhere for it.
+        assert qbo.store.get_state("salaried_starts") == '{"p-Dana Lee-Acme Corp": "2026-08-01"}'
+        [item] = [i for i in qbo.store.list_items() if i.consultant == "Dana Lee"]
+        assert item.snapshot.salaried
+        assert item.snapshot.bill_rate_cents == 15_000
+        assert not any(r.code == "UNKNOWN_SENDER" for r in qbo.store.open_reviews())

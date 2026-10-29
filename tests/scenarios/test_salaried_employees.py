@@ -322,8 +322,12 @@ class TestWithQuickBooksDeciding:
                 pay_rate_cents=None,
                 payee="",
                 payee_ref="",
-                notes=f"Start: 2026-08-01\nEmail: {DANA}",
+                notes="",  # the purchase box unticked: no description to write in
             )
+        ]
+        # Her address is on her employee record (decision 70).
+        env.accounting.employee_records = [
+            AccountingParty(ref="e1", name="Dana Cruz", email=DANA, payment_terms_days=None)
         ]
         env.accounting.customers["Acme Corp"] = AccountingParty(
             ref="58",
@@ -340,9 +344,13 @@ class TestWithQuickBooksDeciding:
         env.add_email(DANA, attachment=None, body=ONE_LINER)
         env.run()
 
+        # No start date anywhere: last month is assumed (August, on Sep 8),
+        # and remembered for next time.
         item = env.the_item()
+        assert (item.period.start, item.period.end) == (AUG_START, AUG_END)
         assert item.status is ItemStatus.READY
         assert item.snapshot.salaried
+        assert env.store.get_state("salaried_starts") == '{"44": "2026-08-01"}'
         assert item.snapshot.bill_rate_cents == 14_000
         assert env.store.open_reviews() == []
         assert "Pay salary: Dana Cruz — Aug 2026" in env.sent_subjects()

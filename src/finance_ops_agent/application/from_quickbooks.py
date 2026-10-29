@@ -8,8 +8,11 @@ Everything the agent needs about an engagement now has a place in QuickBooks:
   and an `Invoice code:` line in its Notes box;
 - who Icon pays is the vendor on the product's purchase side, and that vendor's
   email is the address the consultant's timesheets come from;
-- a product with no vendor and no cost is a salaried Icon employee (decision
-  69): nothing is owed by the hour, and their address is an `Email:` line;
+- a product with nothing on its purchase side -- "I purchase this from a
+  vendor" left unticked -- is a salaried Icon employee (decisions 69 and 70):
+  nothing is owed by the hour, their address is on their QuickBooks employee
+  record, and their start date, which has nowhere to go in QuickBooks, is the
+  agent's own to remember;
 - the engagement's own lines -- `Start:` and, rarely, a schedule -- are in the
   product's "Description on purchase forms".
 
@@ -22,9 +25,11 @@ Defaults for what Icon has not needed yet: delivery by email, no CC, monthly,
 never sent automatically, paid by bank transfer.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
+from datetime import date, timedelta
 
-from finance_ops_agent.domain.checks import split_addresses
+from finance_ops_agent.domain.checks import names_match, split_addresses
 from finance_ops_agent.domain.engagements import (
     Client,
     Consultant,
@@ -60,13 +65,51 @@ def _problem(message: str) -> ListRowProblem:
     return ListRowProblem(sheet=SHEET, row_number=0, message=message)
 
 
-def workbook_from_accounting(accounting: AccountingSystem) -> EngagementWorkbook:
+def assumed_start(today: date) -> date:
+    """The first day of last month: when a salaried employee's engagement is
+    taken to start, the first time the agent sees it with no start date
+    (decision 70). Last month is the one whose hours are due now."""
+    last_month = today.replace(day=1) - timedelta(days=1)
+    return last_month.replace(day=1)
+
+
+def workbook_from_accounting(
+    accounting: AccountingSystem,
+    today: date | None = None,
+    starts: dict[str, str] | None = None,
+) -> EngagementWorkbook:
     """Every live engagement QuickBooks can fully describe, and what stops the rest.
+
+    `starts` is the agent's own memory of salaried employees' start dates, by
+    product id (decision 70): QuickBooks has no field for one on a product
+    with no purchase side. One it has not seen before starts on `today`'s
+    `assumed_start`, and is added to `starts` for the caller to keep. With no
+    `today`, a start that is not known is a problem instead.
 
     Raises `AccountingFailed` when QuickBooks cannot be asked at all, so the
     caller can say so rather than conclude Icon has no engagements.
     """
     listing = accounting.engagements().live
+    remembered = starts if starts is not None else {}
+    employee_records: list[AccountingParty] | None = None
+
+    def employees() -> list[AccountingParty]:
+        nonlocal employee_records
+        if employee_records is None:
+            # Only asked when some product has no purchase side.
+            employee_records = accounting.employees()
+        return employee_records
+
+    def start_for(engagement: AccountingEngagement) -> date | None:
+        known = remembered.get(engagement.ref)
+        if known:
+            return date.fromisoformat(known)
+        if today is None:
+            return None
+        start = assumed_start(today)
+        remembered[engagement.ref] = start.isoformat()
+        return start
+
     customers: dict[str, _Party] = {}
     payees: dict[str, _Party] = {}
 
@@ -124,11 +167,18 @@ def workbook_from_accounting(accounting: AccountingSystem) -> EngagementWorkbook
         if engagement.client in bad_clients:
             continue  # the customer's own problem already says why
         paid = payee(engagement.payee_ref) if engagement.payee_ref else None
-        found = _engagement(engagement, who, paid)
+        found = _engagement(engagement, who, paid, start_for)
         if isinstance(found, list):
             problems.extend(found)
             continue
-        row, vendor, emails = found
+        row, vendor = found
+        emails: tuple[str, ...] = ()
+        if vendor is None:
+            matched, said = _employee_email(row.consultant, employees())
+            if said:
+                problems.append(_problem(f"{who}: {said}"))
+                continue
+            emails = matched
         earlier = consultants.get(row.consultant)
         if earlier is not None and earlier.salaried != (vendor is None):
             # One product says a salary and another a vendor: which is how this
@@ -222,29 +272,31 @@ def _shared_invoice_codes(clients: dict[str, Client]) -> list[tuple[str, str]]:
 
 
 def _engagement(
-    engagement: AccountingEngagement, who: str, paid: _Party | None
-) -> tuple[Engagement, Vendor | None, tuple[str, ...]] | list[ListRowProblem]:
+    engagement: AccountingEngagement,
+    who: str,
+    paid: _Party | None,
+    start_for: "Callable[[AccountingEngagement], date | None]",
+) -> tuple[Engagement, Vendor | None] | list[ListRowProblem]:
     """The engagement and who Icon pays for it -- or, for a salaried employee,
-    no vendor and the addresses on the product's `Email:` line."""
-    setup = product_setup(engagement.notes)
+    no vendor at all."""
+    # Nothing on the purchase side: "I purchase this from a vendor" unticked.
+    # QuickBooks may hold a blank cost as zero, which is the same answer.
+    salaried = paid is None and not engagement.pay_rate_cents
+    setup = product_setup(engagement.notes, start_required=not salaried)
     problems = [f"{who}: {said} (in its Description on purchase forms)" for said in setup.problems]
     if engagement.bill_rate_cents is None:
         problems.append(f"{who}: no sales price, which is what the client is billed")
-    # QuickBooks may hold a cost left blank as zero once the purchase box is
-    # ticked to write the `Start:` line; no hourly cost is the same answer.
-    if paid is None and not engagement.pay_rate_cents:
-        # Nothing on the purchase side at all: an Icon employee on a salary,
-        # paid by Kevin each month rather than by the hour (decision 69).
+    if salaried:
+        # An Icon employee on a salary, paid by Kevin each month rather than
+        # by the hour (decisions 69 and 70). A `Start:` line still counts if
+        # the box was ticked to write one; otherwise the agent remembers it.
+        start = setup.start or start_for(engagement)
+        if start is None:
+            problems.append(f"{who}: I do not know when this salaried engagement started")
         if problems:
             return [_problem(said) for said in problems]
-        assert setup.start is not None and engagement.bill_rate_cents is not None
-        return _row(engagement, setup, None), None, setup.emails
-    if setup.emails:
-        problems.append(
-            f'{who}: an "Email:" line is only for a salaried employee\'s product, which has'
-            " no vendor; this one is paid through its vendor, whose email is the address"
-            " timesheets come from. Remove the line."
-        )
+        assert start is not None
+        return _row(engagement, replace(setup, start=start), None), None
     if paid is None:
         problems.append(
             f"{who}: a cost on its purchase side but no preferred vendor, so I do not know"
@@ -277,7 +329,29 @@ def _engagement(
         active=True,
         row_number=0,
     )
-    return _row(engagement, setup, Money(engagement.pay_rate_cents)), vendor, ()
+    return _row(engagement, setup, Money(engagement.pay_rate_cents)), vendor
+
+
+def _employee_email(name: str, employees: list[AccountingParty]) -> tuple[tuple[str, ...], str]:
+    """A salaried employee's address, off the employee record named as their
+    product is (decision 70): the addresses, or what is wrong.
+
+    No record, or one with no email, is not a problem: it is the same to-do
+    as a vendor with no email, and forwarded emails still work. Two records
+    answering to the name are, because either could be the wrong person."""
+    matching = [
+        record
+        for record in employees
+        if names_match(record.name, name) or (record.company and names_match(record.company, name))
+    ]
+    if len(matching) > 1:
+        return (), (
+            f"QuickBooks has {len(matching)} employees called {name}, so I cannot tell whose"
+            " email to use. Make one of them inactive, or rename it."
+        )
+    if not matching:
+        return (), ""
+    return tuple(split_addresses(matching[0].email)), ""
 
 
 def _row(
@@ -307,9 +381,9 @@ def _salaried_employee(
 ) -> Consultant:
     """An Icon employee on a salary, at however many clients (decision 69).
 
-    Their address comes off the product's `Email:` line, since there is no
-    vendor to hold it; Kevin pays them himself, so there is no payee and no
-    pay timing."""
+    Their address comes off their employee record, since there is no vendor
+    to hold it (decision 70); Kevin pays them himself, so there is no payee
+    and no pay timing."""
     if existing is not None:
         emails = tuple(dict.fromkeys(existing.emails + emails))
     return Consultant(
@@ -352,8 +426,9 @@ def _merged_consultant(existing: Consultant | None, name: str, vendor: Vendor) -
 
 def vendors_without_email(workbook: EngagementWorkbook) -> list[str]:
     """Consultants no timesheet can be recognised from yet: their vendor has no
-    email in QuickBooks, or, for a salaried employee, their product has no
-    `Email:` line. A to-do, not a failure, while timesheets are forwarded."""
+    email in QuickBooks, or, for a salaried employee, there is no employee
+    record with an email under their name. A to-do, not a failure, while
+    timesheets are forwarded."""
     return sorted(consultant.name for consultant in workbook.consultants if not consultant.emails)
 
 

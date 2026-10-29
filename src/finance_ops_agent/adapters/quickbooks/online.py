@@ -23,7 +23,7 @@ Three rules from docs/integrations/quickbooks-online.md carry the weight:
 """
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from typing import Any
 
@@ -609,6 +609,35 @@ class QuickBooksOnline:
         rows = self._client.query(f"SELECT * FROM Vendor WHERE Id = '{_escape(ref)}'")
         return self._party(rows[0], "TermRef") if rows else None
 
+    def employees(self) -> list[AccountingParty]:
+        """Every active employee, by display name, with their email.
+
+        A salaried employee has no vendor, so this is where the address their
+        emails come from is kept (decision 70). QuickBooks keeps an employee
+        list without the payroll plan. Asked only when some engagement has no
+        purchase side, so a company of vendor consultants never asks."""
+        rows = self._client.query("SELECT * FROM Employee WHERE Active = true MAXRESULTS 1000")
+        found: list[AccountingParty] = []
+        for row in rows:
+            email = row.get("PrimaryEmailAddr") or {}
+            given = " ".join(
+                part
+                for part in (_clean(row.get("GivenName")), _clean(row.get("FamilyName")))
+                if part
+            )
+            found.append(
+                AccountingParty(
+                    ref=str(row["Id"]),
+                    name=_clean(row.get("DisplayName")) or given,
+                    # The name as given and family names, for matching a
+                    # product named the other way round.
+                    company=given,
+                    email=_clean(email.get("Address")) if isinstance(email, dict) else "",
+                    payment_terms_days=None,
+                )
+            )
+        return found
+
     def engagements(self) -> EngagementListing:
         """Every active product under a category: one per live engagement.
 
@@ -809,15 +838,21 @@ class QuickBooksOnline:
         done = SetupDone(created=[], reused=[])
         customer_id = self._set_up_customer(setup, done)
         category_id = self._set_up_category(setup.client, done)
-        vendor_id = self._set_up_vendor(setup, done)
-        self._set_up_product(setup, category_id, vendor_id, done)
+        if setup.salaried:
+            # An employee record holds the address; there is no vendor and
+            # nothing on the product's purchase side (decision 70).
+            self._set_up_employee(setup, done)
+            vendor_id = ""
+        else:
+            vendor_id = self._set_up_vendor(setup, done)
+        product_ref = self._set_up_product(setup, category_id, vendor_id, done)
         logs.log(
             "quickbooks engagement set up",
             customer_id=customer_id,
             created=len(done.created),
             reused=len(done.reused),
         )
-        return done
+        return replace(done, product_ref=product_ref)
 
     def _setup_url(self, suffix: str) -> str:
         url = self.company_url(suffix)
@@ -928,6 +963,51 @@ class QuickBooksOnline:
         done.created.append(f"vendor {setup.consultant}")
         return str(row["Id"])
 
+    def _set_up_employee(self, setup: EngagementSetup, done: SetupDone) -> None:
+        """Found by display name first; an existing one with another address
+        is refused, as a vendor is, and one with none is given this one."""
+        rows = self._client.query(
+            f"SELECT * FROM Employee WHERE DisplayName = '{_escape(setup.consultant)}'"
+        )
+        if rows:
+            row = rows[0]
+            email = _clean((row.get("PrimaryEmailAddr") or {}).get("Address"))
+            if email and email.casefold() != setup.consultant_email.casefold():
+                raise QuickBooksFailed(
+                    f"QuickBooks already has an employee called {setup.consultant!r}, with"
+                    f" the email {email}, not {setup.consultant_email}. I won't change"
+                    " who an existing employee is. Fix the employee in QuickBooks, then"
+                    ' reply "try again".'
+                )
+            if not email:
+                self._client.post(
+                    self._setup_url("/employee"),
+                    json={
+                        "Id": row["Id"],
+                        "SyncToken": row["SyncToken"],
+                        "sparse": True,
+                        "PrimaryEmailAddr": {"Address": setup.consultant_email},
+                    },
+                )
+                done.created.append(
+                    f"email {setup.consultant_email} on employee {setup.consultant}"
+                )
+            done.reused.append(f"employee {setup.consultant}")
+            return
+        # QuickBooks wants a given or family name on an employee, not only a
+        # display name. The name is split at its first space, which is only
+        # how it is filed: the display name is what the agent matches on.
+        given, _, family = setup.consultant.partition(" ")
+        body: dict[str, Any] = {
+            "DisplayName": setup.consultant,
+            "GivenName": given,
+            "PrimaryEmailAddr": {"Address": setup.consultant_email},
+        }
+        if family:
+            body["FamilyName"] = family
+        self._created("Employee", body)
+        done.created.append(f"employee {setup.consultant}")
+
     def _accounts_from_another_engagement(self) -> tuple[dict[str, Any], dict[str, Any]]:
         """The income and expense accounts Icon's engagements already use.
 
@@ -949,7 +1029,10 @@ class QuickBooksOnline:
 
     def _set_up_product(
         self, setup: EngagementSetup, category_id: str, vendor_id: str, done: SetupDone
-    ) -> None:
+    ) -> str:
+        """The product's id, found or made. For a salaried employee it has a
+        sales side only: "I purchase this from a vendor" stays unticked, which
+        is what says they are salaried (decision 70)."""
         path = f"{setup.client}:{setup.consultant}"
         rows = self._client.query(
             f"SELECT {PRODUCT_FIELDS} FROM Item WHERE FullyQualifiedName = '{_escape(path)}'"
@@ -966,25 +1049,29 @@ class QuickBooksOnline:
                     ' then reply "try again".'
                 )
             done.reused.append(f"product {path}")
-            return
+            return str(row["Id"])
         income, expense = self._accounts_from_another_engagement()
-        self._created(
-            "Item",
-            {
-                "Name": setup.consultant,
-                "Type": "Service",
-                "SubItem": True,
-                "ParentRef": {"value": category_id},
-                "UnitPrice": setup.bill_rate.cents / 100,
-                "PurchaseCost": setup.pay_rate.cents / 100,
-                "PrefVendorRef": {"value": vendor_id},
-                "PurchaseDesc": f"Start: {setup.start.isoformat()}",
-                "IncomeAccountRef": income,
-                "ExpenseAccountRef": expense,
-            },
-        )
+        body: dict[str, Any] = {
+            "Name": setup.consultant,
+            "Type": "Service",
+            "SubItem": True,
+            "ParentRef": {"value": category_id},
+            "UnitPrice": setup.bill_rate.cents / 100,
+            "IncomeAccountRef": income,
+        }
+        if not setup.salaried:
+            body.update(
+                {
+                    "PurchaseCost": setup.pay_rate.cents / 100,
+                    "PrefVendorRef": {"value": vendor_id},
+                    "PurchaseDesc": f"Start: {setup.start.isoformat()}",
+                    "ExpenseAccountRef": expense,
+                }
+            )
+        created = self._created("Item", body)
         done.created.append(f"product {path}")
         self._products.clear()  # the next lookup must see the new one
+        return str(created["Id"])
 
     # --- helpers ---
 

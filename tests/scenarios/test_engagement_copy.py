@@ -355,13 +355,25 @@ class TestQuickBooksCannotBeAskedForTheCopy:
         assert any("up to date" in line for line in report.lines)
         assert qbo.store.get_state(LAST_EXPECTED_CHECK_KEY) == "2026-09-09"
 
-    def test_no_copy_yet_means_the_spreadsheet(self, qbo: ScenarioEnv) -> None:
-        qbo.workbook = default_workbook()
+    def test_no_copy_yet_never_means_the_spreadsheet(self, qbo: ScenarioEnv) -> None:
+        """Decision 70: the spreadsheet is not kept up to date, so it is never
+        read. The mail waits, stored, until QuickBooks can say who sent it."""
+        qbo.workbook = default_workbook()  # there, and must not be read
         qbo.accounting.fail_with = AccountingFailed("service unavailable")
+        qbo.add_email(PRIYA, scripted_reading=reading(AUG_START, AUG_END))
         qbo.run()
 
         (review,) = [r for r in qbo.store.open_reviews() if r.code == "QUICKBOOKS_FAILED"]
-        assert "the engagement list spreadsheet" in review.message
+        assert "no copy of it yet" in review.message
+        assert "spreadsheet" not in review.message
+        assert qbo.store.list_items() == []
+        assert "UNKNOWN_SENDER" not in open_codes(qbo)  # not set aside as a stranger's
+
+        qbo.accounting.fail_with = None
+        qbo.run()
+
+        assert qbo.the_item().consultant == "Priya Shah"
+        assert "UNKNOWN_SENDER" not in open_codes(qbo)
 
     def test_a_dead_connection_says_how_to_reconnect(self, qbo: ScenarioEnv) -> None:
         qbo.accounting.fail_with = AccountingNeedsReconnect("the refresh token has expired")
