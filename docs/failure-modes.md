@@ -83,6 +83,9 @@ yet.
 | T6 | Dates written day-first (01/08 for 1 August). | `PERIOD_UNCLEAR`; set aside; the investigator explains and asks for a sheet with the dates written out. | Reasoning **[21]**. **Open**: a reply cannot give the period of an email with no item; the consultant has to resend. |
 | T7 | A team timesheet with several people on it. | The reader notes it as unusual; the investigator sees the note. | Partly: reader eval. |
 | T8 | An instruction hidden in the timesheet itself. | Data; flagged, never followed. | Reasoning **[07]** |
+| T9 | A salaried employee's email says no hours ("hope you are well", an out-of-office reply). | Nothing to read: `NO_ATTACHMENT`, saying the email had no hours in it either (decision 69). | Code: M5 |
+| T10 | A salaried employee's email names a month without a year, around New Year. | The reader is told the day it arrived and takes the most recent such month; the month and hours are quoted back to Kevin in every email about it, and he approves before anything goes. | Partly: prompt `hours_email_v1`. **Open**: no eval cases for it yet (roadmap PR 19). |
+| T11 | A salaried employee's email reports two months, or hours and an amount of money. | The reader notes it as unusual; only the hours are read, never an amount. A second month's hours for one record are a `CORRECTION`. | Partly: code M6; reader eval **open**. |
 
 ## Placing it (who, which client, which month)
 

@@ -230,12 +230,15 @@ class FakeStore:
         self._timesheets.append(record)
 
     def message_ids_for_item(self, item_id: int) -> list[str]:
-        shas = {record.sha256 for record in self.timesheets_for_item(item_id)}
-        return [
+        records = self.timesheets_for_item(item_id)
+        shas = {record.sha256 for record in records}
+        found = [
             message.message_id
             for message in self._messages.values()
             if any(attachment.sha256 in shas for attachment in message.attachments)
         ]
+        named = [record.message_id for record in records if record.message_id]
+        return list(dict.fromkeys(found + named))
 
     def timesheets_for_item(self, item_id: int) -> list[TimesheetRecord]:
         return [record for record in self._timesheets if record.item_id == item_id]

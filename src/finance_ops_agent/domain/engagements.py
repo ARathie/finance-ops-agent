@@ -62,6 +62,9 @@ class PaidBy(StrEnum):
     PAYROLL = "payroll"
     CHECK = "check"
     OTHER = "other"
+    # An Icon employee on a fixed salary: nothing is worked out from the hours,
+    # and Kevin is reminded to pay the month's salary (decision 69).
+    SALARY = "salary"
 
 
 @dataclass(frozen=True)
@@ -96,6 +99,12 @@ class Consultant:
     active: bool
     row_number: int
 
+    @property
+    def salaried(self) -> bool:
+        """Paid a fixed salary, so there is no pay rate and nothing owed is
+        worked out from the hours (decision 69)."""
+        return self.paid_by is PaidBy.SALARY
+
 
 @dataclass(frozen=True)
 class Vendor:
@@ -118,7 +127,10 @@ class Engagement:
     billing_schedule: BillingSchedule
     first_period_start: date | None
     bill_rate: Money
-    pay_rate: Money
+    # None for a salaried employee, who has no pay rate (decision 69). For
+    # everyone else a blank one is a problem, checked against the Consultants
+    # sheet in parse_workbook because only that sheet says who is salaried.
+    pay_rate: Money | None
     rates_from: date
     send_automatically: bool
     active: bool
@@ -287,6 +299,11 @@ def _parse_consultant(raw: RawRow) -> tuple[Consultant | None, list[ListRowProbl
     if type_value == ConsultantType.VENDOR.value and not vendor_company:
         row.errors.append('"Type" is vendor but "Vendor company" is empty')
     paid_by_value = row.choice("Paid by", PaidBy)
+    salaried = paid_by_value == PaidBy.SALARY.value
+    if salaried and type_value and type_value != ConsultantType.EMPLOYEE.value:
+        row.errors.append(
+            f'"Paid by" is salary, which only an Icon employee is; "Type" is {type_value}'
+        )
     consultant = Consultant(
         name=name,
         # Optional: blank means the initials are worked out from the name.
@@ -296,7 +313,9 @@ def _parse_consultant(raw: RawRow) -> tuple[Consultant | None, list[ListRowProbl
         type=ConsultantType(type_value) if type_value else ConsultantType.CONTRACTOR,
         vendor_company=vendor_company,
         paid_by=PaidBy(paid_by_value) if paid_by_value else PaidBy.OTHER,
-        pay_timing_days=row.days("Pay timing (days)"),
+        # A salary has no due date worked out from the period; Kevin pays it on
+        # Icon's own pay day.
+        pay_timing_days=row.days("Pay timing (days)", required=not salaried),
         active=row.yes_no("Active"),
         row_number=raw.row_number,
     )
@@ -306,8 +325,10 @@ def _parse_consultant(raw: RawRow) -> tuple[Consultant | None, list[ListRowProbl
 def _parse_vendor(raw: RawRow) -> tuple[Vendor | None, list[ListRowProblem]]:
     row = _RowReader("Vendors", raw)
     company = row.required("Vendor company")
-    # Vendors are paid by bank transfer, check, or other -- never payroll.
-    paid_by_value = row.choice("Paid by", PaidBy, forbid={PaidBy.PAYROLL.value})
+    # Vendors are paid by bank transfer, check, or other -- never payroll or a salary.
+    paid_by_value = row.choice(
+        "Paid by", PaidBy, forbid={PaidBy.PAYROLL.value, PaidBy.SALARY.value}
+    )
     vendor = Vendor(
         company=company,
         contact_emails=row.emails("Contact email"),
@@ -338,8 +359,9 @@ def _parse_engagement(raw: RawRow) -> tuple[Engagement | None, list[ListRowProbl
             f'"First period start" is needed when the billing schedule is {schedule_value}'
         )
     bill_rate = row.money("Bill rate")
-    pay_rate = row.money("Pay rate")
-    if bill_rate.cents and pay_rate.cents > bill_rate.cents:
+    # Blank only for a salaried employee; parse_workbook says so for anyone else.
+    pay_rate = row.money("Pay rate") if row.text("Pay rate") else None
+    if pay_rate is not None and bill_rate.cents and pay_rate.cents > bill_rate.cents:
         row.errors.append(f"the pay rate ({pay_rate}) is higher than the bill rate ({bill_rate})")
     start_date = row.date("Start date")
     end_date = row.date("End date", required=False)
@@ -406,6 +428,7 @@ def parse_workbook(raw: RawWorkbook) -> EngagementWorkbook:
 
     client_names = {_key(client.name) for client in clients}
     consultant_names = {_key(consultant.name) for consultant in consultants}
+    salaried = {_key(consultant.name) for consultant in consultants if consultant.salaried}
     vendor_names = {_key(vendor.company) for vendor in vendors}
 
     for consultant in consultants:
@@ -456,6 +479,27 @@ def parse_workbook(raw: RawWorkbook) -> EngagementWorkbook:
                     engagement.row_number,
                     f'"Client" {engagement.client!r} is not on the Clients sheet',
                 )
+            )
+            ok = False
+        if _key(engagement.consultant) in salaried and engagement.pay_rate is not None:
+            # Two answers to what Icon pays: a salary and an hourly figure.
+            # Neither is guessed between (decision 69).
+            problems.append(
+                ListRowProblem(
+                    "Engagements",
+                    engagement.row_number,
+                    f'{engagement.consultant} is paid a salary, so leave "Pay rate" blank'
+                    f" (it says {engagement.pay_rate})",
+                )
+            )
+            ok = False
+        elif (
+            _key(engagement.consultant) not in salaried
+            and _key(engagement.consultant) in consultant_names
+            and engagement.pay_rate is None
+        ):
+            problems.append(
+                ListRowProblem("Engagements", engagement.row_number, '"Pay rate" is empty')
             )
             ok = False
         rate_key = (_key(engagement.consultant), _key(engagement.client), engagement.rates_from)

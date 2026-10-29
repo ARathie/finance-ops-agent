@@ -148,3 +148,42 @@ class TestCoverage:
     def test_a_gap_means_still_waiting(self) -> None:
         spans = [(date(2026, 8, 1), date(2026, 8, 15)), (date(2026, 8, 20), date(2026, 8, 31))]
         assert not checks.period_fully_covered(AUG, spans)
+
+
+class TestAMonthNamedInAnEmail:
+    """Decision 69: "168 hours in October" covers the whole of October."""
+
+    def test_the_month_becomes_its_first_and_last_day(self) -> None:
+        from finance_ops_agent.domain.reading import ReadField
+
+        base = reading(date(2026, 10, 1), date(2026, 10, 31))
+        named = base.model_copy(
+            update={
+                "period_start": ReadField[date](confidence=Confidence.HIGH),
+                "period_end": ReadField[date](confidence=Confidence.HIGH),
+                "stated_month_start": ReadField[date](
+                    value=date(2026, 10, 1), quote="October", confidence=Confidence.MEDIUM
+                ),
+            }
+        )
+
+        dated = checks.month_as_dates(named)
+
+        assert (dated.period_start.value, dated.period_end.value) == (
+            date(2026, 10, 1),
+            date(2026, 10, 31),
+        )
+        assert dated.period_end.quote == "October"
+        assert dated.period_end.confidence is Confidence.MEDIUM
+
+    def test_dates_written_out_are_left_alone(self) -> None:
+        written = reading(date(2026, 10, 5), date(2026, 10, 30), month=date(2026, 10, 1))
+        assert checks.month_as_dates(written) == written
+
+    def test_approval_confidence_is_not_asked_of_an_email(self) -> None:
+        unsure = reading(date(2026, 10, 1), date(2026, 10, 31))
+        unsure = unsure.model_copy(
+            update={"approval": unsure.approval.model_copy(update={"confidence": Confidence.LOW})}
+        )
+        assert checks.check_confidence(unsure)
+        assert checks.check_confidence(unsure, approval=False) == []

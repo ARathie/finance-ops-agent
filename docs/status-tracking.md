@@ -91,6 +91,8 @@ For Kevin's records the agent keeps an Excel file, `tracking.xlsx`, with one row
 | Client paid | |
 | Notes | corrected timesheet received 2026-09-05, used new one |
 
+For a salaried employee (decision 69), **Pay rate** and **Amount owed** say `salary` and **Owed to** says the salary is paid by Kevin.
+
 The sheet is a copy for reading and filing; the agent's own database is what it works from. Kevin can open, sort, and copy from it freely, and it is safe to delete because the agent rewrites it.
 
 ## Missing timesheets

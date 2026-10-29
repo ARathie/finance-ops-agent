@@ -23,7 +23,7 @@ For every field the model also records the exact words on the page it relied on 
 
 Before any engagement is matched -- a consultant or client the agent cannot place yet -- the emails to Kevin still show one month: the month most of the timesheet's dates fall in, marked "probably", with only that month's days counted in the hours, never every day printed on the page (decision 68). It is for Kevin's eyes only; nothing is billed on it.
 
-If the email has no attachment, or the attachment cannot be opened, the agent asks Kevin rather than trying to read hours out of the email text.
+If the email has no attachment, or the attachment cannot be opened, the agent asks Kevin rather than trying to read hours out of the email text -- **except from a salaried employee** (decision 69). Their email with no attachment is read as the report itself: "168 hours were worked in October" fills in the same form, quoting the email's own words, and the agent turns the month into its first and last day. Those hours are trusted as written: check 9, approval, is not asked of them, and Kevin sees their words in every email about it. Every other check still runs. An email from them with no hours in it is `NO_ATTACHMENT`, saying so; a timesheet from them goes through every check, approval included.
 
 ## Deciding whose timesheet it is
 
@@ -45,7 +45,7 @@ Each check either passes or creates a review item with one of the reasons below.
 6. Can we tell which dates it covers, and do they fit the billing schedule?
 7. Can we find the hours, and do the daily hours add up to the total?
 8. Are the hours believable? (More than 24 in a day, more than 25% over full time for the period — full time counted as 8 hours per weekday — or zero.)
-9. Was it approved, and can we see by whom or how?
+9. Was it approved, and can we see by whom or how? (Not asked of hours a salaried employee wrote in the email itself.)
 10. Is the model sure enough about the consultant, dates, hours, and approval? ("Sure enough" means none of those read with low confidence.)
 11. Is there a rate for these dates, and a billing email for the client? (A rate that changes in the middle of the period is a `LIST_ROW_PROBLEM` review naming both rows — the agent never splits an invoice.)
 12. Have we already handled a different timesheet for this consultant and period? (If so, this may be a correction.)
@@ -57,7 +57,7 @@ The code is what the software uses; the message is what Kevin sees. Every review
 | Code | Message Kevin sees | What usually fixes it |
 |---|---|---|
 | `UNKNOWN_SENDER` | This came from an address I don't recognise. | Add the address to the consultant's vendor in QuickBooks (or their row) and reply "try again", reply "this is from <consultant>", or reply "ignore". Kevin is emailed when the email has an attachment; the rest wait in the Monday summary. |
-| `NO_ATTACHMENT` | This looks like a timesheet email but has no attachment I can use. | Ask the consultant to resend, or reply with the hours and dates. |
+| `NO_ATTACHMENT` | This looks like a timesheet email but has no attachment I can use. (From a salaried employee: and I couldn't find the hours in the email itself either.) | Ask the consultant to resend, or reply with the hours and dates. |
 | `CANT_READ_ATTACHMENT` | I couldn't read the attachment. | Ask for a PDF or spreadsheet, or reply with the details. |
 | `CONSULTANT_UNKNOWN` | I can't tell which consultant this timesheet is for. | Add or fix the consultant in QuickBooks (or "Other names") and reply "try again", or reply "this is from <consultant>". |
 | `ENGAGEMENT_UNCLEAR` | I can't tell which client this is for, or there is no active engagement for these dates. | Fix the engagement in QuickBooks (or its row) and reply "try again". |

@@ -1,0 +1,14 @@
+To: ap@acme.example
+Cc: kevin@icon-technologies.com, jane.doe@acme.example
+Reply-To: kevin@icon-technologies.com
+Subject: Icon Technologies invoice ICON-2026-1001 — Dana Cruz — Aug 2026
+Attachments: invoice-ICON-2026-1001.pdf
+
+Hello,
+
+Please find attached Icon Technologies invoice ICON-2026-1001 for Dana Cruz's services for Aug 1–31, 2026 (168.00 hours). Payment terms are 30 days; the invoice is due 2026-10-03.
+
+Please let us know if you have any questions.
+
+Thank you,
+Icon Technologies

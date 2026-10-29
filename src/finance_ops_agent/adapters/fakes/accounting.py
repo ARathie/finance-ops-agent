@@ -49,6 +49,8 @@ class FakeAccounting:
         # payee, by the id an engagement's rates carry.
         self.customers: dict[str, AccountingParty] = {}
         self.payees: dict[str, AccountingParty] = {}
+        # Employee records: where a salaried employee's email is (decision 70).
+        self.employee_records: list[AccountingParty] = []
         # Numbers another invoice already holds, as a leftover in QuickBooks would.
         self.taken_numbers: set[str] = set()
         # Invoices someone made outside the agent, or that outlived the item
@@ -93,6 +95,12 @@ class FakeAccounting:
         if self.fail_with is not None:
             raise self.fail_with
         return self.payees.get(ref)
+
+    def employees(self) -> list[AccountingParty]:
+        self.calls["employees"] += 1
+        if self.fail_with is not None:
+            raise self.fail_with
+        return list(self.employee_records)
 
     def engagements(self) -> EngagementListing:
         self.calls["engagements"] += 1
@@ -202,7 +210,22 @@ class FakeAccounting:
             ),
             "",
         )
-        if vendor_ref:
+        if setup.salaried:
+            # An employee record, no vendor, nothing on the purchase side
+            # (decision 70).
+            if any(record.name == setup.consultant for record in self.employee_records):
+                reused.append(f"employee {setup.consultant}")
+            else:
+                self.employee_records.append(
+                    AccountingParty(
+                        ref=f"e-{setup.consultant}",
+                        name=setup.consultant,
+                        email=setup.consultant_email,
+                        payment_terms_days=None,
+                    )
+                )
+                created.append(f"employee {setup.consultant}")
+        elif vendor_ref:
             reused.append(f"vendor {setup.consultant}")
         else:
             vendor_ref = f"v-{setup.consultant}"
@@ -224,19 +247,19 @@ class FakeAccounting:
                     consultant=setup.consultant,
                     client=setup.client,
                     bill_rate_cents=setup.bill_rate.cents,
-                    pay_rate_cents=setup.pay_rate.cents,
-                    payee=setup.firm or setup.consultant,
-                    payee_ref=vendor_ref,
-                    notes=f"Start: {setup.start.isoformat()}",
+                    pay_rate_cents=None if setup.salaried else setup.pay_rate.cents,
+                    payee="" if setup.salaried else setup.firm or setup.consultant,
+                    payee_ref="" if setup.salaried else vendor_ref,
+                    notes="" if setup.salaried else f"Start: {setup.start.isoformat()}",
                 )
             )
             created.append(f"product {setup.client}:{setup.consultant}")
         self.rates[(setup.consultant, setup.client)] = EngagementRates(
             ref=ref,
             bill_rate_cents=setup.bill_rate.cents,
-            pay_rate_cents=setup.pay_rate.cents,
-            payee=setup.firm or setup.consultant,
-            payee_ref=vendor_ref,
+            pay_rate_cents=None if setup.salaried else setup.pay_rate.cents,
+            payee="" if setup.salaried else setup.firm or setup.consultant,
+            payee_ref="" if setup.salaried else vendor_ref,
         )
         self.set_up.append(setup)
-        return SetupDone(created=created, reused=reused)
+        return SetupDone(created=created, reused=reused, product_ref=ref)

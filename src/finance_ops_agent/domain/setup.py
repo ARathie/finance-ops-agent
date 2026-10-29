@@ -23,6 +23,7 @@ from finance_ops_agent.domain.money import Money
 
 # The labels, in the order the form shows them. The key is how the plan refers
 # to each; the text is exactly what Kevin sees and writes.
+CONSULTANT_TYPE = "Consultant type"
 CONSULTANT = "Consultant"
 CONSULTANT_EMAIL = "Consultant email"
 FIRM = "Paid through firm"
@@ -37,6 +38,7 @@ PAY_RATE = "Pay rate"
 START = "Start date"
 
 LABELS = (
+    CONSULTANT_TYPE,
     CONSULTANT,
     CONSULTANT_EMAIL,
     FIRM,
@@ -50,7 +52,36 @@ LABELS = (
     PAY_RATE,
     START,
 )
+# Everyone answers these; a vendor consultant answers VENDOR_ONLY too. A
+# salaried employee has no vendor, no pay rate and no payment terms: Kevin pays
+# the salary himself (decisions 69 and 70).
+EVERYONE = (
+    CONSULTANT,
+    CONSULTANT_EMAIL,
+    CLIENT,
+    CLIENT_LEGAL,
+    CLIENT_EMAIL,
+    CLIENT_PAYS_WITHIN,
+    INVOICE_CODE,
+    BILL_RATE,
+    START,
+)
+VENDOR_ONLY = (FIRM, PAY_WITHIN, PAY_RATE)
+SALARIED = "salaried employee"
+VENDOR = "vendor consultant"
+_TYPES = {
+    "salaried employee": SALARIED,
+    "salaried": SALARIED,
+    "salary": SALARIED,
+    "employee": SALARIED,
+    "vendor consultant": VENDOR,
+    "vendor": VENDOR,
+    "consultant": VENDOR,
+    "contractor": VENDOR,
+}
 _HINTS = {
+    CONSULTANT_TYPE: "salaried employee, or vendor consultant",
+    CONSULTANT_EMAIL: "the address their timesheets or hours come from",
     FIRM: "leave blank if Icon pays the consultant directly",
     CLIENT_LEGAL: "new client only; blank means the same as Client",
     CLIENT_EMAIL: "new client only",
@@ -85,8 +116,11 @@ class EngagementSetup:
     client_pays_within_days: int  # new client only; 0 for an existing one
     invoice_code: str  # new client only
     bill_rate: Money
-    pay_rate: Money
+    pay_rate: Money  # zero for a salaried employee, who has none
     start: date
+    # An Icon employee on a salary: an employee record instead of a vendor, a
+    # product with nothing on its purchase side (decision 70).
+    salaried: bool = False
 
     def summary_lines(self) -> list[str]:
         """What will be created or reused, in Kevin's words."""
@@ -100,6 +134,19 @@ class EngagementSetup:
             )
         else:
             lines.append(f"Existing client {self.client}.")
+        if self.salaried:
+            return [
+                *lines,
+                f"Consultant {self.consultant}, an Icon employee on a salary: an employee"
+                f" record in QuickBooks, with {self.consultant_email} as the address their"
+                " hours come from.",
+                "No vendor and no pay rate: you pay the salary yourself, and I remind you"
+                " each month instead of working out an amount.",
+                f"Engagement {self.client}:{self.consultant}, starting"
+                f" {self.start.isoformat()} (I keep the date myself: a product with no"
+                " vendor has nowhere in QuickBooks to hold it).",
+                f"Bill rate ${self.bill_rate} an hour (what {self.client} is charged).",
+            ]
         lines += [
             f"Consultant {self.consultant}, timesheets from {self.consultant_email}.",
             f"Icon pays {payee} within {self.pay_within_days} days.",
@@ -126,6 +173,7 @@ class EngagementSetup:
             "bill_rate_cents": self.bill_rate.cents,
             "pay_rate_cents": self.pay_rate.cents,
             "start": self.start.isoformat(),
+            "salaried": self.salaried,
         }
 
     @classmethod
@@ -144,17 +192,28 @@ class EngagementSetup:
             bill_rate=Money(int(str(data["bill_rate_cents"]))),
             pay_rate=Money(int(str(data["pay_rate_cents"]))),
             start=date.fromisoformat(str(data["start"])),
+            salaried=bool(data.get("salaried", False)),
         )
 
 
 def form(prefill: dict[str, str]) -> list[str]:
-    """The lines Kevin copies into his reply, with what is already known."""
-    lines = []
-    for label in LABELS:
+    """The lines Kevin copies into his reply, with what is already known: the
+    consultant type first, what everyone answers, then what only a vendor
+    consultant answers (decision 70)."""
+
+    def line(label: str) -> str:
         value = prefill.get(label, "")
         hint = _HINTS.get(label)
-        lines.append(f"{label}: {value}" + (f"    ({hint})" if hint and not value else ""))
-    return lines
+        return f"{label}: {value}" + (f"    ({hint})" if hint and not value else "")
+
+    return [
+        line(CONSULTANT_TYPE),
+        "",
+        *[line(label) for label in EVERYONE],
+        "",
+        "Vendor consultant only (leave these out for a salaried employee):",
+        *[line(label) for label in VENDOR_ONLY],
+    ]
 
 
 def _own_words(reply: str) -> list[str]:
@@ -189,7 +248,7 @@ def looks_like_a_setup(reply: str) -> bool:
     """Kevin filled in the form rather than answering in words: the two rates
     are what only a setup reply carries."""
     fields = filled_in(reply)
-    return BILL_RATE in fields and PAY_RATE in fields
+    return BILL_RATE in fields and (PAY_RATE in fields or CONSULTANT_TYPE in fields)
 
 
 def _days(text: str) -> int | None:
@@ -232,14 +291,33 @@ def read_setup(
             problems.append(f'"{label}" is blank.')
         return value
 
+    kind_text = " ".join(fields.get(CONSULTANT_TYPE, "").split()).casefold()
+    kind = _TYPES.get(kind_text)
+    if not kind_text:
+        # A form from before the question was asked: a pay rate says vendor.
+        if fields.get(PAY_RATE, "").strip():
+            kind = VENDOR
+        else:
+            problems.append(
+                f'"{CONSULTANT_TYPE}" is blank: salaried employee, or vendor consultant?'
+            )
+    elif kind is None:
+        problems.append(
+            f'"{CONSULTANT_TYPE}" should be salaried employee or vendor consultant,'
+            f' not "{fields[CONSULTANT_TYPE]}".'
+        )
+    salaried = kind == SALARIED
+
     consultant = need(CONSULTANT)
     consultant_email = need(CONSULTANT_EMAIL)
     if consultant_email and not _EMAIL.match(consultant_email):
         problems.append(f'"{consultant_email}" is not an email address.')
-    firm = fields.get(FIRM, "").strip()
-    pay_within = _days(fields.get(PAY_WITHIN, "")) if fields.get(PAY_WITHIN) else None
-    if pay_within is None:
-        problems.append(f'"{PAY_WITHIN}" should be a number of days, like 15.')
+    firm = "" if salaried else fields.get(FIRM, "").strip()
+    pay_within: int | None = 0
+    if not salaried:
+        pay_within = _days(fields.get(PAY_WITHIN, "")) if fields.get(PAY_WITHIN) else None
+        if pay_within is None:
+            problems.append(f'"{PAY_WITHIN}" should be a number of days, like 15.')
 
     client_text = need(CLIENT)
     existing = [c for c in workbook.clients if checks.names_match(c.name, client_text)]
@@ -269,9 +347,18 @@ def read_setup(
     bill = _rate(fields.get(BILL_RATE, ""))
     if bill is None:
         problems.append(f'"{BILL_RATE}" should be an amount an hour, like 140.00.')
-    pay = _rate(fields.get(PAY_RATE, ""))
-    if pay is None:
-        problems.append(f'"{PAY_RATE}" should be an amount an hour, like 100.00.')
+    pay: Money | None = Money(0)
+    if salaried:
+        if fields.get(PAY_RATE, "").strip() or fields.get(FIRM, "").strip():
+            # Two answers to what Icon pays: never guessed between.
+            problems.append(
+                f"{consultant or 'They'} is a salaried employee, so leave"
+                f' "{PAY_RATE}" and "{FIRM}" out: you pay the salary yourself.'
+            )
+    else:
+        pay = _rate(fields.get(PAY_RATE, ""))
+        if pay is None:
+            problems.append(f'"{PAY_RATE}" should be an amount an hour, like 100.00.')
     start = _date(fields.get(START, ""))
     if start is None:
         problems.append(f'"{START}" should be a date, like 2026-09-01.')
@@ -306,6 +393,7 @@ def read_setup(
             bill_rate=bill,
             pay_rate=pay,
             start=start,
+            salaried=salaried,
         ),
         [],
         fields,

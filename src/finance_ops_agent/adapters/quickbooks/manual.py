@@ -15,6 +15,7 @@ from finance_ops_agent.domain.invoices import Invoice
 from finance_ops_agent.domain.setup import EngagementSetup
 from finance_ops_agent.ports.accounting import (
     AccountingFailed,
+    AccountingParty,
     CreatedInvoice,
     EngagementListing,
     InvoiceLookup,
@@ -64,6 +65,9 @@ class ManualQuickBooks:
 
     def payee(self, ref: str) -> None:
         return None
+
+    def employees(self) -> list[AccountingParty]:
+        return []
 
     def engagements(self) -> EngagementListing:
         # Nothing to enumerate: in manual mode QuickBooks Desktop is not

@@ -110,11 +110,15 @@ class ProductSetup:
     problems: list[str] = field(default_factory=list)
 
 
-def product_setup(description: str) -> ProductSetup:
+def product_setup(description: str, start_required: bool = True) -> ProductSetup:
+    """`start_required=False` for a salaried employee's product, which has no
+    purchase description to write it in (decision 70): a missing start is
+    then the caller's to settle, not a problem."""
     values, problems = labelled_lines(description, PRODUCT_LABELS)
     start = None
     if "start" not in values:
-        problems.append('no "Start:" line, so I do not know which month to expect first')
+        if start_required:
+            problems.append('no "Start:" line, so I do not know which month to expect first')
     else:
         start = read_date(values["start"])
         if start is None:

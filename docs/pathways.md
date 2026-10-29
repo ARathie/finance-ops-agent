@@ -17,8 +17,10 @@ How to read an entry:
 - **Test** -- the automated test that covers it, or **none yet**.
 
 Every path assumes **ask first** mode unless it says otherwise: that is how Icon
-runs (decision 57). Paths marked *QuickBooks mode* need
-`FOPS_ENGAGEMENTS=quickbooks`.
+runs (decision 57). Paths marked *QuickBooks mode* are how Icon runs too: with
+QuickBooks Online connected the engagements come from it alone and the
+spreadsheet is never read (decision 70). Paths marked *spreadsheet mode* are
+manual mode's only.
 
 When a change adds a path, add it here in the same pull request.
 
@@ -69,8 +71,8 @@ When a change adds a path, add it here in the same pull request.
   Outcome: a review naming the record and what to fill in; that engagement is left out.
   Test: `test_engagements_from_quickbooks.py::test_something_missing_in_quickbooks_is_a_review_naming_the_record`.
 - [ ] **B3. QuickBooks can't be reached for the day's copy** *(QuickBooks mode)*.
-  Outcome: the run carries on from yesterday's copy (or the spreadsheet if there is none); Kevin gets one email saying so; it retries every run and closes the question by itself when QuickBooks answers. Replies: "try again", "ignore".
-  Test: `test_engagement_copy.py::TestQuickBooksCannotBeAskedForTheCopy`.
+  Outcome: the run carries on from yesterday's copy; Kevin gets one email saying so; it retries every run and closes the question by itself when QuickBooks answers. Replies: "try again", "ignore". With no copy yet, the spreadsheet is **not** read (decision 70): every email is stored, Kevin's replies are handled, and the rest wait and are told apart once QuickBooks answers -- none is set aside as a stranger's.
+  Test: `test_engagement_copy.py::TestQuickBooksCannotBeAskedForTheCopy`, `::test_no_copy_yet_never_means_the_spreadsheet`.
 - [ ] **B4. QuickBooks needs reconnecting.**
   Outcome: as B3, but the email says to run `fops qbo-connect`.
   Test: `test_engagement_copy.py::TestQuickBooksCannotBeAskedForTheCopy::test_a_dead_connection_says_how_to_reconnect`.
@@ -215,6 +217,20 @@ Decided by code from the sender's address, never by reading the email.
 - [ ] **L3. The email already started sending.** Outcome: never changed. Test: `test_investigation.py::TestTheInvestigator::test_an_email_already_on_its_way_is_never_changed`.
 - [ ] **L4. `fops diagnose`.** Decided by: code only; reads, never writes. Outcome: what is stuck and what to do -- invoices QuickBooks does not have, who holds a taken number, inbox mail the next run will not read and why, items matching no engagement, engagements waiting on too many months (decision 60). Test: `test_diagnosis.py`.
 
+## M. A salaried employee (decisions 69 and 70)
+
+An Icon employee on a fixed salary rather than paid by the hour. In QuickBooks their product has **"I purchase this from a vendor" unticked** -- only the sales price the client is billed -- and an **employee record** with their email says which address they write from. In manual mode's spreadsheet: Type `employee`, Paid by `salary`, Pay rate blank.
+
+- [ ] **M1. Hours in the email itself, no attachment** ("168 hours were worked in October"). Decided by: code -- the sender is a salaried employee (or a forwarder, or Kevin named them); then Claude reads the email's own words into the usual form, and code turns the month into its first and last day. Outcome: the hours are trusted as written -- no approval is looked for -- and every other check still runs; *Timesheet received* quotes her words and carries no file; the record becomes *ready*. Test: `test_salaried_employees.py::TestHoursInTheEmail`.
+- [ ] **M2. Ask first, for hours from an email.** Outcome: *Approve?* shows Kevin her words and says there is no timesheet; on "approve" the client gets the invoice alone, worded without "approved timesheet". Automatic mode never sends it unasked. Test: `test_salaried_employees.py::TestHoursInTheEmail::test_ask_first_shows_kevin_her_words_then_sends`, `::test_automatic_mode_never_sends_her_words_without_asking`.
+- [ ] **M3. She sends a timesheet instead.** Outcome: exactly the vendor consultants' path, approval check and all; the timesheet is attached to the client's email. Test: `test_salaried_employees.py::TestWithATimesheet`.
+- [ ] **M4. After the invoice goes** (or, in dry run, once it is ready). Outcome: no payment instruction; Kevin gets *Pay salary: <name> — <month>* with no rate, no amount and no due date. The tracking sheet says "salary". Test: `test_salaried_employees.py::TestHoursInTheEmail::test_kevin_is_reminded_to_pay_the_salary_not_told_an_amount`.
+- [ ] **M5. Her email has no hours in it, or comes from someone who is not salaried.** Outcome: `NO_ATTACHMENT` as before; a contractor's email is never read for hours. Test: `test_salaried_employees.py::TestOnlyASalariedEmployee`, `::TestHoursInTheEmail::test_an_email_with_no_hours_in_it_is_asked_about`.
+- [ ] **M6. The same words again, or different hours for the same month.** Outcome: a duplicate filed quietly, or a `CORRECTION` review. Unusual hours are still `HOURS_UNUSUAL`. Test: `test_salaried_employees.py::TestHoursInTheEmail`.
+- [ ] **M7. Something about her does not add up** -- a product with a cost and no vendor, one of her products with a vendor and another without, two employee records with her name, or (manual mode) the list saying salary while QuickBooks has a cost. Outcome: a problem naming the product, or QuickBooks' answer used and the record waiting for Kevin; never a guess. No employee record or no email on it is a to-do while timesheets are forwarded. Test: `test_salaried_employees.py::TestWithQuickBooksDeciding`, `tests/unit/test_from_quickbooks.py::TestASalariedEmployee`, `tests/unit/test_engagements.py::TestSalariedEmployees`.
+- [ ] **M8. A salaried product with no start date** (set up by hand, box unticked). Decided by: code -- the product's id has no remembered date. Outcome: the engagement starts on the first day of last month, the month whose hours are due now, and that date is remembered so it never moves; a `Start:` line still counts if one was written (decision 70). Test: `tests/unit/test_from_quickbooks.py::TestASalariedEmployee::test_no_start_date_means_last_month_and_it_is_remembered`, `test_salaried_employees.py::TestWithQuickBooksDeciding::test_no_vendor_on_the_product_means_a_salary`.
+- [ ] **M9. Setting her up from Kevin's email.** Decided by: code -- the form's first line, "Consultant type". Outcome: for "salaried employee", *Set up in QuickBooks?* lists an employee record and a product with no purchase side, and no pay rate; "confirm" makes them, and the start date on the form is remembered by the agent; a pay rate or firm beside "salaried employee", or a type it does not know, is named back to him (decision 70). Test: `test_setting_up.py::TestASalariedEmployee`, `tests/unit/test_setup.py::TestASalariedEmployee`, `tests/contract/test_quickbooks_setup.py::TestASalariedEmployee`.
+
 ## Gaps found while writing this list
 
 Paths where the agent does less than the other documents say, or nothing at all. Each needs deciding, not just testing.
@@ -227,3 +243,6 @@ Paths where the agent does less than the other documents say, or nothing at all.
 - ~~**G6. `NO_BILLING_CONTACT`.**~~ Closed by decision 65 (E12). The whole-run test found the review could never be raised: the client was dropped from the list, so the timesheet looked like one for a client nobody knew.
 - ~~**G7. A replied-to review with no record behind it.**~~ Closed by decision 66 (B1, H16, H17). List problems close by themselves once fixed; an answer with nothing to apply it to is no longer written down as done; an "ignore" closes only its own email's questions.
 - **G8-G12.** The open entries in `failure-modes.md` (P6, E7, T6, R4, R3): a month that never gets its last week, Kevin replying from another address, giving the period of a timesheet with no item, a restored backup resending, and two copies of the agent on one mailbox.
+- ~~**G13. Setting up a salaried employee by email.**~~ Closed by decision 70 (M9): the form asks which kind of consultant first.
+- ~~**G14. What the client gets for hours from an email.**~~ Closed by decision 70: the invoice alone is fine for now; the client's billing email in QuickBooks decides whether it is sent.
+- **G15. A new salaried employee's first one-line email.** From an address QuickBooks does not have yet, with no attachment, it is set aside quietly for the Monday summary (C7), so no setup form is offered for it. It is handled by itself once the employee record has the address (the next day's copy, or "try again"); forwarding it from an address in `FOPS_TIMESHEET_FORWARDERS` works at once if her product and record exist.

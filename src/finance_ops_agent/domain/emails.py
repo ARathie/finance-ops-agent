@@ -112,6 +112,9 @@ class TimesheetSummary:
     # The period is the month the page's own dates point to, not one matched to
     # an engagement, and the hours are that month's (decision 68).
     period_from_page: bool = False
+    # A salaried employee's hours, in their own words, when the email itself
+    # was the report and there is no timesheet (decision 69).
+    reported_in_email: str = ""
 
 
 def _period_text(period: BillingPeriod | None) -> str:
@@ -132,6 +135,10 @@ def _summary_lines(summary: TimesheetSummary) -> list[str]:
         f"Hours: {hours}",
         f"Approval: {summary.approval}",
     ]
+    if summary.reported_in_email:
+        lines.append(
+            f'From the email itself (there is no timesheet): "{summary.reported_in_email}"'
+        )
     if summary.engagement_row is not None:
         lines.append(f"Engagement list row: {summary.engagement_row}")
     if summary.period_from_page:
@@ -272,8 +279,21 @@ def approve_invoice(
     invoice: Invoice,
     billing_preview: "OutgoingEmail",
     attachments: tuple[EmailAttachment, ...],
+    hours_in_email: str = "",
 ) -> OutgoingEmail:
+    """`hours_in_email` is what a salaried employee wrote when their email was
+    the report: there is no timesheet, and nobody but them vouches for the
+    hours, so Kevin is shown their words (decision 69)."""
     assert item.approved_hours is not None and item.invoice_amount is not None
+    reported = (
+        [
+            f'The hours are {item.consultant}\'s own, from their email: "{hours_in_email}".'
+            " There is no timesheet, and no client approval was looked for.",
+            "",
+        ]
+        if hours_in_email
+        else []
+    )
     return OutgoingEmail(
         to=(admin,),
         subject=(
@@ -286,11 +306,12 @@ def approve_invoice(
                 'Right consultant but the wrong client? Reply "wrong client": I\'ll void'
                 " this invoice and help you set up the right one.",
                 "",
+                *reported,
                 f"Client: {item.client}",
                 f"Billing email: {', '.join(item.snapshot.billing_emails)}",
                 f"Consultant: {item.consultant}",
                 f"Period: {format_period(item.period)}",
-                f"Approved hours: {item.approved_hours}",
+                f"{'Hours' if hours_in_email else 'Approved hours'}: {item.approved_hours}",
                 f"Bill rate: {dollars(Money(item.snapshot.bill_rate_cents))}",
                 f"Total: {dollars(invoice.total)}",
                 f"Due: {invoice.due_date}",
@@ -336,6 +357,39 @@ def payment_instruction(
                 "",
                 relates,
                 "I don't follow up on payments; this stays with you, as today.",
+            ]
+        ),
+    )
+
+
+# 4b. Salary reminder, for a salaried employee instead of a payment instruction
+
+
+def salary_reminder(admin: str, item: Item, invoice_number: str | None) -> OutgoingEmail:
+    """Kevin pays a salaried employee's monthly salary himself (decision 69).
+
+    Nothing is owed by the hour, so there is no rate, no amount and no due
+    date: the agent does not know the salary and never works one out."""
+    assert item.approved_hours is not None
+    relates = (
+        f"This relates to invoice {invoice_number}."
+        if invoice_number
+        else "The invoice for this period has not been sent yet (dry run)."
+    )
+    return OutgoingEmail(
+        to=(admin,),
+        subject=f"Pay salary: {item.consultant} — {format_month(item.period)}",
+        body="\n".join(
+            [
+                f"{item.consultant} is an Icon employee on a salary. This is your reminder"
+                f" to pay their salary for {format_month(item.period)}.",
+                "",
+                f"For: {item.consultant} at {item.client}, {format_period(item.period)}",
+                f"Hours billed to the client: {item.approved_hours} (not used for pay)",
+                "",
+                relates,
+                "I don't know the salary and don't follow up on payments; the amount and"
+                " the payment stay with you, as today.",
             ]
         ),
     )
@@ -415,11 +469,19 @@ def billing_email(
     item: Item,
     invoice: Invoice,
     attachments: tuple[EmailAttachment, ...],
+    with_timesheet: bool = True,
 ) -> OutgoingEmail:
     """To the client's billing email(s), Kevin always on CC, Reply-To Kevin.
 
-    Never mentions the pay rate, and the consultant is never on it."""
+    Never mentions the pay rate, and the consultant is never on it. Without a
+    timesheet -- a salaried employee who reported their hours in an email
+    (decision 69) -- it says neither "approved" nor "timesheet"."""
     assert item.approved_hours is not None
+    hours_and_timesheet = (
+        f" ({item.approved_hours} approved hours), along with the approved timesheet."
+        if with_timesheet
+        else f" ({item.approved_hours} hours)."
+    )
     replaces = (
         [f"This invoice replaces invoice {invoice.replaces_number}, which has been cancelled.", ""]
         if invoice.replaces_number
@@ -432,9 +494,8 @@ def billing_email(
             *replaces,
             f"Please find attached Icon Technologies invoice {invoice.number} for"
             f" {item.consultant}'s services for {format_period(item.period)}"
-            f" ({item.approved_hours} approved hours), along with the approved"
-            " timesheet."
-            f" Payment terms are {item.snapshot.payment_terms_days} days; the invoice"
+            + hours_and_timesheet
+            + f" Payment terms are {item.snapshot.payment_terms_days} days; the invoice"
             f" is due {invoice.due_date}.",
             "",
             "Please let us know if you have any questions.",

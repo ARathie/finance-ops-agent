@@ -115,3 +115,17 @@ class TestConfidence:
             confidence=Confidence.HIGH,
         )
         assert confidence_is_all_high(low_dailies)
+
+
+def test_hours_from_an_employees_email_always_go_past_kevin() -> None:
+    """Decision 69: nobody but the employee has vouched for them."""
+    result = check_guardrails(
+        send_automatically=True,
+        open_review_count=0,
+        readings=CLEAN,
+        amount=AMOUNT,
+        recent_amounts=[],
+        hours_from_email=True,
+    )
+    assert not result.may_send_automatically
+    assert "wrote in an email" in result.why_not()

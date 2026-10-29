@@ -16,11 +16,15 @@ import pytest
 from finance_ops_agent.adapters.claude.reader import ClaudeReader
 from finance_ops_agent.domain.reading import (
     ClassifiedKind,
+    Confidence,
+    DailyEntry,
     EmailClassification,
+    ReadField,
     ReplyAnswer,
     ReplyAnswerKind,
     ReplyContext,
     ReplyReading,
+    TimesheetReading,
 )
 from finance_ops_agent.ports.reader import CantReadAttachmentError, ReaderUnavailable
 from tests.scenarios.conftest import reading
@@ -270,3 +274,51 @@ def test_a_response_without_a_usage_block_is_counted_as_zero_not_an_error() -> N
     reader.read_timesheet(CSV, "timesheet.csv", "text/csv")
     assert reader.usage.requests == 1
     assert reader.usage.input_tokens == 0
+
+
+class TestHoursInAnEmail:
+    """Decision 69: a salaried employee's email read as the report itself."""
+
+    def one_liner(self, **changes: object) -> TimesheetReading:
+        base = reading(*AUG)
+        return base.model_copy(
+            update={
+                "stated_total_hours_hundredths": base.stated_total_hours_hundredths.model_copy(
+                    update={"value": 16_800, "quote": "168 hours"}
+                ),
+                **changes,
+            }
+        )
+
+    def test_the_email_is_the_document_and_its_own_prompt_is_used(self) -> None:
+        reader, stub, _ = make_reader(StubResponse(parsed_output=self.one_liner()))
+
+        result = reader.read_hours_email(
+            "October hours", "168 hours were worked in October.", date(2026, 11, 2)
+        )
+
+        assert result.stated_total_hours_hundredths.value == 16_800
+        text = stub.calls[0]["messages"][0]["content"][0]["text"]
+        assert "168 hours were worked in October." in text
+        assert "received 2026-11-02" in text
+        assert "salaried" in stub.calls[0]["system"][0]["text"]
+        assert reader.hours_email_prompt_version == "hours_email_v1"
+
+    def test_a_quote_the_email_does_not_contain_is_trusted_less(self) -> None:
+        reader, _, _ = make_reader(StubResponse(parsed_output=self.one_liner()))
+
+        result = reader.read_hours_email(
+            "hours", "I worked 160 hours in October.", date(2026, 11, 2)
+        )
+
+        assert result.stated_total_hours_hundredths.confidence is Confidence.MEDIUM
+
+    def test_an_email_with_no_hours_is_cant_read(self) -> None:
+        empty = self.one_liner(
+            stated_total_hours_hundredths=ReadField[int](confidence=Confidence.LOW),
+            daily_entries=ReadField[list[DailyEntry]](value=[], confidence=Confidence.LOW),
+        )
+        reader, _, _ = make_reader(StubResponse(parsed_output=empty))
+
+        with pytest.raises(CantReadAttachmentError):
+            reader.read_hours_email("hi", "Hope you are well.", date(2026, 11, 2))

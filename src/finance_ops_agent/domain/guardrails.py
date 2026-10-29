@@ -70,9 +70,14 @@ def check_guardrails(
     readings: list[TimesheetReading],
     amount: Money,
     recent_amounts: list[Money],
+    hours_from_email: bool = False,
 ) -> GuardrailCheck:
     """Every condition, with a plain reason for each one that does not hold."""
     reasons: list[str] = []
+    if hours_from_email:
+        # Nobody but the employee has vouched for them, so Kevin always sees
+        # them first (decision 69).
+        reasons.append("the hours are what the employee wrote in an email, with no timesheet")
     if not send_automatically:
         reasons.append('the engagement row does not say "Send automatically"')
     if open_review_count:

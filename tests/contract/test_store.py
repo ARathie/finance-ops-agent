@@ -514,3 +514,48 @@ class TestAmendingAnEmailBeforeItIsSent:
     def test_an_unknown_email_is_not_created(self, store: Store) -> None:
         assert not store.amend_pending_outgoing("review:nope", {"body": "x"})
         assert store.outgoing_records() == []
+
+
+class TestHoursFromAnEmail:
+    """Decision 69: a record that is an employee's own words, with no file."""
+
+    def test_the_flag_and_the_email_are_kept(self, store: Store) -> None:
+        made = store.create_item("Dana Cruz", "Acme Corp", AUGUST, ItemStatus.RECEIVED, snapshot())
+        store.record_timesheet(
+            TimesheetRecord(
+                item_id=made.id,
+                sha256="c" * 64,
+                reading={},
+                model="m",
+                prompt_version="hours",
+                is_duplicate=False,
+                is_correction=False,
+                from_email_text=True,
+                message_id="<dana@example>",
+            )
+        )
+
+        (record,) = store.timesheets_for_item(made.id)
+        assert record.from_email_text
+        assert record.message_id == "<dana@example>"
+        # No attachment says which email it was, so the record does.
+        assert store.message_ids_for_item(made.id) == ["<dana@example>"]
+        assert store.timesheet_seen("c" * 64)
+
+    def test_an_ordinary_record_is_not_from_an_email(self, store: Store) -> None:
+        made = store.create_item("Priya Shah", "Acme Corp", AUGUST, ItemStatus.RECEIVED, snapshot())
+        store.record_timesheet(
+            TimesheetRecord(
+                item_id=made.id,
+                sha256="d" * 64,
+                reading={},
+                model="m",
+                prompt_version="p",
+                is_duplicate=False,
+                is_correction=False,
+            )
+        )
+
+        (record,) = store.timesheets_for_item(made.id)
+        assert not record.from_email_text
+        assert record.message_id == ""

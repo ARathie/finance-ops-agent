@@ -6,6 +6,7 @@ import pytest
 
 from finance_ops_agent.adapters.fakes.accounting import FakeAccounting
 from finance_ops_agent.application.from_quickbooks import (
+    assumed_start,
     vendors_without_email,
     workbook_from_accounting,
 )
@@ -197,3 +198,147 @@ def test_a_dead_connection_is_raised_so_the_run_can_say_so(company: FakeAccounti
     company.fail_with = AccountingNeedsReconnect("reconnect")
     with pytest.raises(AccountingFailed):
         workbook_from_accounting(company)
+
+
+class TestASalariedEmployee:
+    """Decisions 69 and 70: a product with nothing on its purchase side is an
+    Icon employee on a salary. Their address is on their QuickBooks employee
+    record, and a start date QuickBooks has no field for is remembered."""
+
+    def dana(self, company: FakeAccounting, **changes: object) -> None:
+        fields: dict[str, object] = {
+            "consultant": "Dana Cruz",
+            "vendor": "",
+            "pay": None,
+            "notes": "",
+            "ref": "44",
+        }
+        fields.update(changes)
+        company.live = [product(**fields)]  # type: ignore[arg-type]
+        company.employee_records = [
+            AccountingParty(
+                ref="e1", name="Dana Cruz", email="dana@example.com", payment_terms_days=None
+            )
+        ]
+
+    def test_nothing_on_the_purchase_side_is_a_salaried_employee(
+        self, company: FakeAccounting
+    ) -> None:
+        self.dana(company)
+        built = workbook_from_accounting(company, date(2026, 9, 8), {})
+
+        assert built.problems == []
+        (consultant,) = built.consultants
+        assert consultant.salaried
+        assert consultant.type is ConsultantType.EMPLOYEE
+        assert consultant.emails == ("dana@example.com",)  # off the employee record
+        (engagement,) = built.engagements
+        assert engagement.pay_rate is None
+        assert engagement.bill_rate == Money(14_000)
+        assert built.vendors == []
+
+    def test_no_start_date_means_last_month_and_it_is_remembered(
+        self, company: FakeAccounting
+    ) -> None:
+        self.dana(company)
+        starts: dict[str, str] = {}
+        built = workbook_from_accounting(company, date(2026, 9, 8), starts)
+
+        assert built.engagements[0].start_date == date(2026, 8, 1)
+        assert starts == {"44": "2026-08-01"}
+        # A month later it is still August: the assumption does not move.
+        later = workbook_from_accounting(company, date(2026, 10, 20), starts)
+        assert later.engagements[0].start_date == date(2026, 8, 1)
+
+    def test_last_month_across_new_year(self) -> None:
+        assert assumed_start(date(2027, 1, 5)) == date(2026, 12, 1)
+
+    def test_a_start_line_still_counts_if_one_was_written(self, company: FakeAccounting) -> None:
+        self.dana(company, notes="Start: 2026-06-01")
+        starts: dict[str, str] = {}
+        built = workbook_from_accounting(company, date(2026, 9, 8), starts)
+
+        assert built.engagements[0].start_date == date(2026, 6, 1)
+        assert starts == {}
+
+    def test_without_a_date_to_assume_from_it_is_a_problem(self, company: FakeAccounting) -> None:
+        self.dana(company)
+        built = workbook_from_accounting(company)
+
+        assert built.engagements == []
+        assert any("when this salaried engagement started" in p.message for p in built.problems)
+
+    def test_a_cost_left_blank_but_held_as_zero_is_still_no_cost(
+        self, company: FakeAccounting
+    ) -> None:
+        self.dana(company, pay=0)
+        built = workbook_from_accounting(company, date(2026, 9, 8), {})
+
+        assert built.problems == []
+        assert built.consultants[0].salaried
+
+    def test_no_employee_record_is_a_to_do(self, company: FakeAccounting) -> None:
+        self.dana(company)
+        company.employee_records = []
+        built = workbook_from_accounting(company, date(2026, 9, 8), {})
+
+        assert built.problems == []
+        assert vendors_without_email(built) == ["Dana Cruz"]
+
+    def test_the_record_is_found_under_given_and_family_name(self, company: FakeAccounting) -> None:
+        self.dana(company)
+        company.employee_records = [
+            AccountingParty(
+                ref="e1",
+                name="Dana C.",
+                company="Dana Cruz",
+                email="dana@example.com",
+                payment_terms_days=None,
+            )
+        ]
+        built = workbook_from_accounting(company, date(2026, 9, 8), {})
+
+        assert built.consultants[0].emails == ("dana@example.com",)
+
+    def test_two_employees_by_that_name_are_a_question(self, company: FakeAccounting) -> None:
+        self.dana(company)
+        company.employee_records = company.employee_records * 2
+        built = workbook_from_accounting(company, date(2026, 9, 8), {})
+
+        assert built.engagements == []
+        assert any("2 employees called Dana Cruz" in p.message for p in built.problems)
+
+    def test_employees_are_not_asked_for_when_nobody_is_salaried(
+        self, company: FakeAccounting
+    ) -> None:
+        workbook_from_accounting(company, date(2026, 9, 8), {})
+        assert company.calls["employees"] == 0
+
+    def test_a_cost_with_no_vendor_is_a_question(self, company: FakeAccounting) -> None:
+        company.live = [product(consultant="Dana Cruz", vendor="")]
+        built = workbook_from_accounting(company, date(2026, 9, 8), {})
+
+        assert built.engagements == []
+        assert any(
+            "a cost on its purchase side but no preferred vendor" in p.message
+            for p in built.problems
+        )
+
+    def test_a_vendor_on_one_product_and_not_another_is_a_question(
+        self, company: FakeAccounting
+    ) -> None:
+        company.customers["Beta LLC"] = AccountingParty(
+            ref="59",
+            name="Beta LLC",
+            company="",
+            email="ap@beta.example",
+            payment_terms_days=30,
+            notes="Invoice code: BE",
+        )
+        company.live = [product(), product(client="Beta LLC", vendor="", pay=None, ref="43")]
+        built = workbook_from_accounting(company, date(2026, 9, 8), {})
+
+        assert len(built.engagements) == 1
+        assert any(
+            "a vendor on one product and none on another" in p.message for p in built.problems
+        )

@@ -274,6 +274,9 @@ class ExpectedProduct:
     bill_rate_cents: int
     pay_rate_cents: int
     payee: str
+    # The engagement list says this consultant is paid a salary: their product
+    # should have nothing on its purchase side (decision 69).
+    salaried: bool = False
 
 
 def check_quickbooks_products(
@@ -434,11 +437,27 @@ def check_quickbooks_pay(accounting: object, wanted: Callable[[], list[ExpectedP
         differences: list[str] = []
         empty = 0
         checked = 0
+        salaried = 0
         for expected in expected_all:
             try:
                 product = accounting.product_for(expected.consultant, expected.clients)
             except Exception:
                 continue  # the products check reports this one
+            if expected.salaried:
+                # Nothing on the purchase side is what a salary looks like in
+                # QuickBooks; anything there is an hourly cost or a vendor the
+                # list does not have (decision 69).
+                # A blank cost may come back as zero (from_quickbooks.py).
+                if not product.purchase_cost_cents and not product.vendor:
+                    salaried += 1
+                else:
+                    differences.append(
+                        f"{expected.consultant} at {expected.client}: the engagement list"
+                        " says they are paid a salary, and QuickBooks has a cost or a"
+                        " vendor on the product's purchase side. For a salaried employee,"
+                        " clear both."
+                    )
+                continue
             if product.purchase_cost_cents is None and not product.vendor:
                 empty += 1
                 continue
@@ -468,13 +487,19 @@ def check_quickbooks_pay(accounting: object, wanted: Callable[[], list[ExpectedP
                 " wrong today, but these have to agree before anything moves across. "
                 + " ".join(differences)
             )
+        on_salary = (
+            f"; {salaried} salaried employee engagement(s) with nothing on the purchase"
+            " side, as it should be"
+            if salaried
+            else ""
+        )
         if not checked:
             return (
                 f"nothing to compare yet: none of {empty} engagement(s) has a rate or a"
-                " vendor on the purchase side of its product"
+                " vendor on the purchase side of its product" + on_salary
             )
         note = f"all {checked} engagement(s) with a purchase side agree with the engagement list"
-        return note if not empty else f"{note}; {empty} not filled in yet"
+        return (note if not empty else f"{note}; {empty} not filled in yet") + on_salary
 
     return _run(name, run)
 
@@ -637,6 +662,23 @@ def check_claude_api(model: str, describe: Callable[[str], str] | None = None) -
     return _run("claude api", lambda: ask(model))
 
 
+def _where_the_address_goes(built: EngagementWorkbook, names: list[str]) -> str:
+    """A vendor's email for most; an employee record with their email for a
+    salaried employee, who has no vendor (decision 70)."""
+    salaried = {consultant.name for consultant in built.consultants if consultant.salaried}
+    on_vendor = [name for name in names if name not in salaried]
+    on_product = [name for name in names if name in salaried]
+    said = []
+    if on_vendor:
+        said.append("an email on the vendor for " + ", ".join(on_vendor))
+    if on_product:
+        said.append(
+            "an employee record in QuickBooks, with their email, named as their product"
+            " (a salaried employee has no vendor) for " + ", ".join(on_product)
+        )
+    return "; ".join(said)
+
+
 def check_quickbooks_setup(
     build: Callable[[], EngagementWorkbook], forwarders: tuple[str, ...]
 ) -> Check:
@@ -663,9 +705,10 @@ def check_quickbooks_setup(
             raise RuntimeError(
                 "no timesheet can be recognised for "
                 + ", ".join(unrecognised)
-                + ": their vendor in QuickBooks has no email, and nobody is set up to"
-                " forward timesheets. Put the address their timesheets come from on"
-                " the vendor."
+                + ": nothing in QuickBooks says which address their timesheets come"
+                " from, and nobody is set up to forward timesheets. Put "
+                + _where_the_address_goes(built, unrecognised)
+                + "."
             )
         clients = len({engagement.client for engagement in built.engagements})
         said = (
@@ -674,8 +717,8 @@ def check_quickbooks_setup(
         )
         if unrecognised:
             said += (
-                "; still to do before timesheets stop being forwarded: an email on the"
-                " vendor for " + ", ".join(unrecognised)
+                "; still to do before timesheets stop being forwarded: "
+                + _where_the_address_goes(built, unrecognised)
             )
         return said
 

@@ -5,6 +5,7 @@ sees a rate, and never picks recipients. `classify` and `read_reply` join this
 port with the Claude adapter (see docs/integrations/claude-extraction.md).
 """
 
+from datetime import date
 from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict
@@ -85,6 +86,24 @@ class TimesheetReader(Protocol):
         hints: ReadingHints | None = None,
     ) -> TimesheetReading:
         """Fill in the whole form, or raise CantReadAttachmentError. Never partial."""
+        ...
+
+    @property
+    def hours_email_prompt_version(self) -> str:
+        """The prompt version recorded with hours read from an email's own words."""
+        ...
+
+    def read_hours_email(
+        self,
+        subject: str,
+        body: str,
+        received: date,
+        hints: ReadingHints | None = None,
+    ) -> TimesheetReading:
+        """The same form, filled in from what a salaried employee wrote in the
+        email itself -- "168 hours in October" -- when there is no timesheet
+        (decision 69). Quotes are the email's own words. Raises
+        CantReadAttachmentError when the email says no hours at all."""
         ...
 
     def read_reply(

@@ -112,15 +112,19 @@ def test_something_missing_in_quickbooks_is_a_review_naming_the_record(qbo: Scen
     assert qbo.store.list_items() == []  # nothing is billed from half an answer
 
 
-def test_quickbooks_down_falls_back_to_the_engagement_list(qbo: ScenarioEnv) -> None:
+def test_quickbooks_down_never_falls_back_to_the_engagement_list(qbo: ScenarioEnv) -> None:
+    """Decision 70: with no copy of QuickBooks yet, the spreadsheet is not read;
+    the timesheet waits and is handled once QuickBooks answers."""
     qbo.workbook = default_workbook()
     qbo.accounting.fail_with = AccountingFailed("service unavailable")
     qbo.add_email(PRIYA, scripted_reading=reading(AUG_START, AUG_END))
     report = qbo.run()
 
-    # Read from the list, and waiting on QuickBooks for its rates (decision 55).
-    assert qbo.the_item().status is ItemStatus.NEEDS_REVIEW
-    assert any("used the engagement list" in line for line in report.lines)
+    assert qbo.store.list_items() == []
+    assert any("leaves the mail until QuickBooks answers" in line for line in report.lines)
+    qbo.accounting.fail_with = None
+    qbo.run()
+    assert qbo.the_item().status is ItemStatus.READY
 
 
 class TestOneAddressForTwoConsultants:

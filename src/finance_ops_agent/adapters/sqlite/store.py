@@ -427,25 +427,30 @@ class SqliteStore:
                     prompt_version=record.prompt_version,
                     is_duplicate=record.is_duplicate,
                     is_correction=record.is_correction,
+                    from_email_text=record.from_email_text,
+                    message_id=record.message_id or None,
                 )
             )
 
     def message_ids_for_item(self, item_id: int) -> list[str]:
         with Session(self._engine) as session:
-            shas = list(
-                session.scalars(
-                    select(TimesheetRow.attachment_sha256).where(TimesheetRow.item_id == item_id)
-                )
+            rows = list(
+                session.scalars(select(TimesheetRow).where(TimesheetRow.item_id == item_id))
             )
-            if not shas:
+            if not rows:
                 return []
+            shas = [row.attachment_sha256 for row in rows]
             message_rows = select(AttachmentRow.message_id).where(AttachmentRow.sha256.in_(shas))
-            return [
+            found = [
                 str(found)
                 for found in session.scalars(
                     select(MessageRow.message_id).where(MessageRow.id.in_(message_rows))
                 )
             ]
+            # Hours written in an email have no attachment to say whose they
+            # are; the record names the email itself (decision 69).
+            named = [row.message_id for row in rows if row.message_id]
+            return list(dict.fromkeys(found + named))
 
     def timesheets_for_item(self, item_id: int) -> list[TimesheetRecord]:
         with Session(self._engine) as session:
@@ -463,6 +468,8 @@ class SqliteStore:
                     prompt_version=row.prompt_version,
                     is_duplicate=row.is_duplicate,
                     is_correction=row.is_correction,
+                    from_email_text=row.from_email_text,
+                    message_id=row.message_id or "",
                 )
                 for row in rows
             ]

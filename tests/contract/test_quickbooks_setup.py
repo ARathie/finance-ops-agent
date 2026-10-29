@@ -401,3 +401,81 @@ class TestWhatIsMadeIsReadBackAsToday:
         built = self._read_back(company)
         assert built.problems == []
         assert ("Sam Okafor", "Acme Corp") in {(r.consultant, r.client) for r in built.engagements}
+
+
+def salaried_plan(**changes: Any) -> EngagementSetup:
+    return plan(
+        **{
+            "consultant": "Dana Lee",
+            "consultant_email": "dana.lee@example.com",
+            "firm": "",
+            "pay_within_days": 0,
+            "pay_rate": Money(0),
+            "salaried": True,
+            **changes,
+        }
+    )
+
+
+class TestASalariedEmployee:
+    """Decision 70: an employee record holds the address, and the product has
+    nothing on its purchase side -- the box unticked."""
+
+    def test_an_employee_and_a_product_with_a_sales_side_only(self) -> None:
+        company = StubCompany()
+        done = adapter(company).set_up_engagement(salaried_plan())
+
+        assert company.created("vendor") == []
+        (employee,) = company.created("employee")
+        assert employee == {
+            "DisplayName": "Dana Lee",
+            "GivenName": "Dana",
+            "FamilyName": "Lee",
+            "PrimaryEmailAddr": {"Address": "dana.lee@example.com"},
+        }
+        _category, product = company.created("item")
+        assert product["UnitPrice"] == 150.0
+        assert product["IncomeAccountRef"] == ACCOUNTS[0]
+        for purchase_side in ("PurchaseCost", "PrefVendorRef", "PurchaseDesc", "ExpenseAccountRef"):
+            assert purchase_side not in product
+        assert done.product_ref == company.rows["Item"][-1]["Id"]
+        assert "employee Dana Lee" in done.created
+
+    def test_running_it_again_makes_nothing(self) -> None:
+        company = StubCompany()
+        adapter(company).set_up_engagement(salaried_plan())
+        made = len(company.posts)
+
+        done = adapter(company).set_up_engagement(salaried_plan())
+
+        assert len(company.posts) == made
+        assert "employee Dana Lee" in done.reused
+
+    def test_an_existing_employee_with_another_address_is_refused(self) -> None:
+        company = StubCompany()
+        company.rows["Employee"] = [
+            {
+                "Id": "71",
+                "SyncToken": "0",
+                "DisplayName": "Dana Lee",
+                "PrimaryEmailAddr": {"Address": "someone.else@example.com"},
+            }
+        ]
+
+        with pytest.raises(QuickBooksFailed, match="already has an employee"):
+            adapter(company).set_up_engagement(salaried_plan())
+        assert company.created("item") == [{"Name": "Globex", "Type": "Category"}]
+
+    def test_it_reads_back_as_a_salaried_employee_with_their_email(self) -> None:
+        company = StubCompany()
+        done = adapter(company).set_up_engagement(salaried_plan())
+        starts = {done.product_ref: "2026-09-01"}  # what the run remembers
+
+        built = workbook_from_accounting(adapter(company), TODAY, starts)
+
+        dana = next(c for c in built.consultants if c.name == "Dana Lee")
+        assert dana.salaried
+        assert dana.emails == ("dana.lee@example.com",)
+        engagement = next(row for row in built.engagements if row.consultant == "Dana Lee")
+        assert engagement.pay_rate is None
+        assert engagement.start_date == date(2026, 9, 1)
