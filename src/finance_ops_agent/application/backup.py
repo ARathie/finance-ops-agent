@@ -6,12 +6,21 @@ backup is worth nothing until a restore has been tried, so restore is a real
 command with a real test, not a note in a runbook.
 
 The lock file is deliberately left out: it belongs to a running process, not to
-the data.
+the data. So are earlier backups, when they are kept inside the data folder
+(`data/backups`, the default): otherwise every zip would hold all the ones
+before it, and the one being written would be zipped into itself.
+
+Off the machine, `fops serve` keeps every daily backup for 90 days and the
+first of each month for good, because these are financial records
+(`backups_to_delete`). On the machine it keeps the last week, which is enough
+to put something back quickly; the bucket is the real copy.
 """
 
+import re
 import zipfile
+from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -22,6 +31,44 @@ SKIPPED_NAMES = frozenset({"run.lock"})
 # The sidecar files belong to a live connection. They are safe to leave out
 # only because back_up checkpoints the database first.
 SKIPPED_SUFFIXES = (".db-wal", ".db-shm")
+
+BACKUP_NAME = re.compile(r"^fops-backup-(\d{4}-\d{2}-\d{2})\.zip$")
+KEEP_DAILY = timedelta(days=90)
+KEEP_ON_THE_MACHINE = 7
+
+
+def backup_name(day: date) -> str:
+    return f"fops-backup-{day.isoformat()}.zip"
+
+
+def backup_day(name: str) -> date | None:
+    """The day a backup file is for, or None for anything that is not one."""
+    match = BACKUP_NAME.match(name)
+    if match is None:
+        return None
+    try:
+        return date.fromisoformat(match[1])
+    except ValueError:
+        return None
+
+
+def backups_to_delete(names: Iterable[str], today: date) -> list[str]:
+    """The bucket's retention: daily backups for 90 days, the first of each
+    month for good. Anything not named like a backup is never touched."""
+    doomed = []
+    for name in names:
+        day = backup_day(name)
+        if day is None or day.day == 1:
+            continue
+        if today - day > KEEP_DAILY:
+            doomed.append(name)
+    return sorted(doomed)
+
+
+def local_backups_to_delete(names: Iterable[str], keep: int = KEEP_ON_THE_MACHINE) -> list[str]:
+    """All but the newest `keep` backups in a folder on the machine."""
+    dated = sorted((day, name) for name in names if (day := backup_day(name)) is not None)
+    return [name for _, name in dated[: max(len(dated) - keep, 0)]]
 
 
 class RestoreRefused(Exception):
@@ -55,11 +102,14 @@ def back_up(
     if store is not None:
         store.checkpoint()
     destination_dir.mkdir(parents=True, exist_ok=True)
-    archive_path = destination_dir / f"fops-backup-{today.isoformat()}.zip"
+    archive_path = destination_dir / backup_name(today)
+    backups_folder = destination_dir.resolve()
     written = 0
     with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(data_dir.rglob("*")):
             if not path.is_file() or not _should_include(path):
+                continue
+            if path.resolve().is_relative_to(backups_folder):
                 continue
             archive.write(path, path.relative_to(data_dir).as_posix())
             written += 1

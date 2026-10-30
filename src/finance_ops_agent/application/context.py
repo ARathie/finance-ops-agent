@@ -68,6 +68,18 @@ class RunDeps:
     # None: the review goes out as it is.
     investigator: Investigator | None = None
     render_tracking: Callable[[list[TrackingRow]], bytes] | None = None
+    # `fops serve` asked to stop (SIGTERM). Looked at only between steps that
+    # are whole on their own -- one message, one item, one email -- so a stop
+    # never leaves anything half-sent; the next run carries on from there.
+    stop_requested: Callable[[], bool] | None = None
+
+    def stop_if_asked(self) -> None:
+        if self.stop_requested is not None and self.stop_requested():
+            raise RunStopped("asked to stop; the next run carries on from here")
+
+
+class RunStopped(Exception):
+    """The run stopped at a safe point because the service is shutting down."""
 
 
 @dataclass

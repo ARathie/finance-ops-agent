@@ -55,6 +55,15 @@ When a change adds a path, add it here in the same pull request.
 - [ ] **A7. Filing an email in a folder fails.**
   Outcome: logged; the email is still handled once and never again.
   Test: `test_outages.py::TestFilingFails`.
+- [ ] **A8. Asked to stop mid-run** (the server shutting down, `docker compose stop`, an update).
+  When: `fops serve` gets SIGTERM while a run is going.
+  Decided by: code -- the stop is looked at only between whole steps: before each email is handled, before each ready item, before the investigator, before each email is sent.
+  Outcome: the step in hand finishes, the run stops there, nothing is left half-sent or in flight; the next run carries on and sends nothing twice. Waiting between runs, it stops at once.
+  Test: `test_stopping.py`, `tests/unit/test_service.py::TestStopping`.
+- [ ] **A9. The agent stops altogether** (the server down, the container crashed, every run failing).
+  Decided by: the heartbeat -- `fops serve` pings the check service only after a run or backup that finished cleanly.
+  Outcome: the check service, not the agent, emails Ash and Kevin once the pings have stopped for 45 minutes, and again when they start.
+  Test: `tests/unit/test_service.py::TestHeartbeat`; the alert itself is a roadmap PR 14 box for a person.
 - [ ] **A5. Dry run.**
   When: `FOPS_MODE=dry_run`.
   Decided by: the setting; no command-line flag can override it.
@@ -235,7 +244,7 @@ An Icon employee on a fixed salary rather than paid by the hour. In QuickBooks t
 
 Paths where the agent does less than the other documents say, or nothing at all. Each needs deciding, not just testing.
 
-- ~~**G1. A mailbox that can't be read.**~~ Closed by decision 58 (A6). What is left: if sending is down too -- the same provider -- the email to Kevin waits until it can go. Only the heartbeat (`fops serve`, roadmap PR 14) covers an agent that cannot say anything at all.
+- ~~**G1. A mailbox that can't be read.**~~ Closed by decision 58 (A6). What is left: if sending is down too -- the same provider -- the email to Kevin waits until it can go. Only the heartbeat (`fops serve`, A9) covers an agent that cannot say anything at all.
 - ~~**G2. Claude unreachable.**~~ Closed by decision 58 (D5).
 - ~~**G3. Client replies.**~~ Closed by decision 58 (C4): Kevin gets each one as it came.
 - ~~**G4. A reply from Kevin the agent can't match.**~~ Closed by decision 63 (H10): he is told nothing was done, and how to answer.

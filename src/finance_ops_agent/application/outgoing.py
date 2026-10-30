@@ -515,6 +515,7 @@ def plan_outgoing(deps: RunDeps, report: RunReport) -> None:
     for item in deps.store.list_items():
         if item.status is not ItemStatus.READY:
             continue
+        deps.stop_if_asked()
         assert item.approved_hours is not None and item.invoice_amount is not None
         if mode is Mode.DRY_RUN:
             invoice = build_invoice(item, "DRAFT", deps.clock.today())
@@ -638,6 +639,7 @@ def send_pending(deps: RunDeps, report: RunReport) -> None:
             _reconcile(deps, record, report)
     for record in deps.store.outgoing_records():
         if record.kind in EMAIL_KINDS and record.status == "pending":
+            deps.stop_if_asked()
             _send_one(deps, record, report)
 
 

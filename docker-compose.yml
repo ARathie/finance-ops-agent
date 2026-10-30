@@ -1,0 +1,39 @@
+# The billing agent on a server (docs/running-it.md stage 2).
+#
+#   cp .env.example .env && chmod 600 .env   # fill it in
+#   docker compose pull && docker compose up -d
+#   docker compose exec fops fops doctor
+#
+# One service, running `fops serve`: a run every FOPS_RUN_EVERY_MINUTES, a
+# backup nightly at FOPS_BACKUP_AT, a heartbeat after each. It listens on no
+# port, so nothing is published.
+
+services:
+  fops:
+    image: ghcr.io/arathie/finance-ops-agent:${FOPS_VERSION:-latest}
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Fixed by the container, whatever .env says: the volume and the
+      # read-only workbook mount below.
+      FOPS_DATA_DIR: /data
+      FOPS_ENGAGEMENT_LIST: /engagements/engagements.xlsx
+    volumes:
+      - fops-data:/data
+      # Manual mode only (FOPS_ACCOUNTING=manual): Kevin's workbook. With
+      # QuickBooks the engagements come from QuickBooks and this stays empty.
+      - ./engagements:/engagements:ro
+      # `rclone config` writes here; the nightly backup reads it.
+      - ./rclone:/home/fops/.config/rclone:ro
+    # fops serve stops at its next safe point -- never mid-send -- and a
+    # timesheet being read can take a while, so give it time before a kill.
+    stop_grace_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  fops-data:

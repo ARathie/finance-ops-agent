@@ -1,0 +1,22 @@
+# Nothing secret and nothing real goes into the image.
+.env
+.env.*
+data/
+engagements/
+*.xlsx
+*.db
+*.sqlite*
+secrets/
+rclone/
+.git/
+.github/
+.venv/
+**/__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+tests/
+
+docs/
+templates/

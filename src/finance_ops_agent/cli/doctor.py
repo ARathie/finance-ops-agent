@@ -170,6 +170,42 @@ def check_timesheet_forwarders(forwarders: tuple[str, ...], mode: str) -> Check:
     )
 
 
+def check_heartbeat(url: str) -> Check:
+    """The check service that tells Ash and Kevin when the agent goes quiet.
+
+    The doctor does not ping it. It may be run from a laptop or a scratch
+    machine, and a ping from there would tell the check service the server's
+    agent is alive when nothing says it is.
+    """
+    name = "heartbeat"
+    if not url:
+        return Check(
+            name,
+            CheckResult.SKIP,
+            "FOPS_HEARTBEAT_URL is blank: nobody will be told if the agent stops."
+            " Set it on the server (docs/running-it.md stage 2)",
+        )
+    host = url.removeprefix("https://").split("/", 1)[0]
+    return Check(name, CheckResult.PASS, f"fops serve pings {host} after every good run")
+
+
+def check_backup_target(target: str, names: Callable[[], list[str]]) -> Check:
+    """Can the bucket the nightly backup goes to be reached, and what is in it?"""
+    if not target:
+        return Check(
+            "backup target",
+            CheckResult.SKIP,
+            "FOPS_BACKUP_TARGET is blank: backups stay on this machine only",
+        )
+
+    def run() -> str:
+        found = [name for name in names() if name.startswith("fops-backup-")]
+        latest = f", the latest {max(found)}" if found else ""
+        return f"reached {target}: {len(found)} backup(s) there{latest}"
+
+    return _run("backup target", run)
+
+
 def check_engagement_list(
     load: Callable[[], tuple[int, list[str]]], path: Path, stored: bool = False
 ) -> Check:

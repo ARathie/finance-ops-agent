@@ -15,7 +15,7 @@ replaced by a stray `.env`.
 import os
 from collections.abc import MutableMapping
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, time
 from pathlib import Path
 
 from finance_ops_agent.application.context import Mode
@@ -266,4 +266,45 @@ class Config:
             accounting=accounting,
             timesheet_forwarders=_forwarders(),
             engagements_from=engagements_from,
+        )
+
+
+@dataclass(frozen=True)
+class ServiceSettings:
+    """`fops serve`: how often, when to back up, and who to tell it is alive
+    (docs/running-it.md stage 2)."""
+
+    run_every_minutes: int
+    backup_at: time
+    heartbeat_url: str  # blank = no heartbeat
+    backup_target: str  # blank = backups stay on the machine
+
+    @classmethod
+    def from_env(cls) -> "ServiceSettings":
+        every_text = os.environ.get("FOPS_RUN_EVERY_MINUTES", "").strip() or "15"
+        try:
+            every = int(every_text)
+        except ValueError:
+            every = 0
+        if not 1 <= every <= 24 * 60:
+            raise MissingSettingError(
+                f"FOPS_RUN_EVERY_MINUTES should be a number of minutes, not {every_text!r}"
+            )
+        at_text = os.environ.get("FOPS_BACKUP_AT", "").strip() or "02:30"
+        try:
+            backup_at = time.fromisoformat(at_text)
+        except ValueError as error:
+            raise MissingSettingError(
+                f"FOPS_BACKUP_AT should be a time like 02:30, not {at_text!r}"
+            ) from error
+        heartbeat_url = os.environ.get("FOPS_HEARTBEAT_URL", "").strip()
+        if heartbeat_url and not heartbeat_url.startswith("https://"):
+            raise MissingSettingError(
+                f"FOPS_HEARTBEAT_URL should be an https address, not {heartbeat_url!r}"
+            )
+        return cls(
+            run_every_minutes=every,
+            backup_at=backup_at,
+            heartbeat_url=heartbeat_url,
+            backup_target=os.environ.get("FOPS_BACKUP_TARGET", "").strip(),
         )

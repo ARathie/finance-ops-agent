@@ -888,3 +888,13 @@ For a salaried employee the agent makes:
 On the form, a pay rate or firm beside "salaried employee" is two answers to what Icon pays, and is refused. An unknown type, or a blank one, is a question. A form from before the question, with a pay rate on it, is still read as a vendor consultant's.
 
 **An invoice with nothing behind it is fine, for now.** Icon's clients work out what to pay in their own systems and pay Kevin directly; the invoice is Kevin's record. Whether it is emailed to a client at all is the client's own setting: its billing email in QuickBooks.
+
+## 71. Straight to the server, with `fops serve` stopping only between whole steps
+
+Icon wants Kevin using the agent without anyone's computer having to stay on, so the first real cycle runs on the server (roadmap PR 14) in `dry_run`, rather than on a Mac first. Stage 1 in `running-it.md` stays as a fallback; nothing in PR 13 changes except where its cycle happens. Kevin needs nothing installed: he only ever reads and answers email, on whatever he likes.
+
+**A stop is looked at only between whole steps.** `fops serve` turns SIGTERM into a request, and a run checks it before each email is handled, before each ready item, before the investigator and before each email is sent. It then stops as if it had crashed at that point, which every run is already built to survive (decision 21's never-twice rules). It never stops inside a send, so no row is left `in_flight`. Between runs it stops at once. Compose gives it 60 seconds before a kill, for a timesheet that is part-way through being read.
+
+**Backups.** Kept in the data folder (`data/backups`), so they are skipped when the next zip is made: otherwise each one held every one before it, and the zip being written was zipped into itself. The server keeps its last seven; the bucket keeps every daily for 90 days and the first of each month for good. rclone does the copying, so B2, S3 or Spaces is a setting, and a folder stands in for the bucket in tests.
+
+**The heartbeat is pinged after a run or backup that finished cleanly, and never by `fops doctor`.** The doctor may run from somewhere else, and its ping would say an agent was alive when nothing showed it was.

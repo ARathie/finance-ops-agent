@@ -13,6 +13,7 @@ application logs, and `domain/` and `application/` never import an adapter. Only
 
 import json
 import logging
+import logging.handlers
 import sys
 from pathlib import Path
 from typing import Any
@@ -56,8 +57,16 @@ class JsonLinesFormatter(logging.Formatter):
         return json.dumps(entry, default=str)
 
 
+# The file starts afresh each midnight and the last 30 days are kept
+# (docs/running-it.md), so a server that runs for years never fills its disk.
+DAYS_KEPT = 30
+
+
 def configure(path: Path | None = None, level: int = logging.INFO) -> logging.Logger:
-    """Log JSON lines to `path` (and always to stderr, for a person watching)."""
+    """Log JSON lines to `path` (and always to stderr, for a person watching).
+
+    The file rotates at midnight; yesterday's is `fops.log.YYYY-MM-DD`.
+    """
     logger = logging.getLogger(LOGGER_NAME)
     logger.setLevel(level)
     logger.handlers.clear()
@@ -69,7 +78,9 @@ def configure(path: Path | None = None, level: int = logging.INFO) -> logging.Lo
 
     if path is not None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        handler = logging.FileHandler(path, encoding="utf-8")
+        handler = logging.handlers.TimedRotatingFileHandler(
+            path, when="midnight", backupCount=DAYS_KEPT, encoding="utf-8"
+        )
         handler.setFormatter(JsonLinesFormatter())
         logger.addHandler(handler)
     return logger

@@ -163,10 +163,10 @@ Code: a `Dockerfile` (python 3.11-slim, `uv sync --locked --no-dev`, a non-root 
 
 Done when:
 
-- [ ] CI builds the image and `docker run <image> fops --version` prints the version; the image contains no `.env` and runs as non-root.
-- [ ] `fops serve` with a fake clock runs at the right cadence, backs up once per night, never overlaps runs, pings the heartbeat only after a successful run, and stops within 30 seconds of `SIGTERM` without leaving an `in_flight` row (tested).
-- [ ] Backup upload and retention are tested against a local stand-in (MinIO in CI, or a temporary directory as the rclone remote).
-- [ ] `running-it.md` stage 2 matches what was built, command for command.
+- [x] CI builds the image and `docker run <image> fops --version` prints the version; the image contains no `.env` and runs as non-root. The `image` job in `.github/workflows/ci.yml` also starts the container and checks it stops cleanly on `SIGTERM`, and publishes to `ghcr.io/arathie/finance-ops-agent` on a `v*` tag.
+- [x] `fops serve` with a fake clock runs at the right cadence, backs up once per night, never overlaps runs, pings the heartbeat only after a successful run, and stops within 30 seconds of `SIGTERM` without leaving an `in_flight` row (tested). `tests/unit/test_service.py` (a fake day, and a real SIGTERM) and `tests/scenarios/test_stopping.py` (a stop mid-run, decision 71).
+- [x] Backup upload and retention are tested against a local stand-in (MinIO in CI, or a temporary directory as the rclone remote). `tests/unit/test_backup_retention.py`, with real rclone and a folder as the remote; CI installs rclone.
+- [x] `running-it.md` stage 2 matches what was built, command for command.
 - [ ] **Needs a person:** a server is chosen and provisioned (open question: which provider; the default is a 1 vCPU / 1 GB Ubuntu LTS virtual machine at DigitalOcean, Hetzner, or AWS Lightsail), with Docker, unattended security updates, SSH keys only, and no inbound ports besides SSH. Its static outbound IP goes into the Intuit app profile ("where your app is hosted"), which was left blank until the server existed.
 - [ ] **Needs a person:** `.env` placed on the server (root-only), the volume mounted, `docker compose up -d`, and `docker compose exec fops fops doctor` passes every line.
 - [ ] **Needs a person:** a heartbeat check exists (default: healthchecks.io, 15-minute period, 45-minute grace) that emails Ash and Kevin; proven by stopping the container for an hour and receiving the alert, then starting it and seeing the alert clear.
