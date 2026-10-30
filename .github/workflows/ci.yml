@@ -85,7 +85,9 @@ jobs:
 
       - name: No .env anywhere in the image
         run: |
-          found="$(docker run --rm fops:ci sh -c 'find / -xdev -name ".env" 2>/dev/null')"
+          # As root, so no folder is hidden from the search; find's complaints
+          # about /proc and the like are not findings.
+          found="$(docker run --rm --user 0 fops:ci sh -c 'find / -xdev -name ".env" 2>/dev/null || true')"
           test -z "$found" || { echo "found: $found"; exit 1; }
 
       - name: Stops cleanly on SIGTERM
